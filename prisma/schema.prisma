@@ -1,0 +1,120 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model restaurants {
+  id            String           @id @default(uuid())
+  name          String
+  slug          String           @unique
+  created_at    DateTime         @default(now())
+  users         users[]
+  tables        tables[]
+  tableSessions table_sessions[]
+  calls         calls[]
+}
+
+model users {
+  id            String           @id @default(uuid())
+  name          String
+  restaurant_id String
+  restaurant    restaurants      @relation(fields: [restaurant_id], references: [id])
+  email         String           @unique
+  password_hash String
+  role          role
+  tableSessions table_sessions[]
+  calls         calls[]
+}
+
+model tables {
+  id            String           @id @default(uuid())
+  restaurant_id String
+  restaurant    restaurants      @relation(fields: [restaurant_id], references: [id])
+  label         String
+  public_code   String           @unique
+  active        Boolean          @default(true)
+  tableSessions table_sessions[]
+}
+
+// Índice único parcial (uma sessão ACTIVE por mesa) fica na migration em SQL:
+// CREATE UNIQUE INDEX table_sessions_one_active ON table_sessions(table_id) WHERE status = 'ACTIVE';
+model table_sessions {
+  id             String           @id @default(uuid())
+  restaurant_id  String
+  restaurant     restaurants      @relation(fields: [restaurant_id], references: [id])
+  table_id       String
+  table          tables           @relation(fields: [table_id], references: [id])
+  status         tableStatus      @default(ACTIVE)
+  keep_open      Boolean          @default(false)
+  expires_at     DateTime
+  closed_reason  reason?
+  closed_by      String?
+  user           users?           @relation(fields: [closed_by], references: [id])
+  session_tokens session_tokens[]
+  calls          calls[]
+}
+
+model session_tokens {
+  id            String         @id @default(uuid())
+  session_id    String
+  table_session table_sessions @relation(fields: [session_id], references: [id])
+  token_hash    String         @unique
+  revoked_at    DateTime?
+  calls         calls[]
+}
+
+model calls {
+  id            String         @id @default(uuid())
+  restaurant_id String
+  restaurant    restaurants    @relation(fields: [restaurant_id], references: [id])
+  session_id    String
+  table_session table_sessions @relation(fields: [session_id], references: [id])
+  token_id      String
+  session_token session_tokens @relation(fields: [token_id], references: [id])
+  type          type_call
+  status        call_state     @default(OPEN)
+  created_at    DateTime       @default(now())
+  done_at       DateTime?
+  done_by       String?
+  user          users?         @relation(fields: [done_by], references: [id])
+
+  @@index([restaurant_id, status])
+}
+
+enum call_state {
+  OPEN
+  DONE
+  CANCELLED
+}
+
+enum type_call {
+  WAITER
+  BILL
+}
+
+enum reason {
+  STAFF
+  TIMEOUT
+}
+
+enum tableStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum role {
+  ADMIN
+  STAFF
+}
