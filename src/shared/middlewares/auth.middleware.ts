@@ -18,7 +18,6 @@ export function ensureAuthenticated(req: Request, _res: Response, next: NextFunc
     const payload = verifyToken(token);
     req.id = payload.sub;
   } catch {
-    // Assinatura inválida, token expirado ou payload estranho: tudo vira 401
     throw new AppError("Token inválido ou expirado", 401);
   }
 

@@ -3,7 +3,7 @@ import { Prisma } from "../../../generated/prisma/client.ts";
 import { AppError } from "../errors/AppError.ts";
 
 // Handler global de erros: deve ser registrado DEPOIS das rotas.
-// No Express 5, erros lançados em handlers async chegam aqui sozinhos, sem try/catch.
+
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
   // Erros de regra de negócio lançados pelos services
   if (err instanceof AppError) {
