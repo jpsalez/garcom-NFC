@@ -1,20 +1,14 @@
-import { role } from "../../../generated/prisma/enums.ts";
+import { inject, injectable } from "tsyringe";
 import type { Prisma } from "../../../generated/prisma/client.ts";
-import { prisma, type DbClient } from "../../shared/providers/prisma.ts";
+import type { DbClient } from "../../shared/providers/prisma.ts";
+import type { CreateUserData, IRestaurantRepository, IUserRepository } from "./auth.interfaces.ts";
 
-
-export type CreateUserData = {
-  name: string;
-  restaurant_id: string;
-  email: string;
-  password_hash: string;
-  role: role;
-};
-
-export class RestaurantRepository {
+@injectable()
+export class RestaurantRepository implements IRestaurantRepository {
   private readonly db: DbClient;
 
-  constructor(db: DbClient = prisma) {
+  // Em transações: new RestaurantRepository(tx)
+  constructor(@inject("DbClient") db: DbClient) {
     this.db = db;
   }
 
@@ -39,10 +33,11 @@ export class RestaurantRepository {
   }
 }
 
-export class UserRepository {
+@injectable()
+export class UserRepository implements IUserRepository {
   private readonly db: DbClient;
 
-  constructor(db: DbClient = prisma) {
+  constructor(@inject("DbClient") db: DbClient) {
     this.db = db;
   }
 

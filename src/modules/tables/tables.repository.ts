@@ -1,16 +1,13 @@
-import { Prisma } from "../../../generated/prisma/client.ts";
-import { prisma, type DbClient } from "../../shared/providers/prisma.ts";
+import { inject, injectable } from "tsyringe";
+import type { Prisma } from "../../../generated/prisma/client.ts";
+import type { DbClient } from "../../shared/providers/prisma.ts";
+import type { CreateTableData, ITableRepository } from "./tables.repository.interface.ts";
 
-export type CreateTableData = {
-  restaurant_id: string;
-  label: string;
-  public_code: string;
-};
-
-export class TableRepository {
+@injectable()
+export class TableRepository implements ITableRepository {
   private readonly db: DbClient;
 
-  constructor(db: DbClient = prisma) {
+  constructor(@inject("DbClient") db: DbClient) {
     this.db = db;
   }
 

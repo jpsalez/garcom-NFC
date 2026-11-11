@@ -1,25 +1,76 @@
-import type { CreateUserData, RestaurantRepository, UserRepository } from "./auth.repository.ts";
+import { inject, injectable } from "tsyringe";
+import type {
+  CreateUserData,
+  IAuthService,
+  IRestaurantRepository,
+  IUserRepository,
+  LoginResult,
+} from "./auth.interfaces.ts";
+import type { createUserInput, loginUserInput } from "./auth.schema.ts";
+import { role } from "../../../generated/prisma/enums.ts";
+import { comparePassword, passwordHash } from "../../shared/utils/password.ts";
+import { signToken } from "../../shared/utils/jwt.ts";
+import { AppError } from "../../shared/errors/AppError.ts";
 
-export class AuthService {
-  private readonly restaurantRepository: RestaurantRepository;
-  private readonly userRepository: UserRepository;
+@injectable()
+export class AuthService implements IAuthService {
+  private readonly restaurantRepository: IRestaurantRepository;
+  private readonly userRepository: IUserRepository;
 
-  constructor(restaurantRepository: RestaurantRepository, userRepository: UserRepository) {
+  constructor(
+    @inject("RestaurantRepository") restaurantRepository: IRestaurantRepository,
+    @inject("UserRepository") userRepository: IUserRepository,
+  ) {
     this.restaurantRepository = restaurantRepository;
     this.userRepository = userRepository;
   }
 
-  async register(createUser: CreateUserData) {
-    const restaurantExist = await this.restaurantRepository.findById(createUser.restaurant_id);
-    if (!restaurantExist) {
-      throw new Error("Restaurante não encontrado");
-    }
-
+  // registro de usuário -> esse tipo de usuário é sempre ADMIN controla
+  // pode criar outros usuários. TODO : criar outra função para isso
+  async register(createUser: createUserInput) {
+   
     const emailInUse = await this.userRepository.findByEmail(createUser.email);
     if (emailInUse) {
-      throw new Error("E-mail já cadastrado");
+      throw new AppError("E-mail já cadastrado", 409);
     }
 
-    return this.userRepository.create(createUser);
+    const userData: CreateUserData = {
+      name: createUser.name,
+      email: createUser.email,
+      password_hash: await passwordHash(createUser.password),
+      role: role.ADMIN,
+    };
+
+    const user = await this.userRepository.create(userData);
+
+    // Nunca devolve o hash da senha
+    const { password_hash, ...publicUser } = user;
+    return publicUser;
   }
+
+  // Login vale para ADMIN e STAFF: a role vem do banco e vai dentro do token
+  async login(credentials: loginUserInput): Promise<LoginResult> {
+    const user = await this.userRepository.findByEmail(credentials.email);
+
+    // Mesma mensagem para e-mail inexistente e senha errada: não revela quais e-mails existem
+    const validPassword = user ? await comparePassword(credentials.password, user.password_hash) : false;
+    if (!user || !validPassword) {
+      throw new AppError("E-mail ou senha inválidos", 401);
+    }
+
+    const token = signToken({
+      sub: user.id,
+      restaurantId: user.restaurant_id,
+      role: user.role,
+    });
+
+    const { password_hash, ...publicUser } = user;
+    return { token, user: publicUser };
+  }
+
+
+
+
+
+  
 }

@@ -29,8 +29,8 @@ model restaurants {
 model users {
   id            String           @id @default(uuid())
   name          String
-  restaurant_id String
-  restaurant    restaurants      @relation(fields: [restaurant_id], references: [id])
+  restaurant_id String?
+  restaurant    restaurants?      @relation(fields: [restaurant_id], references: [id])
   email         String           @unique
   password_hash String
   role          role

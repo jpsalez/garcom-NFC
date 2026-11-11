@@ -1,24 +1,19 @@
-import { Prisma, tableStatus, reason } from "../../../generated/prisma/client.ts";
-import { prisma, type DbClient } from "../../shared/providers/prisma.ts";
+import { inject, injectable } from "tsyringe";
+import { tableStatus, type Prisma } from "../../../generated/prisma/client.ts";
+import type { DbClient } from "../../shared/providers/prisma.ts";
+import type {
+  CreateSessionTokenData,
+  CreateTableSessionData,
+  ISessionTokenRepository,
+  ITableSessionRepository,
+  UpdateTableSessionData,
+} from "./sessions.repository.interface.ts";
 
-export type CreateTableSessionData = {
-  restaurant_id: string;
-  table_id: string;
-  expires_at: Date;
-};
-
-export type UpdateTableSessionData = {
-  status?: tableStatus;
-  keep_open?: boolean;
-  expires_at?: Date;
-  closed_reason?: reason;
-  closed_by?: string;
-};
-
-export class TableSessionRepository {
+@injectable()
+export class TableSessionRepository implements ITableSessionRepository {
   private readonly db: DbClient;
 
-  constructor(db: DbClient = prisma) {
+  constructor(@inject("DbClient") db: DbClient) {
     this.db = db;
   }
 
@@ -62,16 +57,12 @@ export class TableSessionRepository {
   }
 }
 
-export type CreateSessionTokenData = {
-  session_id: string;
-  token_hash: string;
-};
-
 // session_tokens não tem restaurant_id: o tenant é checado pela sessão
-export class SessionTokenRepository {
+@injectable()
+export class SessionTokenRepository implements ISessionTokenRepository {
   private readonly db: DbClient;
 
-  constructor(db: DbClient = prisma) {
+  constructor(@inject("DbClient") db: DbClient) {
     this.db = db;
   }
 

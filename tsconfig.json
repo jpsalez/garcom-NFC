@@ -5,17 +5,19 @@
     // See also https://aka.ms/tsconfig/module
     "module": "nodenext",
     "target": "esnext",
-    "lib": ["esnext"],
-    "types": ["node"],
-
-    // O Node executa os .ts direto; o tsc só checa tipos
+    "lib": [
+      "esnext"
+    ],
+    "types": [
+      "node"
+    ],
+    // O tsx executa os .ts direto; o tsc só checa tipos
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "erasableSyntaxOnly": true,
-
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     // Stricter Typechecking Options
     "noUncheckedIndexedAccess": true,
-
     // Recommended Options
     "strict": true,
     "verbatimModuleSyntax": true,
@@ -24,5 +26,9 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "include": ["src", "generated", "prisma.config.ts"]
+  "include": [
+    "src",
+    "generated",
+    "prisma.config.ts"
+  ]
 }

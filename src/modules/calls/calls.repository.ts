@@ -1,23 +1,13 @@
-import { call_state, type_call } from "../../../generated/prisma/client.ts";
-import { prisma, type DbClient } from "../../shared/providers/prisma.ts";
+import { inject, injectable } from "tsyringe";
+import { call_state } from "../../../generated/prisma/client.ts";
+import type { DbClient } from "../../shared/providers/prisma.ts";
+import type { CreateCallData, ICallRepository, UpdateCallData } from "./calls.repository.interface.ts";
 
-export type CreateCallData = {
-  restaurant_id: string;
-  session_id: string;
-  token_id: string;
-  type: type_call;
-};
-
-export type UpdateCallData = {
-  status?: call_state;
-  done_at?: Date;
-  done_by?: string;
-};
-
-export class CallRepository {
+@injectable()
+export class CallRepository implements ICallRepository {
   private readonly db: DbClient;
 
-  constructor(db: DbClient = prisma) {
+  constructor(@inject("DbClient") db: DbClient) {
     this.db = db;
   }
 

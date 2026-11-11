@@ -1,21 +1,35 @@
-import "reflect-metadata";
 import { container } from "tsyringe";
+import { prisma, type DbClient } from "../providers/prisma.ts";
+
+import type { IAuthService, IRestaurantRepository, IUserRepository } from "../../modules/auth/auth.interfaces.ts";
 import { RestaurantRepository, UserRepository } from "../../modules/auth/auth.repository.ts";
 import { AuthService } from "../../modules/auth/auth.service.ts";
+import type { ITableRepository } from "../../modules/tables/tables.repository.interface.ts";
+import { TableRepository } from "../../modules/tables/tables.repository.ts";
+import type {
+  ISessionTokenRepository,
+  ITableSessionRepository,
+} from "../../modules/seassions/sessions.repository.interface.ts";
+import { SessionTokenRepository, TableSessionRepository } from "../../modules/seassions/sessions.repository.ts";
+import type { ICallRepository } from "../../modules/calls/calls.repository.interface.ts";
+import { CallRepository } from "../../modules/calls/calls.repository.ts";
 
-// O Node não executa decorators (@injectable/@inject), então as dependências
-// são registradas aqui. Classes cujo constructor não exige argumentos
-// (os repositories usam o prisma como padrão) podem usar useClass direto;
-// as que recebem dependências usam useFactory e resolvem cada uma.
+export function registerDependencies() {
 
-container.registerSingleton(RestaurantRepository);
-container.registerSingleton(UserRepository);
+  // Infra
+  container.register<DbClient>("DbClient", { useValue: prisma });
 
-container.register(AuthService, {
-  useFactory: (c) => new AuthService(
-    c.resolve(RestaurantRepository),
-    c.resolve(UserRepository),
-  ),
-});
+  // Repositories: nome -> implementação (quem injeta recebe a interface)
+  container.registerSingleton<IRestaurantRepository>("RestaurantRepository", RestaurantRepository);
+  container.registerSingleton<IUserRepository>("UserRepository", UserRepository);
+  container.registerSingleton<ITableRepository>("TableRepository", TableRepository);
+  container.registerSingleton<ITableSessionRepository>("TableSessionRepository", TableSessionRepository);
+  container.registerSingleton<ISessionTokenRepository>("SessionTokenRepository", SessionTokenRepository);
+  container.registerSingleton<ICallRepository>("CallRepository", CallRepository);
+
+  
+  // Services
+  container.registerSingleton<IAuthService>("AuthService", AuthService);
+}
 
 export { container };
