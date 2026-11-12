@@ -10,7 +10,7 @@ import type { createUserInput, loginUserInput } from "./auth.schema.ts";
 import { role } from "../../../generated/prisma/enums.ts";
 import { comparePassword, passwordHash } from "../../shared/utils/password.ts";
 import { signToken } from "../../shared/utils/jwt.ts";
-import { AppError } from "../../shared/errors/AppError.ts";
+import { ConflictError, UnauthorizedError } from "../../shared/errors/http-errors.ts";
 
 @injectable()
 export class AuthService implements IAuthService {
@@ -31,7 +31,7 @@ export class AuthService implements IAuthService {
    
     const emailInUse = await this.userRepository.findByEmail(createUser.email);
     if (emailInUse) {
-      throw new AppError("E-mail já cadastrado", 409);
+      throw new ConflictError("E-mail já cadastrado");
     }
 
     const userData: CreateUserData = {
@@ -55,7 +55,7 @@ export class AuthService implements IAuthService {
     // Mesma mensagem para e-mail inexistente e senha errada: não revela quais e-mails existem
     const validPassword = user ? await comparePassword(credentials.password, user.password_hash) : false;
     if (!user || !validPassword) {
-      throw new AppError("E-mail ou senha inválidos", 401);
+      throw new UnauthorizedError("E-mail ou senha inválidos");
     }
 
     const token = signToken({

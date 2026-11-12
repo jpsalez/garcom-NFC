@@ -1,21 +1,34 @@
 import type { NextFunction, Request, Response } from "express";
 import { Prisma } from "../../../generated/prisma/client.ts";
 import { AppError } from "../errors/AppError.ts";
+import { ConflictError, NotFoundError } from "../errors/http-errors.ts";
 
 // Handler global de erros: deve ser registrado DEPOIS das rotas.
+// Formato único de resposta: { error, message, details? }
 
-export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
-  // Erros de regra de negócio lançados pelos services
+function sendAppError(res: Response, err: AppError) {
+  return res.status(err.statusCode).json({
+    error: err.name,
+    message: err.message,
+    ...(err.details !== undefined && { details: err.details }),
+  });
+}
+
+export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
+  // Erros lançados pelos services/middlewares (NotFoundError, ConflictError, ...)
   if (err instanceof AppError) {
-    return res.status(err.statusCode).json({ message: err.message });
+    return sendAppError(res, err);
   }
 
-  // Violação de unique no banco (ex.: dois cadastros simultâneos com o mesmo e-mail)
-  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-    return res.status(409).json({ message: "Registro já existe" });
+  // Erros conhecidos do Prisma viram erros HTTP equivalentes
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    // Violação de unique (ex.: dois cadastros simultâneos com o mesmo e-mail)
+    if (err.code === "P2002") return sendAppError(res, new ConflictError());
+    // Registro não encontrado em update/delete
+    if (err.code === "P2025") return sendAppError(res, new NotFoundError());
   }
 
   // Qualquer outro erro é inesperado: loga e não vaza detalhes para o cliente
   console.error(err);
-  return res.status(500).json({ message: "Erro interno do servidor" });
+  return res.status(500).json({ error: "InternalServerError", message: "Erro interno do servidor" });
 }
