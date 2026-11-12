@@ -1,10 +1,15 @@
 import type { Application } from 'express';
 import express from 'express';
+import { SetupRoutes } from './routes.ts';
 
 const app: Application = express();
 
 app.use(express.json());
 
-app.listen(3000, () => console.log('rodando na 3000'));
+app.use('/api', SetupRoutes());
 
-export { app };       
+app.listen(4000, () => {
+    console.log('Express rodando na porta 4000');
+});
+
+export { app };
