@@ -544,7 +544,7 @@ def sessions_list():
     out = []
     for f in sorted(mon.PROJ.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)[:12]:
         try:
-            title = analise.parse_file(f)["title"] or f.stem[:8]
+            title = analise.title_of(f) or f.stem[:8]
         except OSError:
             title = f.stem[:8]
         out.append({"id": f.stem, "title": title, "mtime": datetime.fromtimestamp(f.stat().st_mtime).strftime("%d/%m %H:%M"),
