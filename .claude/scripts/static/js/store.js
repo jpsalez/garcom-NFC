@@ -1,6 +1,6 @@
 // @ts-check
 // Estado único do painel. As telas leem daqui; quem atualiza é status.js (e cada tela, nos seus próprios dados).
-export const S = { tab: 'visao-geral', draft: [], runs: [], sel: null, cat: null, ev: {}, open: new Set(), timers: [], liveSession: '', anSession: '', spend: null, pipes: [], view: null, live: null, statusAt: 0 };
+export const S = { tab: 'visao-geral', draft: [], runs: [], sel: null, cat: null, ev: {}, open: new Set(), timers: [], liveSession: '', anSession: '', spend: null, pipes: [], view: null, live: null, statusAt: 0, prefill: '' };
 S.teams = []; S.selTeam = null; S.closed = new Set(); S.mode = 'local';
 
 const ativo = (/** @type {{status: string}} */ r) => r.status === 'rodando' || r.status === 'pausado';
