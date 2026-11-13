@@ -19,6 +19,7 @@ model restaurants {
   id            String           @id @default(uuid())
   name          String
   slug          String           @unique
+  active        Boolean          @default(true)
   created_at    DateTime         @default(now())
   users         users[]
   tables        tables[]
@@ -30,10 +31,12 @@ model users {
   id            String           @id @default(uuid())
   name          String
   restaurant_id String?
-  restaurant    restaurants?      @relation(fields: [restaurant_id], references: [id])
+  restaurant    restaurants?      @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
   email         String           @unique
   password_hash String
   role          role
+  category      staff_category?
+  active       Boolean          @default(true)
   tableSessions table_sessions[]
   calls         calls[]
 }
@@ -115,6 +118,15 @@ enum tableStatus {
 }
 
 enum role {
-  ADMIN
+  SUPER_ADMIN
+  OWNER
   STAFF
+}
+
+enum staff_category {
+  WAITER
+  MANAGER
+  CLEANING
+  KITCHEN
+  OTHER
 }
