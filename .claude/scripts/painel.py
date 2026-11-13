@@ -16,6 +16,8 @@ com permissões mínimas (somente leitura, salvo a edição da base de conhecime
 arquivos bloqueia .env, chaves e node_modules; só scripts de uma lista fixa são executados.
 """
 import argparse
+import gzip
+import hashlib
 import json
 import os
 import re
@@ -57,6 +59,7 @@ SCRIPT_CMDS = {
 }
 LOCK = threading.Lock()
 STATIC = SCRIPTS / "static"
+COMPRESSIBLE = {"application/json", "text/javascript", "text/css", "text/html", "image/svg+xml"}
 ALLOWED_HOSTS = set()  # preenchido em main() com a porta escolhida
 STATIC_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json",
                 ".svg": "image/svg+xml", ".woff2": "font/woff2", ".html": "text/html; charset=utf-8", ".map": "application/json"}
@@ -749,8 +752,6 @@ def route_ext(h, m, parts, q):
         if m == "DELETE" and len(parts) == 2:
             return tasks_delete(parts[1])
     if m == "GET":
-        if parts == ["commits"]:
-            return gitinfo.commits(int(q.get("limit", 60)))
         if parts == ["commit"]:
             return gitinfo.commit_diff(q["sha"], path=q.get("path"))
         if parts == ["graph"]:
@@ -870,10 +871,27 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def reply(self, obj, code=200, ctype="application/json"):
+        """Resposta com gzip (corpo grande e texto) e ETag: quem repete o GET sem mudança recebe 304 sem corpo."""
         body = obj if isinstance(obj, bytes) else json.dumps(obj, ensure_ascii=False).encode()
+        cacheable = code == 200 and self.command == "GET"
+        etag = 'W/"' + hashlib.sha1(body).hexdigest()[:20] + '"' if cacheable else ""
+        if etag and self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return
+        gz = len(body) > 1024 and "gzip" in (self.headers.get("Accept-Encoding") or "") and ctype.split(";")[0] in COMPRESSIBLE
+        if gz:
+            body = gzip.compress(body, 5)
         self.send_response(code)
         self.send_header("Content-Type", ctype)
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "no-cache" if cacheable else "no-store")  # no-cache = pode guardar, mas pergunta antes (ETag)
+        if etag:
+            self.send_header("ETag", etag)
+        if gz:
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Vary", "Accept-Encoding")
         self.send_header("X-Content-Type-Options", "nosniff")
         if ctype.startswith("text/html"):
             self.send_header("Content-Security-Policy", CSP)

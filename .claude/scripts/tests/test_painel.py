@@ -70,6 +70,40 @@ class PainelServer(unittest.TestCase):
         self.assertTrue(hd["Content-Type"].startswith("text/javascript"))
 
 
+class Transporte(PainelServer):
+    """gzip e ETag: respostas grandes vão comprimidas e quem repete o GET sem mudança recebe 304."""
+
+    H = {}
+
+    def test_json_grande_vai_comprimido_e_igual_ao_original(self):
+        import gzip
+        h = {"X-Panel-Token": painel.TOKEN}
+        st, hd, raw = self.call("GET", "/api/dictionary", h)
+        st2, hd2, comp = self.call("GET", "/api/dictionary", {**h, "Accept-Encoding": "gzip"})
+        self.assertEqual((st, st2), (200, 200))
+        self.assertNotIn("Content-Encoding", hd)
+        self.assertEqual(hd2["Content-Encoding"], "gzip")
+        self.assertLess(len(comp), len(raw) / 2)
+        self.assertEqual(gzip.decompress(comp), raw)
+
+    def test_etag_devolve_304_sem_corpo(self):
+        h = {"X-Panel-Token": painel.TOKEN}
+        _, hd, _ = self.call("GET", "/api/dictionary", h)
+        st, hd2, corpo = self.call("GET", "/api/dictionary", {**h, "If-None-Match": hd["ETag"]})
+        self.assertEqual((st, corpo), (304, b""))
+        self.assertEqual(hd2["ETag"], hd["ETag"])
+        st3, _, corpo3 = self.call("GET", "/api/dictionary", {**h, "If-None-Match": 'W/"outro"'})
+        self.assertEqual(st3, 200)
+        self.assertTrue(corpo3)
+
+    def test_estaticos_usam_etag_e_erros_nao_ficam_em_cache(self):
+        _, hd, _ = self.call("GET", "/static/js/main.js")
+        self.assertEqual(hd["Cache-Control"], "no-cache")
+        self.assertEqual(self.call("GET", "/static/js/main.js", {"If-None-Match": hd["ETag"]})[0], 304)
+        st, hd404, _ = self.call("GET", "/static/nao-existe.js")
+        self.assertEqual((st, hd404["Cache-Control"]), (404, "no-store"))
+
+
 class Validacao(unittest.TestCase):
     def test_sha_invalido(self):
         for bad in ("", "zz", "--output=x", "abc", "g" * 40, "a" * 41, "HEAD", "abc1234;rm"):

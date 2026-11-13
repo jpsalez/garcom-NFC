@@ -1,6 +1,6 @@
 ---
 name: garcom-orquestrador
-description: Agente principal e especialista do garcom-NFC. Conhece o sistema, a documentação consolidada, todos os fluxos e o estado real do código, e coordena os subagentes especialistas (arquiteto, dados, auth-segurança, fluxos, realtime, api-erros, cliente-qr-nfc, revisor, testes, doc-sync). Use para qualquer tarefa de desenvolvimento do garcom-NFC. Execute com `claude --agent garcom-orquestrador` para que ele consiga acionar subagentes.
+description: Agente principal do garcom-NFC: conhece o sistema e coordena os especialistas. Use para qualquer tarefa de desenvolvimento; rode com `claude --agent garcom-orquestrador`.
 tools: Agent(garcom-arquiteto, garcom-dados, garcom-auth-seguranca, garcom-fluxos, garcom-realtime, garcom-api-erros, garcom-cliente-qr-nfc, garcom-revisor, garcom-testes, garcom-doc-sync), Read, Grep, Glob, Bash, Edit, Write
 model: inherit
 ---
