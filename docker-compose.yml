@@ -1,0 +1,113 @@
+# Único compose do projeto: PostgreSQL + API (desenvolvimento) e, opcionalmente, o banco dos testes.
+# Sem Dockerfile: usa a imagem oficial do Node. Rode DENTRO de back-end/.
+#
+#   docker compose up                   # banco + API em http://localhost:3000 (teste: /health)
+#   docker compose up -d                # em segundo plano;  docker compose logs -f api
+#   docker compose down                 # para (mantém o banco);  down -v apaga banco e node_modules do contêiner
+#   npm run test:db:up                  # sobe SÓ o banco de testes (porta 5433); npm test; npm run test:db:down
+#
+# Variáveis: o compose lê o arquivo .env desta pasta. É obrigatório definir JWT_SECRET
+# (veja .env.example). Esta pasta é montada SOMENTE LEITURA: nada é escrito nos seus arquivos;
+# editar um arquivo de src/ reinicia a API sozinha.
+name: garcom-nfc
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-garcom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-garcom}
+      POSTGRES_DB: ${POSTGRES_DB:-garcom}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Só a sua máquina enxerga o banco (DBeaver/psql). Em produção, remova esta porta.
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    image: node:22-bookworm # versão completa: já traz o OpenSSL que o Prisma precisa
+    working_dir: /app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      # Use caracteres seguros em URL na senha do banco (evite @ : / ? #)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-garcom}:${POSTGRES_PASSWORD:-garcom}@db:5432/${POSTGRES_DB:-garcom}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no arquivo .env desta pasta (veja .env.example)}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+      AUTH_CACHE_TTL_SECONDS: ${AUTH_CACHE_TTL_SECONDS:-30}
+      TABLE_SESSION_TTL: ${TABLE_SESSION_TTL:-14400}
+    ports:
+      - "${API_PORT:-4000}:4000"
+    volumes:
+      - ./:/app:ro
+      - api_node_modules:/app/node_modules # dependências ficam no volume, não na sua pasta
+      - api_generated:/app/generated # client do Prisma gerado para Linux
+      - npm_cache:/root/.npm
+    # Instala dependências só se o package-lock mudou, gera o client do Prisma,
+    # aplica as migrations e sobe a API reiniciando a cada mudança em src/.
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        H=$$(md5sum package-lock.json | cut -d' ' -f1)
+        if [ "$$(cat node_modules/.lockhash 2>/dev/null)" != "$$H" ]; then
+          npm ci
+          echo "$$H" > node_modules/.lockhash
+        fi
+        npx prisma generate
+        npx prisma migrate deploy
+        exec npx --yes tsx watch src/main.ts
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+  # Banco DESCARTÁVEL dos testes (dados em memória). Só sobe com o perfil "test":
+  # `npm run test:db:up`. Nunca é tocado por `docker compose up`.
+  db-test:
+    profiles: ["test"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: garcom
+      POSTGRES_PASSWORD: garcom
+      POSTGRES_DB: garcom_test
+    ports:
+      - "127.0.0.1:5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U garcom -d garcom_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  # Front-end (Next.js) ainda não existe. Quando existir, descomente e ajuste:
+  # web:
+  #   image: node:22-bookworm
+  #   working_dir: /app
+  #   volumes: ["../front-end:/app"]
+  #   command: sh -c "npm ci && npm run dev"
+  #   environment:
+  #     NEXT_PUBLIC_API_URL: http://localhost:3000
+  #   ports: ["3001:3000"]
+  #   depends_on: [api]
+
+volumes:
+  pgdata:
+  api_node_modules:
+  api_generated:
+  npm_cache:
