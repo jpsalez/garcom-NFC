@@ -77,3 +77,11 @@ input, select, textarea, button { font-variant-numeric: tabular-nums; }
 .tlclip { position: absolute; inset: 0; overflow: hidden; }
 .tbar { min-width: 72px; }
 .tbar:focus-visible, .tdot:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 4; }
+
+/* ajustes: o .sub do cabeçalho não herda a linha do bloco de subagente; espaços nas linhas da Visão geral */
+header.top .sub { border: 0; padding: 0; }
+.ov-sub .id { margin-right: var(--s2); }
+.ov-sub .t { margin-right: var(--s2); }
+.ov-sub .when, .ov-sub .tiny { margin-left: var(--s2); }
+.item.clickable { display: flex; align-items: baseline; gap: var(--s3); padding-block: var(--s1); }
+.item.clickable .t { min-width: 0; }

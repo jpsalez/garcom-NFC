@@ -43,13 +43,14 @@ const actions = () => /** @type {Item[]} */ ([
 /** @param {string} q @returns {Promise<Item[]>} */
 async function dynamic(q) {
   const out = /** @type {Item[]} */ ([]);
-  const [files, graph, tasks, dict, over] = await Promise.all([
+  const [files, graph, tasks, decisoes, dict, over] = await Promise.all([
     q.length >= 2 ? api('files?q=' + enc(q)).catch(() => []) : [],
-    cached('graph', () => api('graph?limit=200')), cached('tasks', () => api('tasks')), cached('dict', () => api('dictionary')), cached('gh', () => api('gh/overview')),
+    cached('graph', () => api('graph?limit=200')), cached('tasks', () => api('tasks')), cached('decisoes', () => api('decisoes')), cached('dict', () => api('dictionary')), cached('gh', () => api('gh/overview')),
   ]);
   /** @type {string[]} */ (files).forEach(p => out.push({ id: 'f:' + p, group: 'Arquivos', title: p.split('/').pop() || p, hint: p, run: () => { go('arquivos', '', 'path=' + enc(p).replace(/%2F/g, '/')); } }));
   (graph?.commits || []).forEach((/** @type {any} */ c) => out.push({ id: 'c:' + c.sha, group: 'Commits', title: c.subject, hint: `${c.short} · ${c.author}`, run: () => { S.commitSel = c.sha; go('commits'); } }));
-  (tasks?.tasks || []).forEach((/** @type {any} */ t) => out.push({ id: 't:' + t.id, group: 'Tarefas', title: `${t.id} · ${t.title}`, hint: t.status, run: () => { go('tarefas').then(() => { const i = /** @type {HTMLInputElement | null} */ ($('#tk-q')); if (i) { i.value = t.id; i.dispatchEvent(new Event('input')); } }); } }));
+  (tasks?.tasks || []).filter((/** @type {any} */ t) => t.status !== 'arquivada').forEach((/** @type {any} */ t) => out.push({ id: 't:' + t.id, group: 'Tarefas', title: `${t.id} · ${t.titulo}`, hint: `${t.status} · ${t.fase}`, run: () => { go('tarefas', '', 'abrir=' + enc(t.id)); } }));
+  (decisoes?.pendentes || []).forEach((/** @type {any} */ d) => out.push({ id: 'dec:' + d.id, group: 'Decisões', title: `${d.id} · ${d.titulo}`, hint: d.bloqueia.length ? `bloqueia ${d.bloqueia.length}` : 'pendente', run: () => { go('decisoes'); } }));
   (dict?.termos || []).forEach((/** @type {any} */ t) => out.push({ id: 'd:' + t.t, group: 'Dicionário', title: t.t, hint: t.c, run: () => { S.dictQ = t.t; go('dicionario'); } }));
   if (over && !over.unavailable) (over.open_prs || []).forEach((/** @type {any} */ p) => out.push({ id: 'p:' + p.number, group: 'Pull requests', title: `#${p.number} ${p.title}`, hint: p.branch, run: () => { if (p.url) window.open(p.url, '_blank', 'noopener'); else go('github'); } }));
   return out;
