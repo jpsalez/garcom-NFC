@@ -1,0 +1,882 @@
+{
+  "categorias": [
+    "Painel e agentes",
+    "Tokens e custo",
+    "Análise e orquestração",
+    "Git",
+    "Qualidade de código",
+    "Domínio do garcom-NFC",
+    "Arquitetura do back-end",
+    "Infra e ferramentas"
+  ],
+  "termos": [
+    {
+      "t": "Agente",
+      "c": "Painel e agentes",
+      "d": "Uma instância do Claude Code com uma função definida em .claude/agents (ex.: garcom-dados). Recebe uma mensagem, usa ferramentas (ler, buscar, editar) e responde.",
+      "o": "Aba Conversa",
+      "v": [
+        "Especialista",
+        "Subagente"
+      ]
+    },
+    {
+      "t": "Especialista",
+      "c": "Painel e agentes",
+      "d": "Um dos agentes garcom-* focado em um assunto: arquiteto, dados, auth-segurança, fluxos, realtime, api-erros, cliente-qr-nfc, revisor, testes, doc-sync. Cada um lê só os capítulos da documentação do seu assunto.",
+      "o": "Plano do orquestrador local",
+      "v": [
+        "Agente",
+        "Orquestrador local"
+      ]
+    },
+    {
+      "t": "Subagente",
+      "c": "Painel e agentes",
+      "d": "Agente acionado por outro agente (o principal ou o orquestrador LLM) através da ferramenta Agent. Roda em um contexto separado e devolve só a resposta final ao agente que o chamou.",
+      "o": "Cartões recolhíveis em Conversa e Ao vivo",
+      "v": [
+        "Handback",
+        "Ferramenta"
+      ]
+    },
+    {
+      "t": "Orquestrador local",
+      "c": "Painel e agentes",
+      "d": "O roteador do painel: lê a sua tarefa, escolhe especialistas por palavras-chave (gatilhos) e monta o plano usando apenas código. Não chama nenhum modelo, então o planejamento custa 0 tokens. Só os especialistas que você dispara consomem tokens.",
+      "o": "Conversa › Orquestrador local",
+      "v": [
+        "Gatilho",
+        "Equipe",
+        "Orquestrador LLM"
+      ]
+    },
+    {
+      "t": "Orquestrador LLM",
+      "c": "Painel e agentes",
+      "d": "O agente garcom-orquestrador (um modelo de linguagem) que decide sozinho quais subagentes acionar. Gasta tokens a cada decisão. Fica disponível no editor, mas não é o caminho padrão do painel.",
+      "o": ".claude/agents/garcom-orquestrador.md",
+      "v": [
+        "Orquestrador local"
+      ]
+    },
+    {
+      "t": "Gatilho",
+      "c": "Painel e agentes",
+      "d": "Palavra ou trecho que faz o roteador local sugerir um especialista (ex.: 'schema', 'migration' → dados; 'login', 'jwt' → auth-segurança). Se nenhum gatilho casa, o painel pede que você escolha na mão.",
+      "o": "Plano do orquestrador local",
+      "v": [
+        "Orquestrador local"
+      ]
+    },
+    {
+      "t": "Equipe",
+      "c": "Painel e agentes",
+      "d": "Conjunto de 1 a 3 especialistas disparados juntos a partir de um mesmo plano. Cada um trabalha de forma independente, em paralelo, e o painel junta as respostas no fim sem usar IA.",
+      "o": "Conversa",
+      "v": [
+        "Paralelismo",
+        "Respostas juntas"
+      ]
+    },
+    {
+      "t": "Respostas juntas",
+      "c": "Painel e agentes",
+      "d": "Resumo montado por código: concatena a resposta final de cada especialista da equipe, sob um título com o nome dele. Não interpreta nem reescreve nada.",
+      "o": "Fim de uma equipe concluída",
+      "v": [
+        "Equipe"
+      ]
+    },
+    {
+      "t": "Receita",
+      "c": "Painel e agentes",
+      "d": "Sequência pré-definida de passos com agentes, salva em .claude/painel/recipes.json. Agentes de um mesmo passo rodam em paralelo (máx. 3); a saída de um passo pode ser usada no prompt do próximo com {saida:agente}.",
+      "o": "Aba Orquestrar",
+      "v": [
+        "Passo",
+        "Portão de aprovação"
+      ]
+    },
+    {
+      "t": "Passo",
+      "c": "Painel e agentes",
+      "d": "Uma etapa de uma receita. O passo seguinte só começa quando todos os agentes do passo atual terminam.",
+      "o": "Receitas",
+      "v": [
+        "Receita"
+      ]
+    },
+    {
+      "t": "Portão de aprovação",
+      "c": "Painel e agentes",
+      "d": "Pausa obrigatória antes de um passo: a receita fica 'aguardando' até você clicar em Aprovar e continuar. Serve para revisar o resultado de um passo antes de gastar tokens no próximo.",
+      "o": "Orquestrar",
+      "v": [
+        "Receita"
+      ]
+    },
+    {
+      "t": "Conversa",
+      "c": "Painel e agentes",
+      "d": "Uma sessão do Claude Code iniciada pelo painel, com histórico. Dá para continuar depois porque a sessão é retomada pelo id; o agente lembra do que já foi dito.",
+      "o": "Aba Conversa",
+      "v": [
+        "Sessão",
+        "Contexto anexado"
+      ]
+    },
+    {
+      "t": "Sessão (Claude Code)",
+      "c": "Painel e agentes",
+      "d": "Um histórico contínuo de mensagens e ferramentas do Claude Code, gravado em ~/.claude/projects. Sessões iniciadas pelo painel têm o rótulo 'painel'.",
+      "o": "Análise, Ao vivo, Linha do tempo",
+      "v": [
+        "Transcrito"
+      ]
+    },
+    {
+      "t": "Transcrito",
+      "c": "Painel e agentes",
+      "d": "Arquivo .jsonl em que o Claude Code grava cada mensagem e chamada de ferramenta da sessão (e um por subagente). O painel só lê esses arquivos para montar Ao vivo, Análise e Linha do tempo. Formato interno: pode mudar em atualizações.",
+      "o": "~/.claude/projects/…",
+      "v": [
+        "Sessão (Claude Code)"
+      ]
+    },
+    {
+      "t": "Ao vivo",
+      "c": "Painel e agentes",
+      "d": "Visão somente leitura da sua sessão interativa (a do editor). O Claude Code não permite controlar essa sessão de fora; para pausar ou parar um agente, use agentes iniciados pelo painel.",
+      "o": "Aba Ao vivo",
+      "v": [
+        "Transcrito"
+      ]
+    },
+    {
+      "t": "Contexto anexado",
+      "c": "Painel e agentes",
+      "d": "Arquivos, trechos de documentação, commits ou notas que você junta à mensagem. O texto é enviado ao agente junto com o pedido (limite de 80 mil caracteres por mensagem) e conta como tokens de entrada.",
+      "o": "Campo de mensagem",
+      "v": [
+        "Token"
+      ]
+    },
+    {
+      "t": "Briefing",
+      "c": "Painel e agentes",
+      "d": "O texto de instrução que um agente recebe ao ser acionado. Briefings curtos e completos (objetivo, arquivos, decisões já tomadas) reduzem leituras desnecessárias.",
+      "o": "Análise › Orquestrador",
+      "v": [
+        "Subagente"
+      ]
+    },
+    {
+      "t": "Handback",
+      "c": "Painel e agentes",
+      "d": "A devolução do resultado de um subagente ao agente que o acionou (ferramenta SubagentHandback). Aparece na resposta do cartão do subagente.",
+      "o": "Cartão de subagente",
+      "v": [
+        "Subagente"
+      ]
+    },
+    {
+      "t": "Pausar",
+      "c": "Painel e agentes",
+      "d": "Congela o processo do agente (sinal SIGSTOP) sem perder o estado. Em pausas longas, a conexão com a API pode expirar e o agente falhar ao continuar.",
+      "o": "Controles do agente",
+      "v": [
+        "Parar"
+      ]
+    },
+    {
+      "t": "Parar",
+      "c": "Painel e agentes",
+      "d": "Encerra o processo do agente (SIGTERM, depois SIGKILL se não sair em 4 s). A conversa fica salva e pode ser retomada com uma nova mensagem.",
+      "o": "Controles do agente",
+      "v": [
+        "Pausar"
+      ]
+    },
+    {
+      "t": "Esquecer",
+      "c": "Painel e agentes",
+      "d": "Apaga do painel o histórico daquela conversa (os arquivos em .claude/painel/runs). Não apaga a sessão que o Claude Code gravou em ~/.claude.",
+      "o": "Controles do agente",
+      "v": [
+        "Conversa"
+      ]
+    },
+    {
+      "t": "Token",
+      "c": "Tokens e custo",
+      "d": "Pedaço de texto que o modelo lê ou escreve (em média, algo como 3 a 4 caracteres). O custo e o limite de contexto são medidos em tokens.",
+      "o": "Análise, chips do topo",
+      "v": [
+        "Tokens novos",
+        "Cache lido"
+      ]
+    },
+    {
+      "t": "Tokens novos",
+      "c": "Tokens e custo",
+      "d": "Entrada não reaproveitada + saída + escrita de cache. É a medida do trabalho 'real' de uma sessão; não inclui as releituras de cache a cada turno.",
+      "o": "Análise",
+      "v": [
+        "Cache lido",
+        "Cache escrito"
+      ]
+    },
+    {
+      "t": "Cache lido",
+      "c": "Tokens e custo",
+      "d": "Tokens de um prompt já visto que o modelo reaproveita a cada turno. Costumam ser cobrados a uma fração do preço de entrada. Os números são grandes porque a conversa inteira é relida em cada turno.",
+      "o": "Análise",
+      "v": [
+        "Tokens novos"
+      ]
+    },
+    {
+      "t": "Cache escrito",
+      "c": "Tokens e custo",
+      "d": "Tokens enviados pela primeira vez que passam a ficar em cache para os próximos turnos.",
+      "o": "Análise",
+      "v": [
+        "Cache lido"
+      ]
+    },
+    {
+      "t": "Turno",
+      "c": "Tokens e custo",
+      "d": "Uma rodada de pedido ao modelo. Um agente que lê vários arquivos faz vários turnos antes da resposta final.",
+      "o": "Cabeçalho da conversa",
+      "v": [
+        "Chamada de ferramenta"
+      ]
+    },
+    {
+      "t": "Chamada de ferramenta",
+      "c": "Tokens e custo",
+      "d": "Uso de uma ferramenta por um agente (ler arquivo, buscar, rodar comando…). O painel mostra o nome da ferramenta e o alvo, nunca o conteúdo.",
+      "o": "Rastro dos agentes",
+      "v": [
+        "Ferramenta"
+      ]
+    },
+    {
+      "t": "Ferramenta",
+      "c": "Tokens e custo",
+      "d": "Capacidade que o agente pode usar: Read (ler arquivo), Grep (buscar texto), Glob (listar por padrão), Bash (comando), Edit/Write (alterar arquivos), Agent (acionar subagente). Os agentes do painel recebem o mínimo necessário.",
+      "o": "Rastro dos agentes",
+      "v": [
+        "Chamada de ferramenta"
+      ]
+    },
+    {
+      "t": "Teto de gasto por agente",
+      "c": "Tokens e custo",
+      "d": "Valor máximo em dólares que um agente pode gastar numa execução (parâmetro --max-budget-usd do Claude Code). Ao atingir, ele para.",
+      "o": "Campo 'teto US$'",
+      "v": [
+        "Limite diário"
+      ]
+    },
+    {
+      "t": "Limite diário",
+      "c": "Tokens e custo",
+      "d": "Soma máxima de gasto das execuções do painel num dia. Ao atingir, o painel recusa novas execuções até o dia seguinte ou até você aumentar o limite.",
+      "o": "Visão geral",
+      "v": [
+        "Teto de gasto por agente"
+      ]
+    },
+    {
+      "t": "Modelo",
+      "c": "Tokens e custo",
+      "d": "O modelo de linguagem usado por um agente (ex.: haiku, sonnet). Modelos menores são mais baratos e rápidos; maiores raciocinam melhor. Cada agente declara o seu no frontmatter.",
+      "o": "Lista de agentes",
+      "v": [
+        "Agente"
+      ]
+    },
+    {
+      "t": "Achado (heurística)",
+      "c": "Análise e orquestração",
+      "d": "Alerta gerado por regra simples sobre uma sessão (ex.: paralelismo acima de 3, arquivo lido por 3+ agentes). É uma pista para investigar, não um veredito.",
+      "o": "Análise, Visão geral",
+      "v": [
+        "Paralelismo",
+        "Contexto repetido"
+      ]
+    },
+    {
+      "t": "Paralelismo",
+      "c": "Análise e orquestração",
+      "d": "Quantos agentes rodam ao mesmo tempo. Ajuda a ganhar tempo, mas multiplica o custo; a regra do projeto é no máximo 3.",
+      "o": "Análise",
+      "v": [
+        "Lote de delegação"
+      ]
+    },
+    {
+      "t": "Lote de delegação",
+      "c": "Análise e orquestração",
+      "d": "Grupo de subagentes lançados com menos de 5 s de diferença, tratados como uma única decisão de delegar.",
+      "o": "Análise › Orquestrador",
+      "v": [
+        "Paralelismo"
+      ]
+    },
+    {
+      "t": "Contexto repetido",
+      "c": "Análise e orquestração",
+      "d": "Mesmo arquivo lido por vários agentes. Cada leitura custa tokens; anexar o arquivo ou um resumo ao briefing evita a repetição.",
+      "o": "Análise › Arquivos mais lidos",
+      "v": [
+        "Briefing"
+      ]
+    },
+    {
+      "t": "Taxa de erro de ferramenta",
+      "c": "Análise e orquestração",
+      "d": "Proporção de chamadas de ferramenta que falharam (arquivo inexistente, permissão negada…). Acima de 10% costuma indicar instrução ruim ou caminho errado.",
+      "o": "Análise",
+      "v": [
+        "Achado (heurística)"
+      ]
+    },
+    {
+      "t": "Linha do tempo",
+      "c": "Análise e orquestração",
+      "d": "Eixo único de tempo com quatro faixas: sessões, agentes do painel, commits e verificações. Permite ver o que aconteceu perto de cada commit.",
+      "o": "Aba Linha do tempo",
+      "v": [
+        "Sessão (Claude Code)",
+        "Commit"
+      ]
+    },
+    {
+      "t": "Commit",
+      "c": "Git",
+      "d": "Registro permanente de um conjunto de mudanças, com mensagem, autor, data e um identificador (sha). Aponta para um ou mais commits-pai, formando a história.",
+      "o": "Aba Commits",
+      "v": [
+        "SHA",
+        "Ramo"
+      ]
+    },
+    {
+      "t": "SHA",
+      "c": "Git",
+      "d": "Identificador único de um commit (40 caracteres hexadecimais; os 7 primeiros costumam bastar). O botão ⧉ copia o completo.",
+      "o": "Detalhe do commit",
+      "v": [
+        "Commit"
+      ]
+    },
+    {
+      "t": "Ramo (branch)",
+      "c": "Git",
+      "d": "Linha independente de commits. 'main' é o ramo principal; 'origin/main' é a cópia dele no repositório remoto.",
+      "o": "Filtros de ramos",
+      "v": [
+        "HEAD",
+        "À frente / atrás"
+      ]
+    },
+    {
+      "t": "HEAD",
+      "c": "Git",
+      "d": "Ponteiro para o commit em que você está. 'HEAD -> main' indica que o ramo ativo é main.",
+      "o": "Etiquetas dos commits",
+      "v": [
+        "Ramo (branch)"
+      ]
+    },
+    {
+      "t": "À frente / atrás (ahead/behind)",
+      "c": "Git",
+      "d": "Quantos commits o seu ramo tem que o remoto não tem (à frente, ↑) ou que o remoto tem e você não (atrás, ↓). '↑2' significa 2 commits ainda não enviados.",
+      "o": "Alterações não commitadas",
+      "v": [
+        "Ramo (branch)"
+      ]
+    },
+    {
+      "t": "Alterações não commitadas",
+      "c": "Git",
+      "d": "O que mudou no seu disco desde o último commit (arquivos modificados, novos ou apagados). Ainda não está protegido pela história do Git.",
+      "o": "Primeira linha em Commits",
+      "v": [
+        "Commit",
+        "Diff"
+      ]
+    },
+    {
+      "t": "Diff",
+      "c": "Git",
+      "d": "Comparação linha a linha entre duas versões. Verde com + = linha adicionada; vermelho com − = removida. As duas colunas de números são a linha antiga e a nova.",
+      "o": "Detalhe do commit",
+      "v": [
+        "Hunk"
+      ]
+    },
+    {
+      "t": "Hunk",
+      "c": "Git",
+      "d": "Bloco contíguo de mudanças dentro de um diff, introduzido por uma linha '@@ -a,b +c,d @@' que informa onde ele começa na versão antiga e na nova.",
+      "o": "Diff",
+      "v": [
+        "Diff"
+      ]
+    },
+    {
+      "t": "Merge",
+      "c": "Git",
+      "d": "Commit com dois ou mais pais, que junta duas linhas de desenvolvimento.",
+      "o": "Filtro 'Merges'",
+      "v": [
+        "Ramo (branch)"
+      ]
+    },
+    {
+      "t": "Lockfile",
+      "c": "Git",
+      "d": "package-lock.json: fixa as versões exatas das dependências. Cresce muito a cada instalação e por isso é descontado dos totais de linhas alteradas.",
+      "o": "Alterações não commitadas",
+      "v": [
+        "Diff"
+      ]
+    },
+    {
+      "t": "LOC lógico",
+      "c": "Qualidade de código",
+      "d": "Linhas de código sem comentários nem linhas em branco. Mede tamanho real. Convenção: atenção acima de 250 por arquivo, alto acima de 400.",
+      "o": "Saúde do código",
+      "v": [
+        "Função longa"
+      ]
+    },
+    {
+      "t": "Complexidade ciclomática (CC)",
+      "c": "Qualidade de código",
+      "d": "Número de caminhos independentes de uma função: 1 + o número de decisões (if, for, while, case, catch, &&, ||, ??, ?:). Cada caminho pede ao menos um teste. Limite clássico (McCabe): 10 atenção, 20 alto. Aqui é aproximada por expressão regular.",
+      "o": "Saúde › Funções",
+      "v": [
+        "Guard clause",
+        "Função longa"
+      ]
+    },
+    {
+      "t": "Função longa",
+      "c": "Qualidade de código",
+      "d": "Função com muitas linhas, que costuma acumular responsabilidades. Convenção: atenção acima de 40 linhas, alto acima de 80.",
+      "o": "Saúde do código",
+      "v": [
+        "Refatoração"
+      ]
+    },
+    {
+      "t": "Churn",
+      "c": "Qualidade de código",
+      "d": "Quantas vezes um arquivo foi alterado num período (aqui, 30 dias), com linhas adicionadas e removidas. Muito churn indica requisito instável ou contexto que faltou. 'Reescrita' = removidas ÷ adicionadas.",
+      "o": "Saúde do código",
+      "v": [
+        "Hotspot"
+      ]
+    },
+    {
+      "t": "Hotspot",
+      "c": "Qualidade de código",
+      "d": "Churn × complexidade máxima do arquivo: código complicado que muda muito. É onde bugs e custo de manutenção tendem a se concentrar (ideia de Adam Tornhill). Atenção a partir de 20, alto a partir de 45.",
+      "o": "Saúde do código",
+      "v": [
+        "Churn",
+        "Complexidade ciclomática (CC)"
+      ]
+    },
+    {
+      "t": "Fan-in / Fan-out",
+      "c": "Qualidade de código",
+      "d": "Fan-in: quantos arquivos importam este. Fan-out: quantos arquivos este importa. Fan-in alto = mudanças se propagam (cuidado com o contrato público); fan-out alto = muitas dependências.",
+      "o": "Saúde do código",
+      "v": [
+        "Acoplamento"
+      ]
+    },
+    {
+      "t": "Acoplamento",
+      "c": "Qualidade de código",
+      "d": "Grau de dependência entre módulos. Baixo acoplamento permite mudar uma parte sem quebrar outras.",
+      "o": "Saúde do código",
+      "v": [
+        "Fan-in / Fan-out"
+      ]
+    },
+    {
+      "t": "Teste correspondente (proxy)",
+      "c": "Qualidade de código",
+      "d": "Existe um arquivo de teste cujo nome contém o do módulo. É um indício, não cobertura: para cobertura real é preciso rodar o Vitest com cobertura.",
+      "o": "Saúde › Arquivos",
+      "v": [
+        "Cobertura"
+      ]
+    },
+    {
+      "t": "Cobertura",
+      "c": "Qualidade de código",
+      "d": "Percentual de linhas ou ramos do código executados pelos testes. Ainda não é medida neste projeto.",
+      "o": "—",
+      "v": [
+        "Teste correspondente (proxy)"
+      ]
+    },
+    {
+      "t": "Dívida marcada (TODO/FIXME)",
+      "c": "Qualidade de código",
+      "d": "Comentários que registram pendências deixadas pelo autor (TODO, FIXME, HACK, XXX).",
+      "o": "Saúde do código",
+      "v": [
+        "Refatoração"
+      ]
+    },
+    {
+      "t": "Refatoração",
+      "c": "Qualidade de código",
+      "d": "Mudar a estrutura do código sem mudar o comportamento, para ficar mais simples de ler e alterar. Deve ser feita com testes protegendo o comportamento.",
+      "o": "Saúde do código",
+      "v": [
+        "Teste de caracterização",
+        "Guard clause"
+      ]
+    },
+    {
+      "t": "Teste de caracterização",
+      "c": "Qualidade de código",
+      "d": "Teste que registra o que o código faz hoje (mesmo que imperfeito) antes de uma refatoração, para detectar mudanças acidentais de comportamento.",
+      "o": "Recomendações da Saúde",
+      "v": [
+        "Refatoração"
+      ]
+    },
+    {
+      "t": "Guard clause",
+      "c": "Qualidade de código",
+      "d": "Validação no início da função que retorna ou lança erro cedo, evitando ifs aninhados e reduzindo a complexidade ciclomática.",
+      "o": "Recomendações da Saúde",
+      "v": [
+        "Complexidade ciclomática (CC)"
+      ]
+    },
+    {
+      "t": "Tenant (multi-tenancy)",
+      "c": "Domínio do garcom-NFC",
+      "d": "Cada restaurante é um 'inquilino' isolado: nenhum pode ver dados de outro. No código, todo método de repository de dados de restaurante recebe restaurantId como primeiro parâmetro e filtra por ele.",
+      "o": "Repositories, check_tenant",
+      "v": [
+        "Repository",
+        "JWT"
+      ]
+    },
+    {
+      "t": "Restaurante",
+      "c": "Domínio do garcom-NFC",
+      "d": "O cliente do sistema (tabela restaurants). Tem slug único e agrupa usuários, mesas, sessões e chamados.",
+      "o": "Banco",
+      "v": [
+        "Tenant (multi-tenancy)"
+      ]
+    },
+    {
+      "t": "Mesa",
+      "c": "Domínio do garcom-NFC",
+      "d": "Local físico de atendimento (tabela tables), com rótulo, ativa ou não, e um public_code único usado no QR Code ou na plaquinha NFC.",
+      "o": "Banco",
+      "v": [
+        "public_code"
+      ]
+    },
+    {
+      "t": "public_code",
+      "c": "Domínio do garcom-NFC",
+      "d": "Código aleatório e único da mesa, gravado no QR/NFC. É o que o cliente usa para entrar no atendimento, sem login. Tamanho ainda em decisão (8 ou 12 caracteres).",
+      "o": "Mesa, decisões pendentes",
+      "v": [
+        "Mesa",
+        "QR Code / NFC"
+      ]
+    },
+    {
+      "t": "QR Code / NFC",
+      "c": "Domínio do garcom-NFC",
+      "d": "Formas de abrir a URL da mesa no celular do cliente. O NFC grava a mesma URL do QR; ele não é requisito da v1.",
+      "o": "Documentação",
+      "v": [
+        "public_code"
+      ]
+    },
+    {
+      "t": "Sessão da mesa (atendimento)",
+      "c": "Domínio do garcom-NFC",
+      "d": "Período em que uma mesa está sendo atendida (tabela table_sessions): ACTIVE ou CLOSED, com expiração (4 h na v0.3, configurável) e opção de manter aberta. Só pode haver uma ACTIVE por mesa.",
+      "o": "Banco, fluxos",
+      "v": [
+        "Índice parcial",
+        "keep_open"
+      ]
+    },
+    {
+      "t": "keep_open",
+      "c": "Domínio do garcom-NFC",
+      "d": "Marca que impede a sessão de expirar sozinha: o garçom decide quando encerrar.",
+      "o": "table_sessions",
+      "v": [
+        "Sessão da mesa (atendimento)"
+      ]
+    },
+    {
+      "t": "Token por aparelho",
+      "c": "Domínio do garcom-NFC",
+      "d": "Cada celular que entra na sessão recebe um token opaco. O banco guarda só o hash (session_tokens); todos são revogados ao encerrar a sessão.",
+      "o": "session_tokens",
+      "v": [
+        "Hash"
+      ]
+    },
+    {
+      "t": "Chamado",
+      "c": "Domínio do garcom-NFC",
+      "d": "Pedido do cliente ao balcão (tabela calls): tipo WAITER (chamar garçom) ou BILL (pedir a conta). Estados: OPEN, DONE (atendido por alguém da equipe) e CANCELLED (cancelado ao encerrar ou expirar a sessão).",
+      "o": "Banco, balcão",
+      "v": [
+        "Sessão da mesa (atendimento)"
+      ]
+    },
+    {
+      "t": "Papéis ADMIN e STAFF",
+      "c": "Domínio do garcom-NFC",
+      "d": "ADMIN: dono do restaurante, cadastra equipe e mesas. STAFF: equipe do balcão que atende chamados. O papel vai dentro do JWT.",
+      "o": "Autenticação",
+      "v": [
+        "JWT"
+      ]
+    },
+    {
+      "t": "Decisão pendente",
+      "c": "Domínio do garcom-NFC",
+      "d": "Ponto de produto ainda não definido (quem abre o atendimento, duração 3 h ou 4 h, chamados repetidos…). Ficam em .claude/knowledge/garcom-nfc/decisoes.md; os agentes não decidem por você.",
+      "o": "Aba Decisões",
+      "v": [
+        "DV-nn"
+      ]
+    },
+    {
+      "t": "DV-nn",
+      "c": "Domínio do garcom-NFC",
+      "d": "Identificador de uma divergência entre as especificações ou entre documentação e código, listadas no Apêndice A do PDF consolidado (DV-01 a DV-47).",
+      "o": "Documentação",
+      "v": [
+        "Decisão pendente"
+      ]
+    },
+    {
+      "t": "RF / RNF / RN",
+      "c": "Domínio do garcom-NFC",
+      "d": "Requisito funcional (o que o sistema faz), requisito não funcional (como: segurança, desempenho) e regra de negócio. A numeração varia entre as versões v0.2 e v0.3 da documentação.",
+      "o": "Capítulo 2 da documentação",
+      "v": [
+        "DV-nn"
+      ]
+    },
+    {
+      "t": "Controller / Service / Repository",
+      "c": "Arquitetura do back-end",
+      "d": "Camadas: controller recebe e responde HTTP; service guarda a regra de negócio; repository fala com o banco. Controller não conhece o Prisma; repository não tem regra.",
+      "o": "back-end/src/modules",
+      "v": [
+        "Injeção de dependência"
+      ]
+    },
+    {
+      "t": "Repository",
+      "c": "Arquitetura do back-end",
+      "d": "Classe que concentra as consultas ao banco de uma entidade, recebendo restaurantId para isolar os dados. Aceita uma transação (tx).",
+      "o": "modules/*/…repository.ts",
+      "v": [
+        "Tenant (multi-tenancy)",
+        "Transação"
+      ]
+    },
+    {
+      "t": "Injeção de dependência (tsyringe)",
+      "c": "Arquitetura do back-end",
+      "d": "Em vez de uma classe criar suas dependências, o container as entrega pelo construtor, usando tokens de texto ('AuthService'). Facilita trocar uma implementação por uma falsa nos testes.",
+      "o": "shared/container",
+      "v": [
+        "Controller / Service / Repository"
+      ]
+    },
+    {
+      "t": "AppError e errorHandler",
+      "c": "Arquitetura do back-end",
+      "d": "Erros de negócio são classes (NotFoundError, ConflictError…) com status HTTP. O errorHandler global, registrado por último, transforma qualquer erro em resposta JSON padronizada; por isso o controller não usa try/catch.",
+      "o": "shared/errors, middlewares",
+      "v": [
+        "Zod"
+      ]
+    },
+    {
+      "t": "Zod",
+      "c": "Arquitetura do back-end",
+      "d": "Biblioteca que valida o formato dos dados de entrada (corpo da requisição). O middleware validateSchema usa o schema e devolve 400 com os campos inválidos.",
+      "o": "auth.schema.ts",
+      "v": [
+        "AppError e errorHandler"
+      ]
+    },
+    {
+      "t": "JWT",
+      "c": "Arquitetura do back-end",
+      "d": "Token assinado devolvido no login, contendo id do usuário, restaurantId e papel. O servidor confere a assinatura em cada chamada protegida; o restaurantId vem daqui, nunca do cliente.",
+      "o": "shared/utils/jwt.ts",
+      "v": [
+        "Papéis ADMIN e STAFF"
+      ]
+    },
+    {
+      "t": "Hash (scrypt)",
+      "c": "Arquitetura do back-end",
+      "d": "Transformação de mão única usada para guardar senhas e tokens sem armazenar o valor original. A comparação usa tempo constante para evitar vazar informação.",
+      "o": "shared/utils/password.ts",
+      "v": [
+        "Token por aparelho"
+      ]
+    },
+    {
+      "t": "Prisma e migration",
+      "c": "Arquitetura do back-end",
+      "d": "Prisma é o ORM que traduz o schema em acesso ao PostgreSQL. Migration é um arquivo SQL versionado que leva o banco de um estado ao próximo.",
+      "o": "back-end/prisma",
+      "v": [
+        "Índice parcial"
+      ]
+    },
+    {
+      "t": "Índice parcial",
+      "c": "Arquitetura do back-end",
+      "d": "Índice que vale só para linhas que cumprem uma condição. Aqui garante uma única sessão ACTIVE por mesa. Fica na migration, escrito à mão, porque o schema do Prisma não o expressa.",
+      "o": "table_sessions_one_active",
+      "v": [
+        "Sessão da mesa (atendimento)"
+      ]
+    },
+    {
+      "t": "Transação",
+      "c": "Arquitetura do back-end",
+      "d": "Grupo de escritas no banco que valem todas ou nenhuma. Necessária quando uma operação grava em mais de uma tabela.",
+      "o": "DbClient/tx",
+      "v": [
+        "Repository"
+      ]
+    },
+    {
+      "t": "Socket.IO e sala",
+      "c": "Arquitetura do back-end",
+      "d": "Biblioteca de tempo real. Cada restaurante tem uma sala (restaurant:<id>); o servidor emite eventos para a sala e só os balcões daquele restaurante recebem. Ainda não implementado.",
+      "o": "Planejado",
+      "v": [
+        "Tenant (multi-tenancy)"
+      ]
+    },
+    {
+      "t": "Docker Compose",
+      "c": "Infra e ferramentas",
+      "d": "Arquivo que descreve os contêineres do projeto (banco, API e o banco de teste opcional). Fica em back-end/docker-compose.yml.",
+      "o": "back-end/",
+      "v": [
+        "Perfil test"
+      ]
+    },
+    {
+      "t": "Perfil test",
+      "c": "Infra e ferramentas",
+      "d": "Serviço do compose que só sobe sob pedido (npm run test:db:up): um PostgreSQL descartável, em memória, na porta 5433, para os testes.",
+      "o": "docker-compose.yml",
+      "v": [
+        "Docker Compose"
+      ]
+    },
+    {
+      "t": "Vitest e supertest",
+      "c": "Infra e ferramentas",
+      "d": "Vitest roda os testes automáticos; supertest faz requisições HTTP à API sem abrir porta. Juntos testam rotas e regras.",
+      "o": "back-end/tests",
+      "v": [
+        "Biome"
+      ]
+    },
+    {
+      "t": "Biome",
+      "c": "Infra e ferramentas",
+      "d": "Ferramenta única de lint (aponta descuidos) e formatação. Foi escolhida porque o typescript-eslint ainda não suporta o TypeScript 7 usado no projeto.",
+      "o": "biome.json",
+      "v": [
+        "Vitest e supertest"
+      ]
+    },
+    {
+      "t": "Modo IA",
+      "c": "Infra e ferramentas",
+      "d": "Pacote preparado em .claude/ai-mode (testes, lint, seed, CI) que deixa o projeto pronto para a IA codar com segurança. Liga e desliga com ai_mode.py; é reversível.",
+      "o": ".claude/ai-mode",
+      "v": [
+        "Skill"
+      ]
+    },
+    {
+      "t": "Skill",
+      "c": "Infra e ferramentas",
+      "d": "Comando que você digita (/verificar, /implementar…) e que carrega um passo a passo pronto para a IA seguir. As deste projeto só rodam quando você digita o comando.",
+      "o": ".claude/skills",
+      "v": [
+        "Modo IA"
+      ]
+    },
+    {
+      "t": "CLAUDE.md",
+      "c": "Infra e ferramentas",
+      "d": "Arquivo que o Claude Code lê no início de toda sessão: seu estilo de código, convenções e como trabalhar com você. Mantém a IA alinhada sem repetir instruções.",
+      "o": ".claude/CLAUDE.md",
+      "v": [
+        "Skill"
+      ]
+    },
+    {
+      "t": "Hook",
+      "c": "Infra e ferramentas",
+      "d": "Comando que o Claude Code executa automaticamente em certos eventos (ex.: após editar um arquivo). Neste projeto existe só um modelo desligado, em hooks.template.json.",
+      "o": ".claude/hooks.template.json",
+      "v": [
+        "Skill"
+      ]
+    },
+    {
+      "t": "CI",
+      "c": "Infra e ferramentas",
+      "d": "Integração contínua: roda typecheck, lint e testes automaticamente a cada push (arquivo .github/workflows/ci.yml). Só funciona quando o projeto está no GitHub.",
+      "o": "back-end/.github",
+      "v": [
+        "Vitest e supertest"
+      ]
+    },
+    {
+      "t": "Seed",
+      "c": "Infra e ferramentas",
+      "d": "Script que cria dados de desenvolvimento (um restaurante demo, um admin e 5 mesas) para trabalhar sem cadastrar tudo à mão.",
+      "o": "back-end/prisma/seed.ts",
+      "v": [
+        "Docker Compose"
+      ]
+    }
+  ]
+}

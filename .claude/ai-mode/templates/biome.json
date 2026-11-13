@@ -1,0 +1,9 @@
+{
+  "files": { "includes": ["src/**", "tests/**", "prisma/seed.ts"] },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 110 },
+  "javascript": {
+    "formatter": { "quoteStyle": "double", "semicolons": "always", "trailingCommas": "all" },
+    "parser": { "unsafeParameterDecoratorsEnabled": true }
+  },
+  "linter": { "enabled": true, "rules": { "recommended": true } }
+}

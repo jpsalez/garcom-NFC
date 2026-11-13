@@ -1,0 +1,74 @@
+{
+  "recipes": [
+    {
+      "id": "planejar-modulo",
+      "nome": "Planejar um módulo",
+      "descricao": "O arquiteto define a estrutura; depois dados e API detalham em paralelo, com a sua aprovação entre as fases.",
+      "steps": [
+        {
+          "nome": "Estrutura",
+          "agents": [
+            {
+              "agent": "garcom-arquiteto",
+              "prompt": "Planeje a tarefa abaixo no padrão do projeto: arquivos a criar, interfaces, ordem de escrita e o que fica bloqueado por decisão de produto pendente. Seja objetivo.\n\nTarefa: {tarefa}"
+            }
+          ]
+        },
+        {
+          "nome": "Detalhes",
+          "gate": true,
+          "agents": [
+            {
+              "agent": "garcom-dados",
+              "prompt": "Com base no plano do arquiteto, detalhe schema, índices, repositories e riscos de isolamento por restaurante.\n\nTarefa: {tarefa}\n\nPlano do arquiteto:\n{saida:garcom-arquiteto}"
+            },
+            {
+              "agent": "garcom-api-erros",
+              "prompt": "Com base no plano do arquiteto, defina o contrato das rotas (método, caminho, perfil, entrada, saída, erros).\n\nTarefa: {tarefa}\n\nPlano do arquiteto:\n{saida:garcom-arquiteto}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "revisao-seguranca",
+      "nome": "Revisão de segurança",
+      "descricao": "Segurança e revisor olham a mesma área em paralelo.",
+      "steps": [
+        {
+          "nome": "Revisão",
+          "agents": [
+            {
+              "agent": "garcom-auth-seguranca",
+              "prompt": "Analise riscos de autenticação, autorização e vazamento entre restaurantes em: {tarefa}"
+            },
+            {
+              "agent": "garcom-revisor",
+              "prompt": "Revise o código de: {tarefa}. Foque em tenant, erros e transações."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "antes-do-commit",
+      "nome": "Antes do commit",
+      "descricao": "Revisor e testes avaliam o que você alterou.",
+      "steps": [
+        {
+          "nome": "Checagem",
+          "agents": [
+            {
+              "agent": "garcom-revisor",
+              "prompt": "Revise as mudanças recentes em: {tarefa}"
+            },
+            {
+              "agent": "garcom-testes",
+              "prompt": "Liste os cenários de teste que faltam para: {tarefa}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

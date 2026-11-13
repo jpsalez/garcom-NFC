@@ -1,0 +1,42 @@
+/* Commits, diff e resumo do git. */
+input[type=date]{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:6px 10px;outline:none;color-scheme:light dark}
+input[type=date]:focus{border-color:var(--ac)}
+/* gráficos de atividade */
+.kpi-n{font:400 32px var(--serif);line-height:1.1}
+.heat{display:block;margin:6px 0;max-width:100%}.hc{fill:var(--bd);transition:opacity .2s}.hc:hover{opacity:.7;stroke:var(--tx);stroke-width:1}
+.hc.l1{fill:color-mix(in srgb,var(--ac) 28%,var(--bd))}.hc.l2{fill:color-mix(in srgb,var(--ac) 52%,var(--bd))}.hc.l3{fill:color-mix(in srgb,var(--ac) 78%,var(--bd))}.hc.l4{fill:var(--ac)}
+.lchart{display:block;width:100%;height:96px;margin-top:6px}.lchart .la{stroke:var(--ok)}.lchart .ld{stroke:var(--err)}
+.lleg{display:flex;gap:12px;font:12px var(--mono)}.la-t{color:var(--ok)}.ld-t{color:var(--err)}
+/* lista de commits virtualizada */
+.cl-card{padding:10px 12px}.cl-scroll{height:min(72vh,780px);overflow:auto;position:relative;outline:none}.cl-spacer{position:relative}.cl-win{position:absolute;left:0;right:0;top:0}
+.cl-scroll:focus-visible{box-shadow:inset 0 0 0 2px var(--ac);border-radius:10px}
+.crow{height:46px}.crow .sj{justify-content:center;padding:0}.crow .sj b{font-size:13px}.crow .mt{align-items:center;flex-wrap:nowrap;overflow:hidden;white-space:nowrap}
+.crow .refs{display:inline-flex;gap:4px}.tag.br{color:var(--ac)}.tag.tg{color:var(--warn)}.tag.cur{font-weight:700;background:color-mix(in srgb,currentColor 14%,transparent)}
+.cdot{width:9px;height:9px;border-radius:50%;background:var(--dim);margin:0 14px 0 12px;flex:none}
+.cd-card{position:sticky;top:0;align-self:start;max-height:84vh;overflow:auto}.cbody{margin:6px 0 10px;padding:8px 12px;border-left:2px solid var(--bd2);color:var(--mut)}
+.cbody p{margin:.3em 0}
+/* diff */
+.dv{margin-top:10px;--dvln:44px}
+.dv-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}.dv-bar .hint{margin-right:auto}
+.dv-stat{margin-bottom:8px}.dv-stat pre{margin-top:6px;max-height:160px}
+.dv-file{border:1px solid var(--bd);border-radius:12px;margin:8px 0;overflow:hidden;background:var(--bg2)}
+.dv-fh{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:7px 12px;background:var(--card2);cursor:pointer;font:12.5px var(--mono)}
+.dv-fh:hover{background:var(--card)}.dv-fh:focus-visible{outline:2px solid var(--ac);outline-offset:-2px}
+.dv-fh .chev{transition:transform .2s var(--e);color:var(--mut)}.dv-fh[aria-expanded=true] .chev{transform:rotate(90deg)}
+.dv-fh .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-bar2{display:flex;width:60px;height:6px;border-radius:4px;overflow:hidden;background:var(--bd)}.dv-bar2 i{display:block}.dv-bar2 .a{background:var(--ok)}.dv-bar2 .d{background:var(--err)}
+.dv-body{overflow:auto;font:12px/1.55 var(--mono)}.dv-body[hidden]{display:none}.pad{padding:10px 14px}.gen{border-top:1px dashed var(--bd)}
+.dv-hunk{padding:3px 12px;color:var(--read);background:color-mix(in srgb,var(--read) 8%,transparent);font-size:11.5px;position:sticky;top:0;z-index:1;white-space:pre}
+.dr{display:grid;grid-template-columns:var(--dvln) var(--dvln) 16px minmax(0,1fr);white-space:pre-wrap;overflow-wrap:anywhere}
+.dr .ln,.dc .ln{color:var(--dim);text-align:right;padding-right:8px;user-select:none;font-size:11px}.dr .mk{color:var(--dim);text-align:center;user-select:none}.dr .tx,.dc .tx{padding-right:10px}
+.dr.a,.dc.a{background:color-mix(in srgb,var(--ok) 13%,transparent)}.dr.d,.dc.d{background:color-mix(in srgb,var(--err) 13%,transparent)}.dc.e{background:var(--card)}
+.dr.a .mk{color:var(--ok)}.dr.d .mk{color:var(--err)}
+mark.wd{background:color-mix(in srgb,var(--ok) 38%,transparent);color:inherit;border-radius:3px;padding:0}.dr.d mark.wd,.dc.d mark.wd{background:color-mix(in srgb,var(--err) 38%,transparent)}
+.dr2{display:grid;grid-template-columns:1fr 1fr}.dc{display:grid;grid-template-columns:var(--dvln) minmax(0,1fr);white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}.dr2 .dc:first-child{border-right:1px solid var(--bd)}
+.dv-gap{display:flex;align-items:center;gap:8px;padding:3px 12px;background:var(--card);color:var(--mut);border-block:1px solid var(--bd)}
+/* resumo do git (Verificar) */
+.gsum .areas{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}.garea{border:1px solid var(--bd);border-radius:12px;padding:10px 12px;background:var(--card)}
+.garea b{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:6px;font-weight:600}.garea .n{font:400 26px var(--serif)}.garea .cs{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font:11.5px var(--mono)}
+.garea .cM{color:var(--warn)}.garea .cA{color:var(--ok)}.garea .cD{color:var(--err)}.garea .c\?{color:var(--read)}
+.grec{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left;padding:6px 8px;border-radius:9px;border:0;background:none;cursor:pointer}.grec:hover{background:var(--card2)}
+.grec .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:13px}.grec .m{font:11.5px var(--mono);color:var(--dim);white-space:nowrap}

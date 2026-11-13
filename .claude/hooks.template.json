@@ -1,0 +1,20 @@
+{
+  "_leia": "MODELO DESLIGADO. Nada aqui é executado. Para ativar, copie o bloco 'hooks' para .claude/settings.json (ou para .claude/settings.local.json, que fica só na sua máquina).",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/scripts/verify.py\"" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/scripts/check_tenant.py\"" }
+        ]
+      }
+    ]
+  }
+}

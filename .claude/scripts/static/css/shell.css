@@ -1,0 +1,67 @@
+/* Casca do painel (fase 5): paleta de comandos, ajuda, botão Ctrl K, linha do tempo com zoom, dicionário em grade e números tabulares. */
+
+/* ---- números alinhados em todo o painel ---- */
+body, .n, .kpi, .mono, .pm, .met b, .cnt, .badge, .chip b, table, td, th, .tick span, .pbar, kbd, input, select { font-variant-numeric: tabular-nums; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* ---- botão "Ctrl K" no topo ---- */
+.kbdbtn { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 10px; border: 1px solid var(--bd); color: var(--mut); font-size: 12.5px; transition: all .3s var(--e); }
+.kbdbtn:hover { color: var(--tx); border-color: var(--bd2); background: var(--card2); }
+.kbdbtn:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+.kbdbtn svg.i { width: 16px; height: 16px; }
+
+/* ---- diálogos (paleta e ajuda) ---- */
+.nm-back { position: fixed; inset: 0; z-index: 100; background: rgba(5, 8, 12, .55); backdrop-filter: blur(3px); display: grid; place-items: start center; padding: 12vh 16px 16px; animation: nmfade .18s var(--e) both; }
+:root[data-theme="light"] .nm-back { background: rgba(40, 36, 28, .35); }
+@keyframes nmfade { from { opacity: 0; } }
+.nm-box { width: min(640px, 100%); max-height: 70vh; display: flex; flex-direction: column; background: var(--bg2); border: 1px solid var(--bd2); border-radius: 16px; box-shadow: var(--shadow), 0 30px 80px -20px rgba(0, 0, 0, .6); overflow: hidden; animation: rise .22s var(--e) both; }
+.nm-pal > input { all: unset; box-sizing: border-box; width: 100%; padding: 16px 18px; font: 16px var(--sans); border-bottom: 1px solid var(--bd); color: var(--tx); }
+.nm-pal > input:focus-visible { box-shadow: inset 0 -2px 0 var(--ac); }
+.nm-list { overflow: auto; padding: 6px; flex: 1; min-height: 80px; }
+.nm-g { font: 600 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); padding: 10px 10px 4px; }
+.nm-item { display: flex; align-items: baseline; gap: 12px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.nm-item.on { background: var(--user); box-shadow: inset 2px 0 0 var(--ac); }
+.nm-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.nm-h { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font: 12px var(--mono); text-align: right; }
+.nm-empty { padding: 20px; text-align: center; }
+.nm-foot { display: flex; gap: 6px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--bd); }
+.nm-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--bd); }
+.nm-head h3 { margin: 0; font: 400 20px var(--serif); }
+.nm-body { overflow: auto; padding: 8px 18px 16px; }
+.nm-sec h4 { margin: 14px 0 6px; font: 600 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.nm-row { display: flex; align-items: center; gap: 14px; padding: 4px 0; }
+.nm-keys { flex: none; min-width: 92px; display: inline-flex; gap: 4px; }
+.nm-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; }
+@media (max-width: 640px) { .nm-grid { grid-template-columns: 1fr; } }
+
+/* ---- Visão geral: cartões clicáveis ---- */
+.gcard { cursor: pointer; }
+.gcard:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+.gcard .kpi-n, .gcard .n { font-variant-numeric: tabular-nums; }
+
+/* ---- Linha do tempo ---- */
+.tl-zoom { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.tl { cursor: grab; outline: none; }
+.tl:focus-visible { box-shadow: 0 0 0 2px var(--ac); border-radius: 10px; }
+.panning .tl { cursor: grabbing; user-select: none; }
+.tlclip { position: absolute; inset: 0; overflow: hidden; }
+.tl.still .tbar { animation: none; }
+.tbar { min-width: 72px; }
+.tbar:focus-visible, .tdot:focus-visible { outline: 2px solid var(--ac); outline-offset: 1px; z-index: 4; }
+
+/* ---- Dicionário: grade em ordem de leitura + índice A–Z ---- */
+.dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
+.dgrid .dcard { margin: 0; }
+.dletter { grid-column: 1 / -1; font: 400 30px var(--serif); color: var(--ac); border-bottom: 1px solid var(--bd); padding: 8px 2px 4px; scroll-margin-top: 56px; }
+.dindex { position: sticky; top: -24px; z-index: 5; display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 0; margin-bottom: 8px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); }
+.dl-btn { all: unset; box-sizing: border-box; cursor: pointer; min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; font: 600 12.5px var(--mono); color: var(--tx); border: 1px solid var(--bd); background: var(--card); transition: all .2s var(--e); }
+.dl-btn:hover:not(:disabled) { background: var(--ac); color: var(--acx); border-color: var(--ac); }
+.dl-btn:disabled { opacity: .3; cursor: default; }
+.dl-btn:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+
+/* selos dentro das linhas dos cartões não esticam na vertical */
+.gcard .find > .tag, .gcard .find > .lv, .gcard .find > .badge { align-self: flex-start; flex: none; }
+
+/* tarefas: título de trilha e status arquivada */
+.tk-track{margin:0;font:400 20px var(--serif);letter-spacing:-.01em}.tk-st.st-dropped{color:var(--dim)}.tk.dropped .tk-t{color:var(--dim);text-decoration:line-through}
