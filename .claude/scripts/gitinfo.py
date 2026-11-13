@@ -21,6 +21,51 @@ TEST_RX = re.compile(r"(^|/)(tests?|__tests__)/|\.(test|spec)\.[tj]sx?$")
 _cache = {}
 
 
+# ---------- cache invalidado por assinatura (só recalcula quando o git ou os fontes mudaram) ----------
+def refs_sig():
+    """Muda a cada commit, troca de branch, tag ou fetch: mtime de HEAD, packed-refs e de cada arquivo em refs/."""
+    g = REPO / ".git"
+    out = []
+    try:
+        for name in ("HEAD", "packed-refs"):
+            f = g / name
+            out.append(f.stat().st_mtime_ns if f.exists() else 0)
+        for dp, _, fns in os.walk(g / "refs"):
+            out += [(Path(dp) / x).stat().st_mtime_ns for x in fns]
+    except OSError:
+        pass
+    return tuple(out)
+
+
+def src_sig():
+    """Muda quando qualquer .ts de back-end/src (e tests/) é criado, apagado ou editado."""
+    out = []
+    for base in (BACK / "src", BACK / "tests"):
+        for dp, _, fns in os.walk(base):
+            out += [(x, (Path(dp) / x).stat().st_mtime_ns) for x in fns if x.endswith(".ts")]
+    return tuple(sorted(out))
+
+
+def memo(*sigs):
+    """Guarda o resultado da função enquanto as assinaturas não mudarem (até 32 combinações de argumentos)."""
+    def deco(fn):
+        cache = {}
+        def wrap(*a, **k):
+            key = (a, tuple(sorted(k.items())))
+            sig = tuple(s() for s in sigs)
+            hit = cache.get(key)
+            if hit and hit[0] == sig:
+                return hit[1]
+            val = fn(*a, **k)
+            cache[key] = (sig, val)
+            if len(cache) > 32:
+                cache.pop(next(iter(cache)))
+            return val
+        wrap.__wrapped__ = fn
+        return wrap
+    return deco
+
+
 def git(*args, timeout=25):
     try:
         r = subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
@@ -144,6 +189,7 @@ def level_of(cc, longest, loc, hot):
     return "ok"
 
 
+@memo(refs_sig, src_sig)
 def health():
     # git devolve caminhos a partir da raiz do monorepo; aqui trabalhamos relativo a back-end/
     cur = {k[len('back-end/'):]: v for k, v in churn(30).items() if k.startswith('back-end/')}
@@ -395,13 +441,7 @@ def import_graph():
     return g
 
 
-_health = {"t": 0.0, "d": None}
-
-
-def health_cached():
-    if _health["d"] is None or time.time() - _health["t"] > 30:
-        _health.update(t=time.time(), d=health())
-    return _health["d"]
+health_cached = health  # health() já é memoizada por assinatura
 
 
 def github_remote():
@@ -482,6 +522,7 @@ def _filters(branch, author, path, since, until, grep=None):
     return args, (["--", repo_path(path)] if path else [])
 
 
+@memo(refs_sig)
 def graph(limit=300, skip=0, branch=None, author=None, path=None, since=None, until=None, grep=None):
     """Commits em ordem topológica com `parents` (para o desenho do grafo), sem a lista de arquivos."""
     limit, skip = max(1, min(int(limit), 1000)), max(0, int(skip))

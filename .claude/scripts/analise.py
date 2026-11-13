@@ -21,12 +21,40 @@ def _ts(s):
         return None
 
 
+_titles = {}
+
+
+def title_of(path: Path):
+    """Título (ai-title) de um .jsonl lendo só os bytes novos desde a última chamada: barato mesmo em sessões enormes."""
+    st = path.stat()
+    key = str(path)
+    off, title, size = _titles.get(key, (0, None, 0))
+    if st.st_size < size:  # arquivo recomeçou
+        off, title = 0, None
+    with open(path, "rb") as f:
+        f.seek(off)
+        chunk = f.read()
+    end = chunk.rfind(b"\n") + 1  # só linhas completas
+    for line in chunk[:end].splitlines():
+        if b'"ai-title"' in line:
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            if d.get("type") == "ai-title" and d.get("aiTitle"):
+                title = d["aiTitle"]
+    _titles[key] = (off + end, title, st.st_size)
+    return title
+
+
 def parse_file(path: Path):
     """Lê um .jsonl inteiro (com cache por tamanho/mtime) e extrai as métricas de um agente."""
     st = path.stat()
     key = (str(path), st.st_size, int(st.st_mtime))
     if key in _cache:
         return _cache[key]
+    for k in [k for k in _cache if k[0] == key[0]]:  # só a versão mais nova de cada arquivo fica na memória
+        del _cache[k]
     r = {"first": None, "last": None, "tools": Counter(), "read": Counter(), "edited": Counter(),
          "usage": {}, "model": None, "errors": 0, "calls": [], "briefing": 0, "title": None, "msgs": 0, "edit_events": []}
     ids = {}

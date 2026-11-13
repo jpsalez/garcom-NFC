@@ -187,11 +187,24 @@ class RepoTemporario(unittest.TestCase):
         (self.root / "g.txt").write_text("x\n")
         subprocess.run(["git", "-C", str(self.root), "add", "g.txt"], check=True)
         subprocess.run(["git", "-C", str(self.root), "-c", "user.name=Ana", "-c", "user.email=a@x", "commit", "-q", "-m", "feat: SES-01 abre a mesa"], check=True)
+        self.addCleanup(lambda: subprocess.run(["git", "-C", str(self.root), "reset", "-q", "--hard", "HEAD~1"], check=True))
         self.assertEqual(gitinfo.graph(10, grep="SES-01")["total"], 1)
         self.assertEqual(gitinfo.graph(10, grep="SES-02")["total"], 0)
         for ruim in ("--all", "a b", "SES-01\nx", ".*"):
             with self.assertRaises(ValueError, msg=ruim):
                 gitinfo.graph(10, grep=ruim)
+
+    def test_cache_do_grafo_invalida_ao_commitar(self):
+        import subprocess
+        antes = gitinfo.graph(50)
+        self.assertIs(gitinfo.graph(50), antes)  # mesma assinatura: devolve o guardado
+        (self.root / "h.txt").write_text("y\n")
+        subprocess.run(["git", "-C", str(self.root), "add", "h.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "-c", "user.name=Ana", "-c", "user.email=a@x", "commit", "-q", "-m", "novo commit"], check=True)
+        self.addCleanup(lambda: subprocess.run(["git", "-C", str(self.root), "reset", "-q", "--hard", "HEAD~1"], check=True))
+        depois = gitinfo.graph(50)
+        self.assertIsNot(depois, antes)
+        self.assertEqual(depois["total"], antes["total"] + 1)
 
     def test_filtros_recusam_entrada_perigosa(self):
         for kw in ({"branch": "--output=/tmp/x"}, {"branch": "nao-existe"}, {"author": "a\nb"}, {"since": "ontem"}, {"path": "../x"}, {"branch": "a..b"}):
