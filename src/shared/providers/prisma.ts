@@ -4,3 +4,8 @@ export const prisma = new PrismaClient();
 
 // Permite usar os repositories dentro de prisma.$transaction(async (tx) => ...)
 export type DbClient = PrismaClient | Prisma.TransactionClient;
+
+// Várias escritas que valem juntas ou não valem: use new XRepository(tx) dentro do callback
+export function runInTransaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>) {
+  return prisma.$transaction(work);
+}

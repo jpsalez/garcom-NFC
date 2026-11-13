@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import type { ZodType } from "zod";
+import { z, type ZodType } from "zod";
 import { ValidationError } from "../errors/http-errors.ts";
 
 export function validateSchema(schema: ZodType) {
@@ -15,6 +15,19 @@ export function validateSchema(schema: ZodType) {
       throw new ValidationError(details);
     }
 
+    // Só os campos do schema seguem adiante (evita campos extras como role ou active)
+    req.body = result.data;
+    next();
+  };
+}
+
+// Parâmetros de URL que precisam ser UUID: evita erro do banco por id malformado
+export function validateUuidParams(...names: string[]) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const invalid = names.filter((name) => !z.uuid().safeParse(req.params[name]).success);
+    if (invalid.length > 0) {
+      throw new ValidationError(invalid.map((field) => ({ field, message: "UUID inválido" })));
+    }
     next();
   };
 }

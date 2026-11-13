@@ -17,6 +17,9 @@ export async function passwordHash(password: string): Promise<string> {
   return `${salt}:${derived.toString("hex")}`;
 }
 
+// Hash válido que nunca confere: o login o compara quando o e-mail não existe (mesmo tempo de resposta)
+export const DUMMY_PASSWORD_HASH = `${"0".repeat(SALT_BYTES * 2)}:${"0".repeat(KEY_LENGTH * 2)}`;
+
 export async function comparePassword(password: string, stored: string): Promise<boolean> {
   const [salt, hash] = stored.split(":");
   if (!salt || !hash) return false;

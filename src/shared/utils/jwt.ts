@@ -16,12 +16,12 @@ function getSecret(): string {
 
 export function signToken(payload: TokenPayload): string {
   const expiresIn = (process.env.JWT_EXPIRES_IN ?? "1d") as SignOptions["expiresIn"];
-  return jwt.sign(payload, getSecret(), { expiresIn });
+  return jwt.sign(payload, getSecret(), { expiresIn, algorithm: "HS256" });
 }
 
 // Lança erro se o token for inválido, adulterado ou expirado
 export function verifyToken(token: string): TokenPayload {
-  const decoded = jwt.verify(token, getSecret());
+  const decoded = jwt.verify(token, getSecret(), { algorithms: ["HS256"] });
 
   if (typeof decoded === "string" || typeof decoded.sub !== "string") {
     throw new Error("Payload do token inválido");
