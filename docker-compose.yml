@@ -1,14 +1,14 @@
-# Único compose do projeto: PostgreSQL + API (desenvolvimento) e, opcionalmente, o banco dos testes.
-# Sem Dockerfile: usa a imagem oficial do Node. Rode DENTRO de back-end/.
+# Único compose do projeto: PostgreSQL + API + front-end (desenvolvimento) e, opcionalmente, o banco dos testes.
+# Sem Dockerfile: usa a imagem oficial do Node. Rode na RAIZ do projeto (esta pasta).
 #
-#   docker compose up                   # banco + API em http://localhost:3000 (teste: /health)
-#   docker compose up -d                # em segundo plano;  docker compose logs -f api
-#   docker compose down                 # para (mantém o banco);  down -v apaga banco e node_modules do contêiner
-#   npm run test:db:up                  # sobe SÓ o banco de testes (porta 5433); npm test; npm run test:db:down
+#   docker compose up                   # banco + API (http://localhost:4000, docs em /docs) + front (http://localhost:3000)
+#   docker compose up -d                # em segundo plano;  docker compose logs -f api web
+#   docker compose down                 # para (mantém o banco);  down -v apaga banco e node_modules dos contêineres
+#   (em back-end/) npm run test:db:up   # sobe SÓ o banco de testes (porta 5433); npm test; npm run test:db:down
 #
-# Variáveis: o compose lê o arquivo .env desta pasta. É obrigatório definir JWT_SECRET
-# (veja .env.example). Esta pasta é montada SOMENTE LEITURA: nada é escrito nos seus arquivos;
-# editar um arquivo de src/ reinicia a API sozinha.
+# Segredos: a API lê back-end/.env (JWT_SECRET é obrigatório, veja back-end/.env.example).
+# Variáveis opcionais deste compose (portas, usuário do banco) podem ir em um .env aqui na raiz.
+# back-end/ é montado SOMENTE LEITURA: editar um arquivo de src/ reinicia a API sozinha.
 name: garcom-nfc
 
 services:
@@ -37,20 +37,18 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - back-end/.env
     environment:
       NODE_ENV: development
-      PORT: 3000
+      PORT: 4000
       # Use caracteres seguros em URL na senha do banco (evite @ : / ? #)
       DATABASE_URL: postgresql://${POSTGRES_USER:-garcom}:${POSTGRES_PASSWORD:-garcom}@db:5432/${POSTGRES_DB:-garcom}?schema=public
-      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no arquivo .env desta pasta (veja .env.example)}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
-      AUTH_CACHE_TTL_SECONDS: ${AUTH_CACHE_TTL_SECONDS:-30}
-      TABLE_SESSION_TTL: ${TABLE_SESSION_TTL:-14400}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "${API_PORT:-4000}:4000"
     volumes:
-      - ./:/app:ro
+      - ./back-end:/app:ro
       - api_node_modules:/app/node_modules # dependências ficam no volume, não na sua pasta
       - api_generated:/app/generated # client do Prisma gerado para Linux
       - npm_cache:/root/.npm
@@ -95,19 +93,29 @@ services:
       timeout: 3s
       retries: 20
 
-  # Front-end (Next.js) ainda não existe. Quando existir, descomente e ajuste:
-  # web:
-  #   image: node:22-bookworm
-  #   working_dir: /app
-  #   volumes: ["../front-end:/app"]
-  #   command: sh -c "npm ci && npm run dev"
-  #   environment:
-  #     NEXT_PUBLIC_API_URL: http://localhost:3000
-  #   ports: ["3001:3000"]
-  #   depends_on: [api]
+  # Front-end (Next.js) em modo dev. A URL da API é a que o NAVEGADOR enxerga (host), não a do contêiner.
+  web:
+    image: node:22-bookworm
+    working_dir: /app
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - ./front-end:/app
+      - web_node_modules:/app/node_modules # dependências ficam no volume, não na sua pasta
+      - web_next:/app/.next
+      - npm_cache:/root/.npm
+    command: sh -c "npm ci && exec npm run dev -- --hostname 0.0.0.0"
 
 volumes:
   pgdata:
   api_node_modules:
   api_generated:
+  web_node_modules:
+  web_next:
   npm_cache:
