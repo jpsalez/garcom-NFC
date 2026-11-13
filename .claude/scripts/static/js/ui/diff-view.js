@@ -22,7 +22,7 @@ function parseDiff(txt) {
   /** @type {DFile[]} */ const files = []; const headLines = [];
   /** @type {DFile | null} */ let f = null; /** @type {Hunk | null} */ let hk = null;
   for (const l of txt.split('\n')) {
-    if (l.startsWith('diff --git ')) { f = { name: l.split(' b/').pop() || l, status: 'modificado', binary: false, hunks: [], add: 0, del: 0 }; files.push(f); hk = null; continue; }
+    if (l.startsWith('diff --git ')) { f = { name: (l.match(/^diff --git \S+? [a-z]\/(.+)$/) || [, l])[1], status: 'modificado', binary: false, hunks: [], add: 0, del: 0 }; files.push(f); hk = null; continue; }
     if (!f) { headLines.push(l); continue; }
     const m = l.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)/);
     if (m) { hk = { oldStart: +m[1], oldLines: m[2] === undefined ? 1 : +m[2], newStart: +m[3], newLines: m[4] === undefined ? 1 : +m[4], header: m[5], lines: [] }; f.hunks.push(hk); continue; }

@@ -89,3 +89,6 @@ mark { background: color-mix(in srgb, var(--accent) 35%, transparent); color: in
 .ctx .stats { gap: var(--s4) var(--s5); margin: var(--s3) 0; } .ctx .stat .v { font-size: var(--fs-16); }
 .ctx .stat.warn .v { color: var(--warn); } .ctx .stat.bad .v { color: var(--err); }
 .files3 > .pane > .empty, .files3 > .pane > .errstate, .files3 > .pane > .loading { margin: var(--s5); }
+
+/* Arquivos usa a área "flush" (sem margem); como ela é flex por causa da Conversa, a grade precisa ocupar tudo */
+main#main.flush > .files3 { flex: 1 1 auto; width: 100%; margin-inline: 0; }

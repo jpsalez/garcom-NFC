@@ -13,6 +13,7 @@ const REDIRECT = { geral: 'visao-geral', chat: 'conversa', projeto: 'arquivos', 
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const PORT = Number(arg('port', 8799)), CDP = PORT + 1000;
 const SHOTS = arg('shots', '');
+const DARK = process.argv.includes('--dark'), SIZE = (arg('size', '1440x900')).split('x').map(Number);
 const EVAL = arg('eval', ''), NAME = arg('name', '');
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TABS = (arg('only', '') || (process.argv.includes('--legacy') ? Object.keys(REDIRECT).join(',') : '') || 'visao-geral,conversa,orquestrar,ao-vivo,analise,linha-do-tempo,tarefas,commits,saude-do-codigo,arquivos,verificar,decisoes,dicionario').split(',');
@@ -20,7 +21,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const server = spawn('python3', ['-B', join(HERE, '..', 'painel.py'), '--port', String(PORT)], { stdio: 'ignore' });
 const profile = mkdtempSync(join(tmpdir(), 'painel-smoke-'));
-const chrome = spawn('chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--window-size=1440,900', `--remote-debugging-port=${CDP}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn('chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--window-size=' + SIZE.join(','), `--remote-debugging-port=${CDP}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
 const stop = () => { server.kill(); chrome.kill(); };
 process.on('exit', stop);
 
@@ -47,6 +48,8 @@ async function checkTab(tab) {
     if (m.method === 'Network.responseReceived' && m.params.response.status >= 400) problems.push(`http ${m.params.response.status}: ${m.params.response.url}`);
   });
   await Promise.all([c.send('Runtime.enable'), c.send('Log.enable'), c.send('Network.enable'), c.send('Page.enable')]);
+  await c.send('Emulation.setDeviceMetricsOverride', { width: SIZE[0], height: SIZE[1], deviceScaleFactor: 1, mobile: false });
+  if (DARK) await c.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
   await c.send('Page.navigate', { url: `http://127.0.0.1:${PORT}/#${tab}` });
   await sleep(2500);
   if (EVAL) { const ev = await c.send('Runtime.evaluate', { expression: EVAL, awaitPromise: true, returnByValue: true }); if (ev.result.exceptionDetails) problems.push('eval: ' + (ev.result.exceptionDetails.exception?.description || ev.result.exceptionDetails.text)); else if (ev.result.result.value !== undefined) console.log('      eval →', JSON.stringify(ev.result.result.value)); await sleep(1200); }
