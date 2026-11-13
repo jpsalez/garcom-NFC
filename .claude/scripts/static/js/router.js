@@ -32,7 +32,7 @@ export const ROUTES = [
   { hash: 'ao-vivo', label: 'Ao vivo', sub: 'sua sessão interativa, em tempo real', icon: 'pulse', group: 'Observar', view: renderVivo, badge: 'b-live' },
   { hash: 'analise', label: 'Análise', sub: 'sessões, custo e qualidade da orquestração', icon: 'chart', group: 'Observar', view: renderAnalise },
   { hash: 'linha-do-tempo', label: 'Linha do tempo', sub: 'sessões, agentes, commits e verificações no mesmo eixo', icon: 'clock', group: 'Observar', view: renderTempo },
-  { hash: 'tarefas', label: 'Tarefas', sub: 'o que falta fazer, por módulo, de acordo com a documentação', icon: 'check', group: 'Projeto', view: renderTarefas },
+  { hash: 'tarefas', label: 'Tarefas', sub: 'o que fazer agora, o que está bloqueado e por quê', icon: 'check', group: 'Projeto', view: renderTarefas },
   { hash: 'commits', label: 'Commits', sub: 'histórico, alterações não commitadas e diff', icon: 'git', group: 'Projeto', view: renderCommits },
   { hash: 'github', label: 'GitHub', sub: 'pull requests, Actions e issues', icon: 'github', group: 'Projeto', view: renderGithub },
   { hash: 'saude-do-codigo', label: 'Saúde do código', sub: 'candidatos a refatorar, churn e histórico de verificações', icon: 'heart', group: 'Projeto', view: renderSaude },
@@ -52,8 +52,9 @@ export function buildNav(/** @type {Element} */ box) {
   let group = '';
   ROUTES.forEach(r => {
     if (r.group !== group) { group = r.group; box.append(h('div', 'grp', group)); }
-    const b = h('button'); b.dataset.tab = r.hash; b.append(ico(r.icon), document.createTextNode(r.label));
-    if (r.badge) { const c = h('span', 'cnt', '–'); c.id = r.badge; b.append(c); }
+    const b = h('button'); b.dataset.tab = r.hash; b.title = r.label;
+    b.append(ico(r.icon), h('span', 'lbl', r.label));
+    if (r.badge) { const c = h('span', 'cnt'); c.id = r.badge; c.hidden = true; b.append(c); }
     b.onclick = () => go(r.hash);
     box.append(b);
   });

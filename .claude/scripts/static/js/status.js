@@ -36,19 +36,18 @@ export async function refreshStatus() {
   if (falhas.length === r.length) throw /** @type {PromiseRejectedResult} */ (falhas[0]).reason;
 }
 
-/** @param {string} id @param {number | null} n */
+/** Selo de contagem do menu: só aparece quando há algo (nada de "0" ou "–"). @param {string} id @param {number | null} n */
 function badge(id, n) {
   const el = $('#' + id); if (!el) return;
-  el.textContent = n == null ? '–' : String(n); el.classList.toggle('hot', !!n);
+  el.hidden = !n; el.textContent = n ? String(n) : ''; el.classList.toggle('hot', !!n);
 }
 
-/** Pinta o topo e os selos do menu a partir do estado (sem rede). */
+/** Pinta o topo e os selos do menu a partir do estado (sem rede): texto simples, sem pílulas. */
 export function renderChips() {
   const known = S.statusAt > 0, c = agentCounts();
   badge('b-run', known ? c.panel : null); badge('b-pipe', known ? c.pipes : null); badge('b-live', known ? c.live : null);
   const box = $('#chips'); if (!box) return; box.replaceChildren();
   const a = h('span', 'chip' + (c.total ? ' live' : '')); a.title = `${c.panel} no painel · ${c.live} na sessão interativa`;
-  if (c.total) a.append(h('span', 'dot'));
-  a.append(document.createTextNode('agentes '), h('b', '', known ? c.total : '–')); box.append(a);
-  if (S.spend) { const g = h('span', 'chip'); g.append(document.createTextNode('gasto hoje '), h('b', '', 'US$ ' + S.spend.hoje.toFixed(2)), h('span', 'dim', ' / ' + S.spend.limite.toFixed(0))); box.append(g); }
+  a.append(document.createTextNode('agentes '), h('b', '', known ? String(c.total) : '–')); box.append(a);
+  if (S.spend) { const g = h('span', 'chip'); g.title = 'Gasto de hoje e limite diário'; g.append(document.createTextNode('gasto hoje '), h('b', '', 'US$ ' + S.spend.hoje.toFixed(2)), h('span', 'faint', ' / ' + S.spend.limite.toFixed(0))); box.append(g); }
 }
