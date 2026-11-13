@@ -9,7 +9,8 @@
 # Funciona logo após o clone, sem configurar nada: o JWT_SECRET abaixo é só de DESENVOLVIMENTO.
 # Para outro segredo ou outras portas, crie um .env aqui na raiz (JWT_SECRET=..., API_PORT, WEB_PORT...).
 # back-end/.env (opcional) também é lido pela API, mas JWT_SECRET, banco e FRONTEND_URL vêm daqui.
-# back-end/ é montado SOMENTE LEITURA: editar um arquivo de src/ reinicia a API sozinha.
+# back-end/ permite escrita para o Docker criar os pontos de montagem dos volumes.
+# Editar um arquivo de src/ reinicia a API sozinha.
 name: garcom-nfc
 
 services:
@@ -51,7 +52,7 @@ services:
     ports:
       - "${API_PORT:-4000}:4000"
     volumes:
-      - ./back-end:/app:ro
+      - ./back-end:/app
       - api_node_modules:/app/node_modules # dependências ficam no volume, não na sua pasta
       - api_generated:/app/generated # client do Prisma gerado para Linux
       - npm_cache:/root/.npm
