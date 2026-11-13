@@ -112,6 +112,15 @@ class Tarefas(unittest.TestCase):
             with self.assertRaises((ValueError, KeyError)):
                 tarefas.marcar_decisao(ruim, True)
 
+    def test_texto_da_tarefa_para_anexar_ao_contexto(self):
+        tarefas.atualizar("TAB-01", {"criterios": ["Lista as mesas", "Valida o nome"], "arquivos": ["back-end/src/x.ts"], "descricao": "Cria mesa"})
+        txt = tarefas.texto_da_tarefa("TAB-01")
+        for trecho in ("TAB-01 · Tarefa TAB-01", "Descrição: Cria mesa", "- Lista as mesas", "Arquivos: back-end/src/x.ts"):
+            self.assertIn(trecho, txt)
+        self.assertIn("Bloqueada pela decisão: DEC-01", tarefas.texto_da_tarefa("SES-01"))
+        with self.assertRaises(ValueError):
+            tarefas.texto_da_tarefa("ZZZ-9")
+
     def test_ids_conhecidos_incluem_decisoes(self):
         self.assertEqual(tarefas.ids_conhecidos(), {"AUT-01", "SES-01", "TAB-01", "DEC-01", "DEC-04"})
 

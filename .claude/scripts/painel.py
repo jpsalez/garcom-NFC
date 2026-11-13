@@ -188,10 +188,12 @@ def build_context(attach):
                 label, body = a["path"], text + ("\n[... truncado ...]" if cut else "")
             elif a.get("type") == "commit":
                 label, body = "commit " + str(a["sha"])[:7], gitinfo.commit_text(str(a["sha"]))
+            elif a.get("type") == "task":
+                label, body = "tarefa " + str(a["id"]), tarefas.texto_da_tarefa(str(a["id"]))
             else:
                 label, body = "nota do usuário", str(a.get("text", ""))[:10_000]
-        except (OSError, PermissionError, KeyError) as e:
-            stats.append({"label": str(a.get("path", "?")), "chars": 0, "tokens": 0, "error": str(e)})
+        except (OSError, PermissionError, KeyError, ValueError) as e:
+            stats.append({"label": str(a.get("path", a.get("id", "?"))), "chars": 0, "tokens": 0, "error": str(e)})
             continue
         if total + len(body) > MAX_CTX:
             stats.append({"label": label, "chars": 0, "tokens": 0, "error": "limite de contexto atingido"})

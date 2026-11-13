@@ -267,3 +267,24 @@ def citam(chaves):
     except (RuntimeError, ValueError):
         return []
     return [{"id": t["id"], "title": t["titulo"], "status": t["status"]} for t in tarefas if any(k in json.dumps(t, ensure_ascii=False) for k in chaves)][:10]
+
+
+def texto_da_tarefa(tid):
+    """A tarefa em texto simples (para anexar ao contexto de um agente): título, critérios, dependências e notas."""
+    t = next((x for x in carregar() if x["id"] == tid), None)
+    if not t:
+        raise ValueError("tarefa não encontrada: " + str(tid)[:20])
+    linhas = [f"{t['id']} · {t['titulo']}", f"Status: {t['status']} · Fase: {t['fase']} · Prioridade: {t['prioridade']}" + (f" · Quem: {t['quem']}" if t.get("quem") else "")]
+    for rotulo, chave in (("Descrição", "descricao"), ("Notas", "notas"), ("Motivo", "motivo"), ("Módulo", "modulo"), ("Refs", "refs")):
+        if t.get(chave):
+            linhas.append(f"{rotulo}: {t[chave]}")
+    if t.get("depende_de"):
+        linhas.append("Depende de: " + ", ".join(t["depende_de"]))
+    d = t.get("bloqueada_por_decisao")
+    if d:
+        linhas.append("Bloqueada pela decisão: " + (d if isinstance(d, str) else ", ".join(d)))
+    if t.get("arquivos"):
+        linhas.append("Arquivos: " + ", ".join(t["arquivos"]))
+    if t.get("criterios"):
+        linhas.append("Critérios de pronto:\n" + "\n".join(f"- {c}" for c in t["criterios"]))
+    return "\n".join(linhas)
