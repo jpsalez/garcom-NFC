@@ -1,21 +1,17 @@
 /* Tela GitHub e selos de CI nos Commits. */
-.ghs{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;font:700 11px/1 var(--mono);flex:none;border:1.5px solid currentColor}
-.ghs.ok{color:var(--ok)}.ghs.bad{color:var(--err)}.ghs.run{color:var(--warn)}.ghs.none{color:var(--dim)}
-.ghs.ok,.ghs.bad{background:color-mix(in srgb,currentColor 14%,transparent)}
-@media(prefers-reduced-motion:no-preference){.ghs.run{animation:pulse 1.6s infinite}}
-.gh-split{display:grid;grid-template-columns:minmax(300px,5fr) minmax(0,7fr);gap:16px;align-items:start}
-@media(max-width:1000px){.gh-split{grid-template-columns:1fr}}
-.gh-list{padding:12px;max-height:78vh;overflow:auto}.gh-detail{position:sticky;top:0;max-height:84vh;overflow:auto}
-.gh-list>.seg{margin-bottom:8px}
-.gh-row{display:block;width:100%;text-align:left;padding:9px 10px;border-radius:11px;border:1px solid transparent;background:none;cursor:pointer;color:inherit;font:inherit}
-.gh-row:hover{background:var(--card2)}.gh-row.on{background:var(--user);border-color:var(--bd2)}.gh-row b{font-size:13px;overflow-wrap:anywhere}
-.gh-row .mt{display:flex;gap:4px 10px;flex-wrap:wrap;align-items:center;margin-top:3px;font-size:11.5px;color:var(--dim)}
-.gh-labels{display:inline-flex;gap:4px;flex-wrap:wrap}
-.gh-line{display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px}.gh-line .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gh-job{margin-top:10px;font-size:13.5px}.gh-steps{list-style:none;margin:2px 0 6px 26px;padding:0}.gh-steps li{display:flex;align-items:center;gap:8px;padding:2px 0;font-size:12.5px;color:var(--mut)}.gh-steps li.bad{color:var(--err);font-weight:600}
-.gh-log{max-height:340px;overflow:auto;font-size:11.5px;white-space:pre-wrap;overflow-wrap:anywhere;border-color:color-mix(in srgb,var(--err) 40%,var(--bd))}
-.gh-issue{border-bottom:1px solid var(--bd);border-radius:0;cursor:default}.gh-issue:hover{background:none}.gh-issues{max-height:none}.gh-body{margin-top:4px}
-.gh-setup{max-width:640px}.gh-setup ol{margin:10px 0;padding-left:22px;line-height:1.7}.gh-setup .btn{margin-top:8px}
-/* selos de CI e PR na lista de commits */
-.crow .ghs{width:15px;height:15px;font-size:9px}
-a.gh-pr{text-decoration:none;color:var(--read);border-color:currentColor}a.gh-pr:hover{background:var(--card2)}a.gh-pr.merged{color:var(--exec)}a.gh-pr.closed{color:var(--dim)}
+.ghs { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; font: var(--fw-semibold) 10px/1 var(--mono); flex: none; }
+.ghs.ok { color: var(--ok); background: var(--ok-soft); } .ghs.bad { color: var(--err); background: var(--err-soft); }
+.ghs.run { color: var(--warn); background: var(--warn-soft); } .ghs.none { color: var(--text-3); background: var(--surface-3); }
+.gh-list { max-height: 78vh; overflow: auto; border-top: 1px solid var(--border); } .gh-detail { position: sticky; top: 0; max-height: calc(100vh - 140px); overflow: auto; padding-left: var(--s5); border-left: 1px solid var(--border); }
+.gh-row { display: block; width: 100%; text-align: left; padding: var(--s3); border: 0; border-bottom: 1px solid var(--border); background: none; cursor: pointer; color: inherit; font: inherit; }
+.gh-row:hover { background: var(--hover); } .gh-row.on { background: var(--accent-soft); } .gh-row b { font-size: var(--fs-13); font-weight: var(--fw-medium); overflow-wrap: anywhere; }
+.gh-row .mt { display: flex; gap: var(--s1) var(--s3); flex-wrap: wrap; align-items: center; margin-top: var(--s1); font-size: var(--fs-12); color: var(--text-3); }
+.gh-labels { display: inline-flex; gap: var(--s1); flex-wrap: wrap; }
+.gh-line { display: flex; align-items: center; gap: var(--s2); min-height: 30px; font-size: var(--fs-13); } .gh-line .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gh-job { margin-top: var(--s3); } .gh-steps { list-style: none; margin: 0 0 var(--s2) var(--s5); padding: 0; }
+.gh-steps li { display: flex; align-items: center; gap: var(--s2); padding: 2px 0; font-size: var(--fs-12); color: var(--text-2); } .gh-steps li.bad { color: var(--err); font-weight: var(--fw-medium); }
+.gh-log { max-height: 340px; overflow: auto; font-size: var(--fs-12); border-color: color-mix(in srgb, var(--err) 40%, var(--border)); }
+.gh-issue { cursor: default; } .gh-issue:hover { background: none; } .gh-issues { max-height: none; } .gh-body { margin-top: var(--s1); }
+.gh-setup { max-width: 640px; } .gh-setup ol { margin: var(--s3) 0; padding-left: var(--s5); line-height: 1.7; }
+/* PR e CI nas linhas de commit */
+a.gh-pr { text-decoration: none; } a.gh-pr.merged { color: var(--viz-4); } a.gh-pr.closed { color: var(--text-3); }
