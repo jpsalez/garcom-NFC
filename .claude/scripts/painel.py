@@ -683,7 +683,7 @@ def route_ext(h, m, parts, q):
         if parts == ["commit"]:
             return gitinfo.commit_diff(q["sha"], path=q.get("path"))
         if parts == ["graph"]:
-            return gitinfo.graph(q.get("limit", 300), q.get("skip", 0), q.get("branch"), q.get("author"), q.get("path"), q.get("since"), q.get("until"))
+            return gitinfo.graph(q.get("limit", 300), q.get("skip", 0), q.get("branch"), q.get("author"), q.get("path"), q.get("since"), q.get("until"), q.get("grep"))
         if parts == ["commit", "info"]:
             return gitinfo.commit_info(q["sha"])
         if parts == ["blob"]:

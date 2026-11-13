@@ -460,13 +460,20 @@ def parse_refs(raw):
     return res
 
 
-def _filters(branch, author, path, since, until):
+GREP_RX = re.compile(r"^[A-Z]{2,4}-\d{1,3}[a-z]?$")
+
+
+def _filters(branch, author, path, since, until, grep=None):
     """Argumentos de filtro do `git log` (sempre validados; cada valor é um único argumento)."""
     args = [check_ref(branch)] if branch else ["--all"]
     if author:
         if len(author) > 60 or "\n" in author:
             raise ValueError("autor inválido")
         args += ["--fixed-strings", f"--author={author}"]
+    if grep:
+        if not GREP_RX.match(grep):
+            raise ValueError("grep aceita só ids de tarefa (ex.: SES-01)")
+        args += ["--fixed-strings", f"--grep={grep}"]
     for flag, v in (("--since", since), ("--until", until)):
         if v:
             if not DATE_RX.match(v):
@@ -475,10 +482,10 @@ def _filters(branch, author, path, since, until):
     return args, (["--", repo_path(path)] if path else [])
 
 
-def graph(limit=300, skip=0, branch=None, author=None, path=None, since=None, until=None):
+def graph(limit=300, skip=0, branch=None, author=None, path=None, since=None, until=None, grep=None):
     """Commits em ordem topológica com `parents` (para o desenho do grafo), sem a lista de arquivos."""
     limit, skip = max(1, min(int(limit), 1000)), max(0, int(skip))
-    flt, spec = _filters(branch, author, path, since, until)
+    flt, spec = _filters(branch, author, path, since, until, grep)
     out = git("log", "--topo-order", f"-n{limit}", f"--skip={skip}", "--numstat", "--pretty=format:" + GRAPH_FMT, *flt, *spec, timeout=40)
     res = []
     for rec in [r for r in out.split("\x1e") if r.strip()]:

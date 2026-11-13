@@ -182,6 +182,17 @@ class RepoTemporario(unittest.TestCase):
         self.assertEqual(gitinfo.graph(50, since="2030-01-01")["total"], 0)
         self.assertEqual(sorted(gitinfo.graph(50)["authors"]), ["Ana", "Bia"])
 
+    def test_grep_por_id_de_tarefa(self):
+        import subprocess
+        (self.root / "g.txt").write_text("x\n")
+        subprocess.run(["git", "-C", str(self.root), "add", "g.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "-c", "user.name=Ana", "-c", "user.email=a@x", "commit", "-q", "-m", "feat: SES-01 abre a mesa"], check=True)
+        self.assertEqual(gitinfo.graph(10, grep="SES-01")["total"], 1)
+        self.assertEqual(gitinfo.graph(10, grep="SES-02")["total"], 0)
+        for ruim in ("--all", "a b", "SES-01\nx", ".*"):
+            with self.assertRaises(ValueError, msg=ruim):
+                gitinfo.graph(10, grep=ruim)
+
     def test_filtros_recusam_entrada_perigosa(self):
         for kw in ({"branch": "--output=/tmp/x"}, {"branch": "nao-existe"}, {"author": "a\nb"}, {"since": "ontem"}, {"path": "../x"}, {"branch": "a..b"}):
             with self.assertRaises((ValueError, PermissionError), msg=str(kw)):
