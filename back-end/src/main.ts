@@ -17,7 +17,7 @@ function bootstrap() {
   app.use(errorHandler);
 
   // Só sobe depois que tudo está registrado
-  const port = Number(process.env.PORT) || 3000;
+  const port = Number(process.env.PORT) || 4000;
   app.listen(port, () => console.log(`rodando na ${port}`));
 }
 bootstrap();
