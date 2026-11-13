@@ -104,6 +104,12 @@ class Transporte(PainelServer):
         self.assertEqual((st, hd404["Cache-Control"]), (404, "no-store"))
 
 
+class HostsPermitidos(unittest.TestCase):
+    def test_porta_publicada_pelo_docker_tambem_vale(self):
+        self.assertEqual(painel.allowed_hosts(8765), {"127.0.0.1:8765", "localhost:8765"})
+        self.assertEqual(painel.allowed_hosts(8765, 9000), {"127.0.0.1:8765", "localhost:8765", "127.0.0.1:9000", "localhost:9000"})
+
+
 class Validacao(unittest.TestCase):
     def test_sha_invalido(self):
         for bad in ("", "zz", "--output=x", "abc", "g" * 40, "a" * 41, "HEAD", "abc1234;rm"):

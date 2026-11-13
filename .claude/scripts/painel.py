@@ -978,16 +978,23 @@ class Handler(BaseHTTPRequestHandler):
         raise ValueError("rota desconhecida")
 
 
+def allowed_hosts(port, public_port=0):
+    """Hosts que o navegador pode usar (com a porta): barra DNS rebinding e páginas de outros sites."""
+    return {f"{h}:{p}" for h in ("127.0.0.1", "localhost") for p in {port, public_port or port}}
+
+
 def main():
     global MON
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--host", default="127.0.0.1", help="endereço de escuta; no Docker use 0.0.0.0 e publique só em 127.0.0.1 no compose")
+    ap.add_argument("--public-port", type=int, default=0, help="porta que o navegador usa, se o Docker publicar em outra")
     ap.add_argument("--open", action="store_true")
     a = ap.parse_args()
-    ALLOWED_HOSTS.update({f"127.0.0.1:{a.port}", f"localhost:{a.port}"})
+    ALLOWED_HOSTS.update(allowed_hosts(a.port, a.public_port))
     MON = mon.Monitor()
     load_runs()
-    srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
+    srv = ThreadingHTTPServer((a.host, a.port), Handler)
     realtime.start()
     url = f"http://127.0.0.1:{a.port}/"
     print(f"Painel: {url}\n(Ctrl+C para parar)", flush=True)
