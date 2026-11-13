@@ -1,14 +1,16 @@
 import { inject, injectable } from "tsyringe";
-import type {
-  CreateUserData,
-  IAuthService,
-  IRestaurantRepository,
-  IUserRepository,
-  LoginResult,
-} from "./auth.interfaces.ts";
+import type { IAuthService, LoginResult, RegisterResult } from "./auth.interfaces.ts";
+import type { IUserRepository } from "../users/users.repository.interface.ts";
+import { UserRepository } from "../users/users.repository.ts";
+import { RestaurantRepository } from "../restaurants/restaurants.repository.ts";
+import { slugify, withRandomSuffix } from "../restaurants/slug.ts";
+import { runInTransaction } from "../../shared/providers/prisma.ts";
+import type { IRestaurantRepository } from "../restaurants/restaurants.repository.interface.ts";
 import type { createUserInput, loginUserInput } from "./auth.schema.ts";
+import type { users } from "../../../generated/prisma/client.ts";
 import { role } from "../../../generated/prisma/enums.ts";
-import { comparePassword, passwordHash } from "../../shared/utils/password.ts";
+import { DUMMY_PASSWORD_HASH, comparePassword, passwordHash } from "../../shared/utils/password.ts";
+import { toPublicUser } from "../users/public-user.ts";
 import { signToken } from "../../shared/utils/jwt.ts";
 import { ConflictError, UnauthorizedError } from "../../shared/errors/http-errors.ts";
 
@@ -25,36 +27,39 @@ export class AuthService implements IAuthService {
     this.userRepository = userRepository;
   }
 
-  // registro de usuário -> esse tipo de usuário é sempre ADMIN controla
-  // pode criar outros usuários. TODO : criar outra função para isso
-  async register(createUser: createUserInput) {
-   
-    const emailInUse = await this.userRepository.findByEmail(createUser.email);
-    if (emailInUse) {
-      throw new ConflictError("E-mail já cadastrado");
+  // Auto-cadastro (fluxo B): cria o OWNER e o restaurante dele numa transação
+  async register(input: createUserInput): Promise<RegisterResult> {
+    // Mensagem genérica: não confirma se o e-mail já existe
+    if (await this.userRepository.findByEmail(input.email)) {
+      throw new ConflictError("Não foi possível concluir o cadastro");
     }
 
-    const userData: CreateUserData = {
-      name: createUser.name,
-      email: createUser.email,
-      password_hash: await passwordHash(createUser.password),
-      role: role.ADMIN,
-    };
+    const slug = await this.availableSlug(input.restaurantName);
+    const password_hash = await passwordHash(input.password);
 
-    const user = await this.userRepository.create(userData);
+    const { user, restaurant } = await runInTransaction(async (tx) => {
+      const restaurant = await new RestaurantRepository(tx).create({ name: input.restaurantName, slug });
+      const user = await new UserRepository(tx).create({
+        name: input.name,
+        email: input.email,
+        password_hash,
+        role: role.OWNER,
+        restaurant_id: restaurant.id,
+      });
+      return { user, restaurant };
+    });
 
-    // Nunca devolve o hash da senha
-    const { password_hash, ...publicUser } = user;
-    return publicUser;
+    return { user: toPublicUser(user), restaurant };
   }
 
-  // Login vale para ADMIN e STAFF: a role vem do banco e vai dentro do token
+  // Login vale para SUPER_ADMIN, OWNER e STAFF: a role vem do banco e vai dentro do token
   async login(credentials: loginUserInput): Promise<LoginResult> {
     const user = await this.userRepository.findByEmail(credentials.email);
 
     // Mesma mensagem para e-mail inexistente e senha errada: não revela quais e-mails existem
-    const validPassword = user ? await comparePassword(credentials.password, user.password_hash) : false;
-    if (!user || !validPassword) {
+    // Compara sempre (hash falso se o e-mail não existe) para não revelar e-mails pelo tempo de resposta
+    const validPassword = await comparePassword(credentials.password, user?.password_hash ?? DUMMY_PASSWORD_HASH);
+    if (!user || !validPassword || !(await this.isActive(user))) {
       throw new UnauthorizedError("E-mail ou senha inválidos");
     }
 
@@ -64,13 +69,19 @@ export class AuthService implements IAuthService {
       role: user.role,
     });
 
-    const { password_hash, ...publicUser } = user;
-    return { token, user: publicUser };
+    return { token, user: toPublicUser(user) };
   }
 
+  private async availableSlug(restaurantName: string) {
+    const slug = slugify(restaurantName);
+    return (await this.restaurantRepository.findBySlug(slug)) ? withRandomSuffix(slug) : slug;
+  }
 
-
-
-
-  
+  // Usuário desativado, ou de restaurante desativado, não entra
+  private async isActive(user: users) {
+    if (!user.active) return false;
+    if (!user.restaurant_id) return true;
+    const restaurant = await this.restaurantRepository.findById(user.restaurant_id);
+    return restaurant?.active === true;
+  }
 }
