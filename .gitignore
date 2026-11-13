@@ -16,4 +16,5 @@
 .claude/painel/*
 !.claude/painel/dicionario.json
 !.claude/painel/recipes.json
+!.claude/painel/AUDITORIA.md
 **/__pycache__/

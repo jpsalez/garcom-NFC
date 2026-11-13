@@ -37,6 +37,7 @@ import ghapi
 import gitinfo
 import insights
 import realtime
+import tarefas
 import monitor as mon
 from _common import KNOW, ROOT, blocked, safe
 
@@ -404,7 +405,6 @@ def live(session=None):
 
 # ---------- configurações, gasto, receitas e pipelines ----------
 SETTINGS = ROOT / ".claude" / "painel" / "settings.json"
-TASKS = ROOT / ".claude" / "painel" / "tasks.json"
 RECIPES = ROOT / ".claude" / "painel" / "recipes.json"
 DEFAULT_RECIPES = {"recipes": [
     {"id": "planejar-modulo", "nome": "Planejar um módulo", "descricao": "O arquiteto define a estrutura; depois dados e API detalham em paralelo, com a sua aprovação entre as fases.",
@@ -653,104 +653,32 @@ def timeline(days):
 
 
 # ---------- Tarefas (painel/tasks.json) ----------
-TASK_LOCK = threading.Lock()
-TASK_STATUS = {"todo", "doing", "done", "blocked", "dropped"}
-TASK_PRIO = {"P0", "P1", "P2", "P3"}
-TASK_EDITABLE = {"title": 200, "desc": 1500, "notes": 3000, "module": 80, "phase": 40, "refs": 120, "mode": 20, "blocked_by": 40}
-
-
-def tasks_load():
-    if not TASKS.exists():
-        return []
-    return json.loads(TASKS.read_text(encoding="utf-8")).get("tasks", [])
-
-
 def mentions(rel):
     """Tarefas e trechos do registro de decisões que citam o arquivo (pelo caminho ou, se longo o bastante, pelo nome)."""
     base = Path(rel).name
     keys = {rel} | ({base} if len(base) >= 8 else set())
-    tasks = [{"id": t["id"], "title": t.get("title", ""), "status": t.get("status", "")}
-             for t in tasks_load() if any(k in json.dumps(t, ensure_ascii=False) for k in keys)][:10]
     text = DEC.read_text(encoding="utf-8") if DEC.exists() else ""
     decisions = [ln.strip()[:200] for ln in text.splitlines() if any(k in ln for k in keys)][:5]
-    return {"tasks": tasks, "decisions": decisions}
-
-
-
-def tasks_save(items):
-    TASKS.parent.mkdir(parents=True, exist_ok=True)
-    tmp = TASKS.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"tasks": items}, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(TASKS)
-    realtime.publish("tasks")
-
-
-def tasks_apply(item, b):
-    for k, limit in TASK_EDITABLE.items():
-        if k in b:
-            item[k] = str(b[k])[:limit]
-    if "status" in b:
-        if b["status"] not in TASK_STATUS:
-            raise ValueError("status inválido")
-        item["status"] = b["status"]
-    if "prio" in b:
-        if b["prio"] not in TASK_PRIO:
-            raise ValueError("prioridade inválida")
-        item["prio"] = b["prio"]
-    if "deps" in b:
-        if not isinstance(b["deps"], list):
-            raise ValueError("deps deve ser uma lista")
-        item["deps"] = [str(d)[:20] for d in b["deps"]][:30]
-    return item
-
-
-def tasks_update(tid, b):
-    with TASK_LOCK:
-        items = tasks_load()
-        item = next((x for x in items if x["id"] == tid), None)
-        if not item:
-            raise KeyError("tarefa não encontrada")
-        tasks_apply(item, b)
-        tasks_save(items)
-        return item
-
-
-def tasks_create(b):
-    if not str(b.get("title", "")).strip() or not str(b.get("module", "")).strip():
-        raise ValueError("informe módulo e título")
-    with TASK_LOCK:
-        items = tasks_load()
-        n = 1 + max([int(x["id"][2:]) for x in items if x["id"].startswith("T-") and x["id"][2:].isdigit()] or [0])
-        item = {"id": f"T-{n:03d}", "module": "", "title": "", "desc": "", "status": "todo", "prio": "P2", "phase": "MVP-2",
-                "refs": "", "deps": [], "mode": "você", "blocked_by": "", "notes": ""}
-        tasks_apply(item, b)
-        items.append(item)
-        tasks_save(items)
-        return item
-
-
-def tasks_delete(tid):
-    with TASK_LOCK:
-        items = tasks_load()
-        if not any(x["id"] == tid for x in items):
-            raise KeyError("tarefa não encontrada")
-        for x in items:
-            x["deps"] = [d for d in x.get("deps", []) if d != tid]
-        tasks_save([x for x in items if x["id"] != tid])
-        return {"ok": True}
+    return {"tasks": tarefas.citam(keys), "decisions": decisions}
 
 
 def route_ext(h, m, parts, q):
     """Rotas novas; devolve None quando a rota não é daqui."""
     if parts and parts[0] == "tasks":
         if m == "GET" and len(parts) == 1:
-            return {"tasks": tasks_load()}
+            return {"tasks": tarefas.carregar()}
         if m == "POST" and len(parts) == 1:
-            return tasks_create(h.body())
+            return tarefas.criar(h.body())
         if m == "PUT" and len(parts) == 2:
-            return tasks_update(parts[1], h.body())
+            return tarefas.atualizar(parts[1], h.body())
         if m == "DELETE" and len(parts) == 2:
-            return tasks_delete(parts[1])
+            return tarefas.apagar(parts[1])
+    if parts and parts[0] == "decisoes":
+        if m == "GET" and len(parts) == 1:
+            return tarefas.decisoes()
+        if m == "PUT" and len(parts) == 2:
+            b = h.body()
+            return tarefas.marcar_decisao(parts[1], bool(b.get("resolvida")), b.get("nota", ""))
     if m == "GET":
         if parts == ["commit"]:
             return gitinfo.commit_diff(q["sha"], path=q.get("path"))

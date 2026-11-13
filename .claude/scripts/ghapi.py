@@ -289,11 +289,9 @@ def run(rid):
 
 
 def task_ids():
-    p = ROOT / ".claude" / "painel" / "tasks.json"
-    try:
-        return {t["id"] for t in json.loads(p.read_text(encoding="utf-8")).get("tasks", [])}
-    except (OSError, ValueError, KeyError):
-        return set()
+    """Ids de tarefas e de decisões conhecidos (issues que os citam ganham um atalho)."""
+    import tarefas
+    return tarefas.ids_conhecidos()
 
 
 def issues():

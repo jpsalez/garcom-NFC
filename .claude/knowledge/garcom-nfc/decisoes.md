@@ -2,18 +2,66 @@
 
 Preencha quando decidir. Os agentes leem este arquivo e deixam de perguntar o que já foi decidido. Formato: decisão, data, motivo.
 
-Backlog restante: tela Tarefas do painel (`.claude/painel/tasks.json`, 121 tarefas). Atualizado em 12/11/2026 com o código: itens de papéis, register, gestão de STAFF e primeiro SUPER_ADMIN estão resolvidos e implementados (ver "Decididas"); o texto antigo abaixo é histórico.
+Backlog: tela Tarefas do painel (`.claude/painel/tasks.json`). Aqui ficam só as DECISÕES; cada tarefa bloqueada aponta a sua em `bloqueada_por_decisao`.
 
-## Pendentes (opções em `apendice-a-divergencias.md`)
-- [ ] Domínio/URL do NFC; prefixo /api/v1 e porta; criar usuário em restaurante inativo
-- [ ] Quem abre o atendimento: garçom / primeiro scan (token) / primeiro chamado
-- [ ] Duração do atendimento: 3 h / 4 h (configurável)
-- [ ] Chamados repetidos: um card por chamado / agrupar / bloquear por tipo (409)
-- [x] RESOLVIDO: fluxo B do register (OWNER + restaurante em transação)
-- [x] RESOLVIDO: primeiro SUPER_ADMIN por seed (`prisma/seed-super-admin.ts`)
-- [x] RESOLVIDO: remover STAFF = existem desativar e excluir
-- [x] RESOLVIDO: `public_code` com 12 caracteres (ver Decididas, módulo tables)
-- [ ] Código de erro estável no formato de erro (`error.code`)?
+## Pendentes
+Formato: `- [ ] DEC-NN · título`; as linhas indentadas são detalhes. A tela Decisões e a tela Tarefas leem este bloco.
+
+- [ ] DEC-01 · Quem abre o atendimento da mesa
+  - Opções e contexto: Opções: garçom no balcão / primeiro scan do QR (token) / primeiro chamado. Define o fluxo público inteiro.
+  - Nota sua: o garçom no balcão abre a mesa como fecha ela também.
+  - Atenção: a nota acima parece uma decisão. Confirme marcando a caixa para destravar as tarefas.
+  - Fase: MVP-2 · Prioridade: P0 · Refs: RF04, RN
+  - Bloqueia: SES-01, SES-02b
+- [ ] DEC-02 · Duração do atendimento: 3 h ou 4 h
+  - Opções e contexto: v0.3 diz 4 h (configurável por TABLE_SESSION_TTL); módulos/guia usam 3 h.
+  - Fase: MVP-3 · Prioridade: P1 · Refs: RF12
+  - Bloqueia: SES-02b
+- [ ] DEC-03 · Chamados repetidos
+  - Opções e contexto: Um card por chamado (RN08) / agrupar / bloquear por tipo (409, índice parcial calls_one_open_per_type).
+  - Fase: MVP-2 · Prioridade: P0 · Refs: RN08, RN12
+  - Bloqueia: CAL-01, DB-03
+- [ ] DEC-05 · Domínio e formato da URL pública
+  - Opções e contexto: Gravar NFC é irreversível: definir domínio e formato (ex.: /m/<code>) antes de gravar qualquer tag.
+  - Fase: MVP-1 · Prioridade: P1 · Refs: RF13
+  - Bloqueia: FE-03b, NFC-02, OPS-03, TAB-04
+- [ ] DEC-06 · Registrar qual garçom finalizou o chamado
+  - Opções e contexto: Balcão compartilhado (acesso único) ou login individual. Afeta done_by e o painel do balcão.
+  - Fase: MVP-2 · Prioridade: P1 · Refs: 9.4.3
+  - Bloqueia: CAL-04
+- [ ] DEC-07 · Após encerrar, um novo scan abre atendimento na hora?
+  - Opções e contexto: Ligado a DEC-01. Define o comportamento da tela da mesa depois do encerramento.
+  - Fase: MVP-3 · Prioridade: P1 · Refs: 9.4.3
+- [ ] DEC-08 · O cliente vê o chamado como finalizado ou só a confirmação de envio?
+  - Opções e contexto: Define eventos para o aparelho do cliente (RF07) e se o cliente precisa de canal em tempo real.
+  - Fase: MVP-2 · Prioridade: P2 · Refs: RF07
+  - Bloqueia: CAL-06
+- [ ] DEC-09 · "Manter aberto": só no balcão ou também pelo cliente
+  - Opções e contexto: Afeta rotas públicas e o abuso (sessão eterna).
+  - Fase: MVP-3 · Prioridade: P2 · Refs: RF11
+  - Bloqueia: SES-06
+- [ ] DEC-10 · Alerta sonoro no balcão e nome/cobrança do produto
+  - Opções e contexto: Pontos a validar da v0.3. Nome definitivo do produto e modelo de planos.
+  - Fase: Pós-MVP · Prioridade: P3 · Refs: 9.4.3
+  - Bloqueia: FE-05c
+- [ ] DEC-11 · Prefixo /api/v1 e porta 4000 da v0.3
+  - Opções e contexto: Código usa porta 3000 e sem prefixo. Decidir antes do front consumir a API.
+  - A porta já foi resolvida (back-end 4000, front-end 3000). Resta só o prefixo /api/v1.
+  - Fase: MVP-1 · Prioridade: P2 · Refs: cap-09
+  - Bloqueia: INF-08
+- [ ] DEC-12 · Código de erro estável (error.code) no formato de erro
+  - Opções e contexto: Hoje a resposta é { error, message, details }. O front pode precisar de códigos.
+  - Fase: MVP-2 · Prioridade: P3
+- [ ] DEC-13 · Criar usuário em restaurante desativado: pode?
+  - Opções e contexto: Hoje o service permite. Apontado pelo revisor; é regra de produto.
+  - Fase: Agora · Prioridade: P3
+
+(A lista anterior, sem ids, está em `../_arquivo/decisoes-lista-antiga.md`.)
+
+## Resolvidas que estavam na lista de tarefas
+- [x] DEC-04 · Tamanho do public_code: 8 ou 12 — 12 caracteres (12/11/2026).
+- [x] DEC-14 · Fluxo do register (A x B) — B escolhido: register cria OWNER + restaurante em transação.
+- [x] DEC-15 · Primeiro SUPER_ADMIN, remover STAFF e MANAGER x job_title — Seed por variáveis de ambiente; excluir (rota DELETE) além de desativar; MANAGER é categoria do STAFF.
 
 ## Sugestões para destravar o modo IA (NÃO decididas: confirme ou altere)
 | Decisão | Sugestão | Por quê |
