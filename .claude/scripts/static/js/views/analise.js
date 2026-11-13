@@ -1,30 +1,62 @@
 // @ts-check
 import { api } from '../api.js';
-import { $, countUp, h, stagger } from '../lib/dom.js';
+import { $, h } from '../lib/dom.js';
 import { fmtDur, fmtN } from '../lib/format.js';
 import { S } from '../store.js';
+import { badge } from '../ui/badge.js';
+import { button } from '../ui/button.js';
+import { rotulado } from '../ui/obs-common.js';
+import { section, stats } from '../ui/section.js';
+import { table } from '../ui/table.js';
 import { guard } from '../ui/toast.js';
 
-/* ---------- Análise ---------- */
+const TOM_ACHADO = /** @type {Record<string, 'err' | 'warn' | 'ok' | 'neutral'>} */ ({ alta: 'err', media: 'warn', baixa: 'neutral', ok: 'ok' });
+
+/** Barras horizontais simples: rótulo, barra proporcional e valor. @param {{ label: string, value: number, text: string }[]} rows */
+function barras(rows) {
+  const mx = Math.max(1, ...rows.map(r => r.value)), box = h('div', 'hbars');
+  rows.forEach(r => { const row = h('div', 'bar-row'), tr = h('div', 'bar-track'), b = h('i'); b.style.width = (r.value / mx * 100) + '%'; tr.append(b); row.append(h('span', 'ellipsis', r.label), tr, h('span', 'num muted small', r.text)); box.append(row); });
+  return box;
+}
+
+/* ---------- Análise: custo e qualidade da orquestração de uma sessão ---------- */
 export async function renderAnalise() {
-  const main = $('#main'); main.className = ''; main.replaceChildren(); const top = h('div', 'row'); const sel = h('select'); top.append(h('span', 'mut', 'Sessão'), sel); const rf = h('button', 'btn sm', 'Atualizar'); top.append(rf); main.append(top);
-  const body = h('div', 'bento'); body.style.marginTop = '16px'; main.append(body);
-  const ss = await api('sessions'); ss.forEach(x => sel.append(new Option(x.title.slice(0, 44) + ' · ' + x.mtime + (x.panel ? ' (painel)' : ''), x.id))); if (S.anSession) sel.value = S.anSession; else S.anSession = sel.value;
+  const main = $('#main'); main.className = ''; main.replaceChildren();
+  const sel = h('select'); sel.setAttribute('aria-label', 'Sessão');
+  const top = h('div', 'row'); top.append(rotulado('Sessão', sel), button('Atualizar', { small: true, onClick: () => load() })); main.append(top);
+  const body = h('div', 'stack'); body.style.marginTop = 'var(--s5)'; main.append(body);
+  const ss = await api('sessions'); ss.forEach((/** @type {any} */ x) => sel.append(new Option(x.title.slice(0, 44) + ' · ' + x.mtime + (x.panel ? ' (painel)' : ''), x.id))); if (S.anSession) sel.value = S.anSession; else S.anSession = sel.value;
   const load = guard(async () => {
-    body.replaceChildren(); for (let i = 0; i < 4; i++) { const c = h('div', 'card s3'); c.append(h('div', 'skel'), h('div', 'skel')); body.append(c); }
     const a = await api('analysis?session=' + S.anSession); body.replaceChildren(); const K = a.kpis;
-    const kp = (label, v, fmt, sub) => { const c = h('div', 'card kpi hov s2'); const n = h('div', 'n', '0'); c.append(n, h('div', 'l', label), h('small', '', sub || '')); body.append(c); countUp(n, v, fmt); };
-    kp('subagentes', K.agents, undefined, a.orch.batches + ' lote(s) de delegação'); kp('duração da sessão', K.duration, v => fmtDur(v * 1000), 'inclui pausas suas');
-    kp('tokens novos', K.tokens, v => fmtN(Math.round(v)), 'cache lido: ' + fmtN(K.cache_read)); kp('paralelismo máximo', K.max_parallel, undefined, K.parallel_time + 's com 2+ agentes');
-    kp('arquivos editados', K.edited, undefined, K.calls + ' chamadas de ferramenta'); kp('erros de ferramenta', K.errors, undefined, 'taxa ' + (K.calls ? (100 * K.errors / K.calls).toFixed(1) : 0) + '%');
-    const o = h('div', 'card s6'); o.append(h('h3', '', 'Orquestrador')); const ot = h('table'); [['delegações', a.orch.spawns], ['lotes (agentes lançados juntos)', a.orch.batches], ['briefing médio', a.orch.avg_briefing + ' caracteres'], ['1ª delegação após', a.orch.first_delegation_s == null ? '—' : fmtDur(a.orch.first_delegation_s * 1000)], ['mensagens a agentes (SendMessage)', a.orch.send_message], ['chamadas do principal', a.orch.main_calls], ['tokens novos: principal / subagentes', fmtN(a.orch.main_tokens) + ' / ' + fmtN(a.orch.sub_tokens)]].forEach(([k, v]) => { const r = h('tr'); r.append(h('td', 'mut', k), h('td', 'mono', v)); ot.append(r); }); o.append(ot); body.append(o);
-    const fd = h('div', 'card s6'); fd.append(h('h3', '', 'Achados (heurísticas)')); a.findings.forEach(x => { const r = h('div', 'find'); const d = h('div'); d.append(h('b', '', x.title), h('div', 'hint', x.detail)); r.append(h('span', 'sev ' + x.sev, x.sev), d); fd.append(r); }); body.append(fd);
-    const g = h('div', 'card s12'); g.append(h('h3', '', 'Linha do tempo dos subagentes')); const span = Math.max(1, a.t1 - a.t0), gg = h('div', 'gantt');
-    a.agents.forEach((ag, i) => { if (!ag.start) return; const r = h('div', 'gr'); const tr = h('div', 'tr'), br = h('div', 'br'); br.style.left = ((ag.start - a.t0) / span * 100) + '%'; br.style.width = Math.max(0.6, (ag.end - ag.start) / span * 100) + '%'; br.style.setProperty('--i', i); tr.append(br); r.append(h('span', 'lb', ag.name), tr, h('span', 'mono dim', fmtDur((ag.end - ag.start) * 1000))); gg.append(r); }); g.append(gg); if (gg.children.length) body.append(g);
-    const tk = h('div', 'card s7'); tk.append(h('h3', '', 'Delegação: quem custou o quê (tokens novos · chamadas)')); const mx = Math.max(1, ...a.agents.map(x => (x.usage.in || 0) + (x.usage.out || 0) + (x.usage.cache_w || 0)));
-    const tp = h('div', 'gantt bars'); a.agents.forEach((ag, i) => { const v = (ag.usage.in || 0) + (ag.usage.out || 0) + (ag.usage.cache_w || 0); const r = h('div', 'gr'); const t = h('div', 'tr'), b = h('div', 'br'); b.style.width = (v / mx * 100) + '%'; b.style.setProperty('--i', i); t.append(b); r.append(h('span', 'lb', ag.name), t, h('span', 'mono dim', fmtN(v) + ' · ' + ag.calls + 'c')); tp.append(r); }); tk.append(tp); body.append(tk);
-    const tl = h('div', 'card s5'); tl.append(h('h3', '', 'Ferramentas mais usadas')); const tmx = Math.max(1, ...Object.values(a.tools)); const tb = h('div', 'gantt bars ed'); Object.entries(a.tools).forEach(([k, v], i) => { const r = h('div', 'gr'); const t = h('div', 'tr'), b = h('div', 'br'); b.style.width = (v / tmx * 100) + '%'; b.style.setProperty('--i', i); t.append(b); r.append(h('span', 'lb', k), t, h('span', 'mono dim', v)); tb.append(r); }); tl.append(tb); body.append(tl);
-    const hf = h('div', 'card s12'); hf.append(h('h3', '', 'Arquivos mais lidos (contexto repetido custa tokens)')); const ht = h('table'); const hr = h('tr'); ['Arquivo', 'Leituras', 'Agentes'].forEach(x => hr.append(h('th', '', x))); ht.append(hr); a.hot_files.forEach(f => { const r = h('tr'); r.append(h('td', 'mono', f.path), h('td', 'mono', f.reads), h('td', f.agents.length >= 3 ? 'st-pausado' : '', f.agents.length + ' — ' + f.agents.slice(0, 3).join(', '))); ht.append(r); }); hf.append(ht); body.append(hf);
-    stagger(body); });
-  sel.onchange = () => { S.anSession = sel.value; load(); }; rf.onclick = load; await load();
+    body.append(stats([{ label: 'subagentes', value: K.agents, sub: a.orch.batches + ' lote(s) de delegação' }, { label: 'tokens novos', value: fmtN(K.tokens), sub: 'cache lido: ' + fmtN(K.cache_read) }, { label: 'duração da sessão', value: fmtDur(K.duration * 1000), sub: 'inclui pausas suas' }]));
+    const o = section('Orquestrador');
+    const linhas = [['delegações', a.orch.spawns], ['lotes (agentes lançados juntos)', a.orch.batches], ['briefing médio', a.orch.avg_briefing + ' caracteres'],
+      ['1ª delegação após', a.orch.first_delegation_s == null ? '—' : fmtDur(a.orch.first_delegation_s * 1000)], ['mensagens a agentes (SendMessage)', a.orch.send_message], ['chamadas do principal', a.orch.main_calls],
+      ['tokens novos: principal / subagentes', fmtN(a.orch.main_tokens) + ' / ' + fmtN(a.orch.sub_tokens)], ['paralelismo máximo', K.max_parallel + ' (' + K.parallel_time + ' s com 2+ agentes)'],
+      ['arquivos editados', K.edited], ['erros de ferramenta', K.errors + ' de ' + K.calls + ' chamadas (' + (K.calls ? (100 * K.errors / K.calls).toFixed(1) : 0) + '%)']];
+    o.body.append(table({ columns: [{ key: 'k', label: 'Medida' }, { key: 'v', label: 'Valor', align: 'r' }], rows: linhas.map(([k, v]) => ({ k, v })) })); body.append(o.el);
+    if (a.findings.length) {
+      const f = section('Achados (heurísticas)'), lista = h('div', 'list');
+      a.findings.forEach((/** @type {any} */ x) => { const it = h('div', 'item achado'); const t = h('div', 'grow'); t.append(h('b', '', x.title), h('div', 'muted small', x.detail)); it.append(badge(x.sev, TOM_ACHADO[x.sev] || 'neutral'), t); lista.append(it); });
+      f.body.append(lista); body.append(f.el);
+    }
+    const comTempo = a.agents.filter((/** @type {any} */ ag) => ag.start);
+    if (comTempo.length) {
+      const span = Math.max(1, a.t1 - a.t0), g = section('Linha do tempo dos subagentes'), gg = h('div', 'hbars');
+      comTempo.forEach((/** @type {any} */ ag) => { const row = h('div', 'bar-row'), tr = h('div', 'bar-track'), b = h('i'); b.style.marginLeft = ((ag.start - a.t0) / span * 100) + '%'; b.style.width = Math.max(0.6, (ag.end - ag.start) / span * 100) + '%'; tr.append(b); row.append(h('span', 'ellipsis', ag.name), tr, h('span', 'num muted small', fmtDur((ag.end - ag.start) * 1000))); gg.append(row); });
+      g.body.append(gg); body.append(g.el);
+    }
+    if (a.agents.length) {
+      const tk = section('Quem custou o quê', { meta: 'tokens novos · chamadas' });
+      tk.body.append(barras(a.agents.map((/** @type {any} */ ag) => { const v = (ag.usage.in || 0) + (ag.usage.out || 0) + (ag.usage.cache_w || 0); return { label: ag.name, value: v, text: fmtN(v) + ' · ' + ag.calls + ' ch.' }; }))); body.append(tk.el);
+    }
+    const ferr = Object.entries(a.tools);
+    if (ferr.length) { const t = section('Ferramentas mais usadas'); t.body.append(barras(ferr.map(([k, v]) => ({ label: k, value: /** @type {number} */ (v), text: String(v) })))); body.append(t.el); }
+    if (a.hot_files.length) {
+      const hf = section('Arquivos mais lidos', { meta: 'contexto repetido custa tokens' });
+      hf.body.append(table({ columns: [{ key: 'path', label: 'Arquivo', render: (/** @type {any} */ f) => { const c = h('span', 'mono small', f.path); return c; } }, { key: 'reads', label: 'Leituras', align: 'r' },
+        { key: 'agents', label: 'Agentes', render: (/** @type {any} */ f) => f.agents.length + ' — ' + f.agents.slice(0, 3).join(', ') }], rows: a.hot_files })); body.append(hf.el);
+    }
+  });
+  sel.onchange = () => { S.anSession = sel.value; load(); }; await load();
 }
