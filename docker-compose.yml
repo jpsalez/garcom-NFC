@@ -6,8 +6,9 @@
 #   docker compose down                 # para (mantém o banco);  down -v apaga banco e node_modules dos contêineres
 #   (em back-end/) npm run test:db:up   # sobe SÓ o banco de testes (porta 5433); npm test; npm run test:db:down
 #
-# Segredos: a API lê back-end/.env (JWT_SECRET é obrigatório, veja back-end/.env.example).
-# Variáveis opcionais deste compose (portas, usuário do banco) podem ir em um .env aqui na raiz.
+# Funciona logo após o clone, sem configurar nada: o JWT_SECRET abaixo é só de DESENVOLVIMENTO.
+# Para outro segredo ou outras portas, crie um .env aqui na raiz (JWT_SECRET=..., API_PORT, WEB_PORT...).
+# back-end/.env (opcional) também é lido pela API, mas JWT_SECRET, banco e FRONTEND_URL vêm daqui.
 # back-end/ é montado SOMENTE LEITURA: editar um arquivo de src/ reinicia a API sozinha.
 name: garcom-nfc
 
@@ -38,13 +39,15 @@ services:
       db:
         condition: service_healthy
     env_file:
-      - back-end/.env
+      - path: back-end/.env
+        required: false # num clone novo o arquivo não existe
     environment:
       NODE_ENV: development
       PORT: 4000
       # Use caracteres seguros em URL na senha do banco (evite @ : / ? #)
       DATABASE_URL: postgresql://${POSTGRES_USER:-garcom}:${POSTGRES_PASSWORD:-garcom}@db:5432/${POSTGRES_DB:-garcom}?schema=public
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-segredo-apenas-para-desenvolvimento-local-troque-em-producao}
     ports:
       - "${API_PORT:-4000}:4000"
     volumes:
@@ -72,7 +75,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 120s
+      start_period: 300s # primeiro boot: npm ci + prisma generate + migrations
 
   # Banco DESCARTÁVEL dos testes (dados em memória). Só sobe com o perfil "test":
   # `npm run test:db:up`. Nunca é tocado por `docker compose up`.
@@ -100,7 +103,7 @@ services:
     restart: unless-stopped
     depends_on:
       api:
-        condition: service_healthy
+        condition: service_started # não espera o healthcheck: o front sobe em paralelo com o npm ci da API
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
     ports:
