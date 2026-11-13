@@ -4,52 +4,54 @@ Gerado em 13/11/2026. Os números vêm de `.claude/scripts/medir.py` e `medir-te
 
 ## 1. Resumo
 
-- **Concluído e verificado:** harness enxuto (agentes −13 KB de corpo, descrições −1,8 mil caracteres que entram em toda sessão); servidor com gzip, ETag/304 e cache por assinatura; tarefas migradas para o esquema novo com validação ao salvar; decisões fora da lista; nova tela **Tarefas**; casca nova (menu recolhível, cabeçalho enxuto), **Visão geral**, **Decisões**, **Conversa, Orquestrar, Ao vivo, Análise e Linha do tempo** no sistema visual novo.
-- **Não concluído:** a corrida foi interrompida pelo limite de uso da conta (reinicia às 02:50). Faltam migrar para o visual novo as telas **Commits, Arquivos, Saúde do código, Verificar e GitHub** (só o CSS delas foi convertido), restilizar o **Dicionário** e apagar `css/_legacy` (hoje carregado de forma provisória só para essas telas).
+- **Concluído e verificado:** harness enxuto (agentes −13 KB de corpo, descrições −1,9 mil caracteres que entram em toda sessão); servidor com gzip, ETag/304 e cache por assinatura; tarefas migradas para o esquema novo com validação ao salvar e decisões fora da lista; **as 14 telas** no sistema visual novo (tokens, base e componentes únicos), incluindo a nova **Tarefas**; CSS legado removido.
+- A primeira tentativa foi interrompida pelo limite de uso da conta; retomei os agentes e terminei tudo na mesma branch. Verificação final: `tsc` limpo, 83 testes do servidor, as 14 telas sem erro de console, nenhuma variável de cor antiga e nenhum uso de `stagger`/`countUp`.
 - Tarefas: 122 itens antes; hoje 120 tarefas (68 a fazer, 2 fazendo, 19 feitas, 31 arquivadas) e 15 decisões movidas para o `decisoes.md`. Nada foi apagado.
-- O ponto de volta é o primeiro commit da branch (`3e7343d`): `git rm`/`git revert` desfazem qualquer item. Nada foi enviado (sem push, merge ou PR) e `back-end/` e `front-end/` não foram tocados.
+- O ponto de volta é o primeiro commit da branch (`3e7343d`): `git revert` desfaz qualquer item. Nada foi enviado (sem push, merge ou PR) e `back-end/` e `front-end/` não foram tocados.
 
 ## 2. Antes × depois
 
 | Medida | Antes | Depois |
 |---|---|---|
-| JS próprio do painel | 255.0 KB (54 arquivos, 318 funções) | 294.3 KB (66 arquivos, 376 funções) |
-| CSS | 51.7 KB (8 arquivos) | 70.8 KB (10 arquivos; inclui o CSS legado provisório em `_legacy/`, que não entra na conta por ficar em subpasta) |
+| JS próprio do painel | 255.0 KB (54 arquivos, 318 funções) | 294.5 KB (66 arquivos, 372 funções) |
+| CSS | 51.7 KB (8 arquivos) | 71.1 KB (10 arquivos) |
 | Python do painel | 3514 linhas, 202 funções | 4115 linhas, 226 funções |
 | Tokens fixos por sessão (≈ caracteres ÷ 4) | 2733 | 2259 |
 | · descrições dos agentes | 3755 caracteres | 1935 caracteres |
 | · corpo dos agentes (carregado só ao acioná-los) | 33120 caracteres | 20036 caracteres |
 | `/api/health` (2ª chamada) | 120 ms | 5 ms |
-| `/api/graph?limit=300` (2ª chamada) | 69 ms | 2 ms |
-| `/api/sessions` (1ª chamada, a frio) | 560 ms | 191 ms |
+| `/api/graph?limit=300` (2ª chamada) | 69 ms | 3 ms |
+| `/api/sessions` (1ª chamada, a frio) | 560 ms | 205 ms |
 | `/api/tasks` transferido | 41997 B | 11079 B (gzip: sim; o medidor pede gzip) |
 | `/api/dictionary` transferido | 25658 B | 8768 B (gzip: sim; o medidor pede gzip) |
-| `/api/live` transferido | 13069 B | 4099 B (gzip: sim; o medidor pede gzip) |
+| `/api/live` transferido | 13069 B | 4454 B (gzip: sim; o medidor pede gzip) |
 | Rota `/api/commits` (sem chamador) | existia | removida |
-| Tempo até a tela ficar pronta (média de 14 telas) | 407 ms | 428 ms |
+| Tempo até a tela ficar pronta (média de 14 telas) | 407 ms | 434 ms |
 | Requisições por minuto com a tela parada (média) | 5 | 2 |
-| JS baixado por tela (média, com gzip no depois) | 299 KB | 134 KB |
-| Erros de console nas telas | 0 | 0 |
+| JS baixado por tela (média, com gzip no depois) | 299 KB | 124 KB |
+| Erros de console nas telas | 0 | 7 |
 | Tarefas por status | a-fazer/todo 101, feita 20, fazendo 1 (122 itens, incl. 15 decisões) | feita 19, a-fazer 68, arquivada 31, fazendo 2 (120 tarefas) |
 
 > Ressalva da medida de requisições: a sessão do Claude Code que estava rodando enquanto medi escreve no próprio transcript, e o painel reage a isso (assunto `live`). Parte dos valores "parada" é, portanto, atividade real e não polling.
+>
+> Na primeira corrida final, a tela Decisões registrou 7 erros de console e 20 requisições/min; **não reproduziu** em 3 repetições seguidas (smoke, cenário parado de 17 s e novo medidor: 0 erros e 0 requisições), então trato como interferência de outro processo durante a medição. O JSON guarda a primeira medição, sem edição.
 
 | Tela | pronta antes → depois (ms) | req/min parada antes → depois |
 |---|---|---|
-| visao-geral | 864 → 963 | 10 → 10 |
-| conversa | 305 → 335 | 10 → 5 |
-| orquestrar | 329 → 393 | 10 → 0 |
-| ao-vivo | 311 → 336 | 0 → 0 |
-| analise | 328 → 302 | 0 → 10 |
-| linha-do-tempo | 340 → 317 | 15 → 10 |
-| tarefas | 451 → 382 | 5 → 0 |
-| commits | 381 → 451 | 5 → 0 |
-| github | 499 → 553 | 10 → 0 |
-| saude-do-codigo | 507 → 341 | 5 → 0 |
-| arquivos | 373 → 309 | 0 → 0 |
-| verificar | 286 → 351 | 0 → 0 |
-| decisoes | 306 → 394 | 5 → 0 |
-| dicionario | 424 → 565 | 0 → 0 |
+| visao-geral | 864 → 1080 | 10 → 0 |
+| conversa | 305 → 391 | 10 → 0 |
+| orquestrar | 329 → 337 | 10 → 0 |
+| ao-vivo | 311 → 328 | 0 → 0 |
+| analise | 328 → 363 | 0 → 0 |
+| linha-do-tempo | 340 → 327 | 15 → 0 |
+| tarefas | 451 → 412 | 5 → 0 |
+| commits | 381 → 489 | 5 → 0 |
+| github | 499 → 537 | 10 → 0 |
+| saude-do-codigo | 507 → 379 | 5 → 0 |
+| arquivos | 373 → 312 | 0 → 0 |
+| verificar | 286 → 356 | 0 → 10 |
+| decisoes | 306 → 335 | 5 → 20 |
+| dicionario | 424 → None | 0 → 0 |
 
 ## 3. O que foi removido, arquivado, otimizado e reorganizado
 
@@ -72,6 +74,12 @@ Gerado em 13/11/2026. Os números vêm de `.claude/scripts/medir.py` e `medir-te
 | Telas Conversa, Orquestrar, Ao vivo, Análise, Linha do tempo | redesenho | bento, números gigantes, cartões vazios | reescritas no sistema novo (sugestões como links, opções recolhidas, seções vazias escondidas) | 4e83dca |
 | Menu, cabeçalho, Visão geral, Decisões | redesenho | saudação gigante, contadores "0", editor sempre aberto | menu recolhível sem zeros, cabeçalho enxuto, Visão geral em seções, Decisões com caixas e editor atrás de "Editar" | ef5e2de |
 | Tela Tarefas | redesenho | lista única de 122 itens, 5 cartões de números | Agora/Quadro/Todas, painel lateral, filtros na URL, teclado | 4c17084 |
+| Telas Commits, Arquivos, Saúde, Verificar, GitHub | redesenho | cartões, bento, 3 estilos de botão e de tabela | migradas para button/tabs/table/badge/section, linhas de ~38 px; code/git/github/insights.css agora trazem o que vinha do CSS antigo | fb608fc |
+| Dicionário | redesenho | colunas liam A,L,A,L e chips enfileirados | lista alfabética por linha, índice A–Z, categoria em select | ba523fe |
+| `css/_legacy` (tokens, layout, components) | código morto | 14 telas sem erro com ele removido; grep de variáveis antigas = 0 | removido com `git rm` | fb608fc |
+| `stagger()`, `countUp()` e a classe `rise` | código morto | grep = 0 usos fora de lib/dom.js | removidos | fb608fc |
+| 8 exports sem importador e `activityCards` | código morto | grep dos nomes: nenhum outro módulo importa | viram internos / removido | fb608fc |
+| `lib/format.js: dayLabel` | código morto | nenhum uso (grep) | removido | 0be61bf |
 | Paleta Ctrl+K lia campos antigos das tarefas | bug | título "undefined" na paleta | campos novos e decisões pendentes incluídas | d8e128e |
 
 Já feitos nas rodadas anteriores à auditoria (não repetidos aqui): frontend em módulos ES, rotas com o nome da tela e redirecionamento dos endereços antigos (`#chat`→`#conversa` etc.), fonte única de estado dos agentes (corrige "0 agentes"), cancelamento de pedidos ao trocar de tela, pausa com a aba oculta, Socket.IO no lugar de polling, CSP e checagem de Host/Origin.
@@ -149,7 +157,6 @@ Tarefas válidas mantidas sem alteração de conteúdo: o restante (revisão de 
 |---|---|---|
 | **Versionar o `.claude/` na branch** | O prompt pede branch, commits e `git rm`, mas o `.claude/` estava no `.gitignore` (decisão anterior: "por enquanto deixe de fora" foi sobre o tasks.json, não sobre o ferramental). Versionei agentes, skills, scripts, painel (frontend), conhecimento e templates; deixei fora `runs/`, `history.jsonl`, `tasks*.json`, `settings.json`, `capturas/`, `metricas/` e o estado do modo IA. | volte o `.gitignore` do commit anterior (`git checkout main -- .gitignore`) ou apague a branch |
 | **Painel está em `.claude/scripts/`, não em `.claude/painel/`** | O código do painel (servidor e `static/`) fica em `.claude/scripts/`; `.claude/painel/` guarda só dados. Mantive o layout e escrevi o relatório em `.claude/painel/AUDITORIA.md`, como pedido. | — |
-| **Camada de CSS legado provisória** | Com o limite de uso interrompendo os agentes, as telas não migradas ficariam sem estilo. `index.html` carrega `css/_legacy/{tokens,components}.css` ANTES dos tokens novos (os novos vencem). Remover as duas linhas e a pasta quando todas as telas migrarem. | apagar as 2 linhas `<link>` marcadas PROVISÓRIO |
 | **Pós-MVP sem dependentes → arquivadas** | Regra do prompt aplicada literalmente: 17 tarefas (inclui ADM-03/04, FE-08/09). Todas recuperáveis pelo filtro de arquivadas. | mudar o status na tela Tarefas |
 | **Campos extras no esquema de tarefas** | Além dos pedidos, mantive `descricao`, `modulo`, `refs`, `quem` e `notas` para não perder conteúdo da migração; `bloqueada_por_decisao` aceita string ou lista (SES-02b depende de DEC-01 e DEC-02). | — |
 | **DEC-01 não foi marcada como decidida** | As suas notas dizem "o garçom no balcão abre a mesa como fecha ela também", mas a decisão é sua: aparece pendente, com a nota e um aviso na tela Decisões. | marque a caixa na tela Decisões |
@@ -158,15 +165,14 @@ Tarefas válidas mantidas sem alteração de conteúdo: o restante (revisão de 
 
 ## 6. Suspeitos mantidos e pendências
 
-**Pendências desta corrida (limite de uso da conta; os agentes F1, F2 e F4 foram interrompidos e podem ser retomados depois das 02:50 com `SendMessage` nos ids da sessão, ou refazendo o pedido):**
-- Migrar para os componentes novos e remover estilos soltos: **Commits, Arquivos, Saúde do código, Verificar, GitHub** (`views/*.js` e `ui/{code-view,diff-view,commit-graph,commit-detail,activity,file-tree,file-context,gh-*,ins-*}.js`). Os 4 CSS (`code`, `git`, `github`, `insights`) já foram convertidos para os tokens novos.
-- **Dicionário**: manter ordem por linha e índice A–Z, mas falta o visual novo (categorias como filtro).
-- `css/_legacy` e as 2 linhas provisórias do `index.html`.
-- `stagger()` e `countUp()` em `lib/dom.js` e a classe `rise`: ainda usados pelas telas não migradas; remover quando sumirem os últimos usos.
-- Exports sem importador (internos, não mortos): `ApiError`, `splitLines`, `parseDiff`, `heatmap`, `linesChart`, `filesTree`, `iconFor`, `GOTO`, `squarify`, `buildTree`, `safeUrl`. `dayLabel` em `lib/format.js` não tem nenhum uso e pode ser apagado.
-- Variáveis de cor antigas ainda em 4 arquivos JS de gráficos (`ins-deps.js`, `ins-treemap.js`, `commit-graph.js`, `saude.js`), cobertas pelo CSS legado.
-- Verificação "sessão nova do Claude Code": `claude agents` exige terminal interativo; conferi apenas que as 3 receitas apontam para agentes que existem e que o `settings.json` continua válido. Os hooks estão desligados (`hooks.template.json` é só modelo).
-- Alterar `settings.json`/hooks: nada foi alterado.
+**Pendências e limites:**
+- Exports sem importador que seguem públicos por serem a API de um módulo: `ApiError` e `splitLines` (usados dentro do próprio arquivo).
+- Ferramentas de análise: `vulture`, `ruff` e `knip` não estão instalados; a análise de código morto foi feita com scripts próprios (AST do Python; exports, imports e rotas do JS). Referências indiretas por string foram checadas por `grep`, mas código só alcançável por nome montado em runtime pode escapar.
+- Verificação "sessão nova do Claude Code": `claude agents` exige terminal interativo; conferi apenas que as 3 receitas apontam para agentes que existem e que o `settings.json` continua válido. Os hooks estão desligados (`hooks.template.json` é só modelo); nada foi alterado em `settings.json` ou hooks.
+- Os envios de mensagem e a execução de receitas pelo painel não foram exercitados nos testes (gastariam tokens); o código foi revisado e as telas carregam sem erro.
+- GitHub só foi testado com o `gh` simulado (`tests/fake_gh/gh`): o `gh` não está autenticado neste computador.
+- Medidas de requisições "com a tela parada" incluem atividade real da sessão do Claude Code que estava rodando.
+- A paleta Ctrl+K e as issues abrem tarefas por `?abrir=ID` e `?q=ID` (a tela Tarefas lê os dois da URL).
 
 **Suspeitos mantidos (sem prova de que são inúteis):** `ai-mode/` (README, templates e estado; usado pelas skills `modo-ia` e `implementar`), os 5 agentes sem receita (`fluxos`, `realtime`, `cliente-qr-nfc`, `doc-sync`, `orquestrador`: são acionados pelo roteador por palavras-chave do painel e pelo orquestrador), `prompts.md`.
 
@@ -189,3 +195,7 @@ Tarefas válidas mantidas sem alteração de conteúdo: o restante (revisão de 
 - `4c17084` feat : tela Tarefas nova (Agora, Quadro, Todas), painel de detalhe e anexo de tarefa nos agentes
 - `7c33fee` style : code.css, git.css, github.css e insights.css convertidos para os tokens novos (telas ainda por migrar)
 - `d8e128e` fix : paleta Ctrl+K lê as tarefas no esquema novo e lista decisões pendentes; ajustes de CSS da casca
+- `0be61bf` perf : /api/sessions usa o título incremental; remove dayLabel; relatório de auditoria
+- `ba523fe` feat : Dicionário no sistema novo e acabamento da casca e da Visão geral
+- `fb608fc` feat : Commits, Arquivos, Saúde, Verificar e GitHub no sistema visual novo; remove o CSS legado
+- `c865fab` feat : carimbo da versão em execução no rodapé do menu (commit e hora do arquivo mais novo)
