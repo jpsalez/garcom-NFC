@@ -1,6 +1,8 @@
 // @ts-check
 import { h } from '../lib/dom.js';
 import { highlightLines } from '../lib/highlight.js';
+import { badge } from './badge.js';
+import { button } from './button.js';
 import { langOf } from '../lib/lang.js';
 
 /**
@@ -16,7 +18,7 @@ const MAX_LINES = 1500;  // por arquivo, antes do "mostrar tudo"
 const MORE = 20;         // linhas reveladas por clique em "mostrar mais"
 
 /** @param {string} txt @returns {{ head: string, files: DFile[] }} */
-export function parseDiff(txt) {
+function parseDiff(txt) {
   /** @type {DFile[]} */ const files = []; const headLines = [];
   /** @type {DFile | null} */ let f = null; /** @type {Hunk | null} */ let hk = null;
   for (const l of txt.split('\n')) {
@@ -152,13 +154,13 @@ export function diffView(text, opts = {}) {
   /** @type {{ box: HTMLElement, body: HTMLElement, f: DFile, drawn: boolean, mode: string }[]} */ const items = [];
 
   const bar = h('div', 'dv-bar');
-  const totals = h('span', 'hint', `${files.length} arquivo(s) · +${files.reduce((a, f) => a + f.add, 0)} −${files.reduce((a, f) => a + f.del, 0)}`);
+  const totals = h('span', 'small muted', `${files.length} arquivo(s) · +${files.reduce((a, f) => a + f.add, 0)} −${files.reduce((a, f) => a + f.del, 0)}`);
   const seg = h('div', 'seg'); const sBtn = [['unified', 'Unificado'], ['split', 'Lado a lado']].map(([k, label]) => { const b = h('button', mode === k ? 'on' : '', label); b.onclick = () => { mode = k; try { localStorage.setItem('diffMode', k); } catch (e) { /* ok */ } sBtn.forEach(x => x.classList.toggle('on', x === b)); items.forEach(i => { if (i.drawn) { i.drawn = false; draw(i); } }); }; seg.append(b); return b; });
-  const all = h('button', 'btn sm', 'Expandir tudo'), none = h('button', 'btn sm', 'Recolher tudo');
+  const all = button('Expandir tudo', { small: true }), none = button('Recolher tudo', { small: true });
   all.onclick = () => items.forEach(i => toggle(i, true)); none.onclick = () => items.forEach(i => toggle(i, false));
   bar.append(totals, seg, all, none); if (files.length) root.append(bar);
-  if (head && files.length) { const d = h('details', 'dv-stat'); d.append(h('summary', 'hint', 'resumo (--stat)'), Object.assign(h('pre'), { textContent: head })); root.append(d); }
-  if (!files.length) root.append(h('div', 'hint', head || 'sem alterações'));
+  if (head && files.length) { const d = h('details', 'dv-stat'); d.append(h('summary', 'small muted', 'resumo (--stat)'), Object.assign(h('pre'), { textContent: head })); root.append(d); }
+  if (!files.length) root.append(h('div', 'small muted', head || 'sem alterações'));
 
   /** @type {Map<string, Promise<string[] | null>>} */ const cache = new Map();
   const lines = (/** @type {string} */ p) => { if (!o.loadLines) return Promise.resolve(null); if (!cache.has(p)) cache.set(p, o.loadLines(p).catch(() => null)); return /** @type {Promise<string[] | null>} */ (cache.get(p)); };
@@ -172,7 +174,7 @@ export function diffView(text, opts = {}) {
    * @param {DFile} f @param {number} from @param {number | null} to @param {number} delta @param {string} lang @param {{ top: boolean, next: boolean }} pos
    */
   function gapRow(f, from, to, delta, lang, pos) {
-    const row = h('div', 'dv-gap'), lab = h('span', 'hint'); row.append(lab);
+    const row = h('div', 'dv-gap'), lab = h('span', 'small muted'); row.append(lab);
     const paint = () => { if (to !== null && to < from) { row.remove(); return; } lab.textContent = to === null ? 'mostrar o restante do arquivo' : `${to - from + 1} linha(s) sem alteração`; };
     /** @param {string[]} src @param {number} a @param {number} b */
     const rowsOf = async (src, a, b) => {
@@ -189,7 +191,7 @@ export function diffView(text, opts = {}) {
       paint();
     };
     /** @param {string} t @param {'up' | 'down' | 'all'} how */
-    const btn = (t, how) => { const b = h('button', 'btn sm', t); b.onclick = () => reveal(how); row.append(b); };
+    const btn = (t, how) => { row.append(button(t, { small: true, onClick: () => reveal(how) })); };
     if (!pos.top) btn('↓ ' + MORE, 'down');
     if (pos.next) btn('↑ ' + MORE, 'up');
     btn('todas', 'all'); paint();
@@ -197,8 +199,8 @@ export function diffView(text, opts = {}) {
   }
 
   async function draw(/** @type {typeof items[number]} */ it) {
-    const { f, body } = it; it.drawn = true; it.mode = mode; body.replaceChildren(h('div', 'hint pad', 'carregando…'));
-    if (f.binary) { body.replaceChildren(h('div', 'hint pad', 'arquivo binário')); return; }
+    const { f, body } = it; it.drawn = true; it.mode = mode; body.replaceChildren(h('div', 'small muted pad', 'carregando…'));
+    if (f.binary) { body.replaceChildren(h('div', 'small muted pad', 'arquivo binário')); return; }
     const lang = langOf(f.name); let budget = MAX_LINES;
     const frag = document.createDocumentFragment();
     /** @param {Hunk} k */ const newEnd = k => (k.newLines ? k.newStart + k.newLines - 1 : k.newStart), oldEnd = (/** @type {Hunk} */ k) => (k.oldLines ? k.oldStart + k.oldLines - 1 : k.oldStart);
@@ -214,7 +216,7 @@ export function diffView(text, opts = {}) {
       const rows = await prepareHunk(hk, lang), use = rows.slice(0, Math.max(0, budget)); budget -= use.length;
       if (mode === 'split') sideRows(use).forEach(([x, y]) => { const r = h('div', 'dr2'); r.append(cell(x, 'o'), cell(y, 'n')); frag.append(r); });
       else use.forEach(r => frag.append(unifiedRow(r)));
-      if (use.length < rows.length) { const more = h('button', 'btn sm', `mostrar tudo (${f.add + f.del} linhas alteradas)`); more.onclick = () => { budget = Infinity; it.drawn = false; draw(it); }; frag.append(more); break; }
+      if (use.length < rows.length) { frag.append(button(`mostrar tudo (${f.add + f.del} linhas alteradas)`, { small: true, onClick: () => { budget = Infinity; it.drawn = false; draw(it); } })); break; }
     }
     if (expandable && f.hunks.length) { const last = f.hunks[f.hunks.length - 1]; frag.append(gapRow(f, newEnd(last) + 1, null, newEnd(last) - oldEnd(last), lang, { top: false, next: false })); }
     body.replaceChildren(frag);
@@ -231,14 +233,14 @@ export function diffView(text, opts = {}) {
     const generated = GENERATED.test(f.name) || (MIGRATION.test(f.name) && f.add + f.del > 150);
     const box = h('div', 'dv-file'), fh = h('button', 'dv-fh'); fh.setAttribute('aria-expanded', 'false');
     const mx = Math.max(1, f.add + f.del), bar_ = h('span', 'dv-bar2'), a = h('i', 'a'), d = h('i', 'd'); a.style.width = f.add / mx * 100 + '%'; d.style.width = f.del / mx * 100 + '%'; bar_.append(a, d);
-    fh.append(h('span', 'chev', '▸'), h('span', 'nm', f.name), ...(f.status !== 'modificado' ? [h('span', 'tag ai2', f.status)] : []), ...(generated ? [h('span', 'tag no', 'gerado')] : []), h('span', 'pm'), bar_);
+    fh.append(h('span', 'chev', '▸'), h('span', 'nm', f.name), ...(f.status !== 'modificado' ? [badge(f.status, 'warn')] : []), ...(generated ? [badge('gerado')] : []), h('span', 'pm'), bar_);
     const pm = /** @type {HTMLElement} */ (fh.querySelector('.pm')); pm.append(h('span', 'a', '+' + f.add), document.createTextNode(' '), h('span', 'd', '−' + f.del));
     const body = h('div', 'dv-body'); body.hidden = true;
     const it = { box, body, f, drawn: false, mode }; items.push(it);
     fh.onclick = () => toggle(it, body.hidden);
     box.append(fh, body); root.append(box);
     if (!generated && opened < openN) { opened++; toggle(it, true); }
-    else if (generated) body.before(Object.assign(h('div', 'hint pad gen', 'Arquivo gerado: recolhido por padrão. Clique no nome para ver.')));
+    else if (generated) body.before(Object.assign(h('div', 'small muted pad gen', 'Arquivo gerado: recolhido por padrão. Clique no nome para ver.')));
   });
 
   /** j/k: arquivo seguinte/anterior · n/p: trecho seguinte/anterior. */

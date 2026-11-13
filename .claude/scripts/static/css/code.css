@@ -88,3 +88,4 @@ mark { background: color-mix(in srgb, var(--accent) 35%, transparent); color: in
 .ctx .dec { padding: var(--s1) var(--s2); border-left: 2px solid var(--warn); margin: var(--s1) 0; }
 .ctx .stats { gap: var(--s4) var(--s5); margin: var(--s3) 0; } .ctx .stat .v { font-size: var(--fs-16); }
 .ctx .stat.warn .v { color: var(--warn); } .ctx .stat.bad .v { color: var(--err); }
+.files3 > .pane > .empty, .files3 > .pane > .errstate, .files3 > .pane > .loading { margin: var(--s5); }

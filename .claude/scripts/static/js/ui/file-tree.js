@@ -1,6 +1,7 @@
 // @ts-check
 import { api } from '../api.js';
 import { h, ico } from '../lib/dom.js';
+import { badge } from './badge.js';
 import { guard } from './toast.js';
 
 const ICON_EXT = { ts: ['filecode', 'ft-ts'], tsx: ['filecode', 'ft-ts'], js: ['filecode', 'ft-js'], mjs: ['filecode', 'ft-js'], py: ['filecode', 'ft-py'], sh: ['filecode', 'ft-py'],
@@ -8,7 +9,7 @@ const ICON_EXT = { ts: ['filecode', 'ft-ts'], tsx: ['filecode', 'ft-ts'], js: ['
   md: ['filetext', 'ft-md'], txt: ['filetext', 'ft-md'], prisma: ['filedb', 'ft-db'], sql: ['filedb', 'ft-db'], css: ['filecode', 'ft-css'], html: ['filecode', 'ft-css'], svg: ['filecode', 'ft-css'] };
 
 /** Ícone e classe de cor pelo tipo do arquivo. @param {string} name @param {boolean} dir @param {boolean} [open] */
-export function iconFor(name, dir, open = false) {
+function iconFor(name, dir, open = false) {
   if (dir) return [open ? 'folderopen' : 'folder', 'ft-dir'];
   if (name === 'Dockerfile' || name === 'docker-compose.yml') return ['fileconf', 'ft-docker'];
   return /** @type {Record<string, string[]>} */ (ICON_EXT)[(name.split('.').pop() || '').toLowerCase()] || ['file', 'ft-def'];
@@ -24,7 +25,7 @@ const tint = (svg, cls) => { svg.classList.add(cls); return svg; };
 export function fileTree({ onOpen }) {
   const el = h('div', 'ft');
   const bar = h('div', 'ft-bar'), q = h('input'); q.type = 'text'; q.placeholder = 'Filtrar por nome · Enter busca no conteúdo'; q.setAttribute('aria-label', 'Filtrar arquivos por nome ou buscar no conteúdo');
-  const hint = h('div', 'hint ft-hint'); bar.append(q, hint);
+  const hint = h('div', 'small muted ft-hint'); bar.append(q, hint);
   const tree = h('div', 'ft-list'); tree.tabIndex = 0; tree.setAttribute('role', 'tree'); tree.setAttribute('aria-label', 'Arquivos do projeto');
   const res = h('div', 'ft-res'); res.hidden = true; res.setAttribute('role', 'listbox');
   el.append(bar, tree, res);
@@ -107,7 +108,7 @@ export function fileTree({ onOpen }) {
   async function byName(term) {
     const paths = await api('files?q=' + encodeURIComponent(term));
     res.replaceChildren(); tree.hidden = true; res.hidden = false; hint.textContent = paths.length + ' arquivo(s) · Enter para buscar no conteúdo';
-    paths.forEach((/** @type {string} */ p) => { const name = p.split('/').pop() || p, [ic, cls] = iconFor(name, false); const r = h('div', 'hitrow'); r.tabIndex = -1; r.dataset.path = p; r.append(tint(ico(ic), cls), h('span', 'nm', name), h('span', 'dim dirp', p.slice(0, p.length - name.length))); r.onclick = () => onOpen(p); r.onkeydown = ev => { if (ev.key === 'Enter') r.click(); }; res.append(r); });
+    paths.forEach((/** @type {string} */ p) => { const name = p.split('/').pop() || p, [ic, cls] = iconFor(name, false); const r = h('div', 'hitrow'); r.tabIndex = -1; r.dataset.path = p; r.append(tint(ico(ic), cls), h('span', 'nm', name), h('span', 'faint dirp', p.slice(0, p.length - name.length))); r.onclick = () => onOpen(p); r.onkeydown = ev => { if (ev.key === 'Enter') r.click(); }; res.append(r); });
   }
 
   /** Resultados do conteúdo agrupados por arquivo. @param {string} term */
@@ -117,7 +118,7 @@ export function fileTree({ onOpen }) {
     /** @type {Map<string, any[]>} */ const g = new Map(); hits.forEach((/** @type {any} */ x) => { if (!g.has(x.path)) g.set(x.path, []); /** @type {any[]} */ (g.get(x.path)).push(x); });
     hint.textContent = `${hits.length} ocorrência(s) em ${g.size} arquivo(s)`;
     g.forEach((list, p) => {
-      const name = p.split('/').pop() || p, [ic, cls] = iconFor(name, false), head = h('div', 'hit-file'); head.append(tint(ico(ic), cls), h('b', '', name), h('span', 'dim', p), h('span', 'badge', String(list.length))); res.append(head);
+      const name = p.split('/').pop() || p, [ic, cls] = iconFor(name, false), head = h('div', 'hit-file'); head.append(tint(ico(ic), cls), h('b', '', name), h('span', 'faint', p), badge(String(list.length))); res.append(head);
       list.forEach(x => { const r = h('div', 'hitrow'); r.tabIndex = -1; r.append(h('span', 'ln', String(x.line)), snippet(x.text, x.col, x.len)); r.onclick = () => onOpen(p, x.line); r.onkeydown = ev => { if (ev.key === 'Enter') r.click(); }; res.append(r); });
     });
   }

@@ -1,12 +1,14 @@
 // @ts-check
 import { watch } from '../lib/realtime.js';
 import { api, isAbort } from '../api.js';
-import { $, h, ico } from '../lib/dom.js';
+import { $, h } from '../lib/dom.js';
 import { ago } from '../lib/format.js';
 import { highlightLines } from '../lib/highlight.js';
 import { LANG_LABEL, langOf } from '../lib/lang.js';
 import { go, hashParams, setHashParams } from '../router.js';
 import { S } from '../store.js';
+import { badge } from '../ui/badge.js';
+import { button } from '../ui/button.js';
 import { codeView } from '../ui/code-view.js';
 import { diffView } from '../ui/diff-view.js';
 import { emptyState } from '../ui/empty-state.js';
@@ -38,7 +40,7 @@ async function historyPanel(path) {
   const open = guard(async (/** @type {any} */ c, /** @type {HTMLElement} */ row) => {
     on?.classList.remove('on'); on = row; row.classList.add('on'); diff.replaceChildren(skeleton(5));
     const d = await api('commit?sha=' + c.sha + '&path=' + enc(path));
-    diff.replaceChildren(h('div', 'hint', `${c.short} · ${c.author} · ${new Date(c.t).toLocaleString('pt-BR')}`), diffView(d.diff, 1));
+    diff.replaceChildren(h('div', 'small muted', `${c.short} · ${c.author} · ${new Date(c.t).toLocaleString('pt-BR')}`), diffView(d.diff, 1));
   });
   commits.forEach((/** @type {any} */ c) => { const r = h('button', 'hrow'); r.append(h('b', '', c.subject), h('span', '', `${c.short} · ${c.author} · ${ago(c.ts)}`)); r.onclick = () => open(c, r); list.append(r); });
   open(commits[0], /** @type {HTMLElement} */ (list.firstElementChild));
@@ -54,13 +56,13 @@ function toolbar({ path, f, meta, lines, show, cv, blame }) {
   const crumb = h('div', 'crumb'); path.split('/').forEach((seg, i, all) => { if (i) crumb.append(h('i', '', '›')); crumb.append(h(i === all.length - 1 ? 'b' : 'span', '', seg)); });
   const info = h('div', 'meta'); const lang = langOf(path);
   info.append(h('span', '', LANG_LABEL[/** @type {keyof typeof LANG_LABEL} */ (lang)] || lang || 'texto'), h('span', 'mono', `${lines} linhas`), h('span', 'mono', (f.size / 1024).toFixed(1) + ' KB'));
-  if (meta.status) { const b = h('span', 'tag ' + (meta.status === 'D' ? 'tst' : 'ai2'), STATUS_LABEL[/** @type {'M'} */ (meta.status)]); info.append(b); }
+  if (meta.status) info.append(badge(STATUS_LABEL[/** @type {'M'} */ (meta.status)], meta.status === 'D' ? 'err' : 'warn'));
   const lc = meta.last_commit;
-  if (lc) { const b = h('button', 'chipb', `${lc.short} · ${ago(Date.parse(lc.t) / 1000)}`); b.title = lc.subject + ' — ' + lc.author; b.onclick = () => { S.commitSel = lc.sha; go('commits'); }; info.append(b); }
-  if (f.truncated) info.append(h('span', 'tag ai2', 'truncado em 200 KB'));
+  if (lc) info.append(button(`${lc.short} · ${ago(Date.parse(lc.t) / 1000)}`, { variant: 'ghost', small: true, title: lc.subject + ' — ' + lc.author, onClick: () => { S.commitSel = lc.sha; go('commits'); } }));
+  if (f.truncated) info.append(badge('truncado em 200 KB', 'warn'));
   const acts = h('div', 'acts');
   /** @param {string} label @param {string} icon @param {(b: HTMLElement) => any} fn @param {string} [title] */
-  const btn = (label, icon, fn, title) => { const b = h('button', 'btn sm'); b.append(ico(icon), document.createTextNode(label)); if (title) b.title = title; b.onclick = guard(() => fn(b)); acts.append(b); return b; };
+  const btn = (label, icon, fn, title) => { const b = button(label, { small: true, icon, title }); b.onclick = guard(() => fn(b)); acts.append(b); return b; };
   btn('Blame', 'person', async b => b.classList.toggle('on', await blame()), 'Quem mexeu em cada linha');
   const hi = btn('Histórico', 'history', b => { const on = !b.classList.contains('on'); b.classList.toggle('on', on); show(on ? 'history' : 'code'); }, 'Commits que mexeram neste arquivo');
   if (lang === 'markdown') { const mdBtn = btn('Renderizado', 'filetext', b => { const on = !b.classList.contains('on'); b.classList.toggle('on', on); hi.classList.remove('on'); show(on ? 'md' : 'code'); }); if (!hashParams().get('L')) { mdBtn.classList.add('on'); show('md'); } }
@@ -69,7 +71,7 @@ function toolbar({ path, f, meta, lines, show, cv, blame }) {
   btn('Copiar caminho', 'copy', () => { navigator.clipboard?.writeText(path); toast('caminho copiado'); });
   btn('Copiar trecho', 'copy', () => { navigator.clipboard?.writeText(cv.selectedText()); toast(cv.range ? 'linhas copiadas' : 'arquivo copiado'); }, 'Copia as linhas selecionadas (ou o arquivo todo)');
   btn('Anexar', 'clip', () => { S.draft.push({ type: 'file', path }); updFoot(); toast('anexado: ' + path); }, 'Anexar ao contexto dos agentes');
-  const gh = h('a', 'btn sm'); gh.append(ico('external'), document.createTextNode('GitHub')); gh.target = '_blank'; gh.rel = 'noopener noreferrer';
+  const gh = /** @type {HTMLAnchorElement} */ (button('GitHub', { small: true, icon: 'external', href: '#' })); gh.target = '_blank'; gh.rel = 'noopener noreferrer'; gh.removeAttribute('href');
   const ok = meta.github && !['?', 'A'].includes(meta.status);
   gh.setAttribute('aria-disabled', ok ? 'false' : 'true'); gh.title = ok ? 'Abrir este arquivo no GitHub' : 'O arquivo ainda não está no GitHub';
   if (ok) gh.href = `${meta.github.url}/blob/${meta.github.branch}/${path}`;
@@ -79,8 +81,8 @@ function toolbar({ path, f, meta, lines, show, cv, blame }) {
 }
 
 export async function renderProjeto() {
-  const main = $('#main'); main.className = 'files-main'; main.replaceChildren();
-  const grid = h('div', 'files3'), treeCol = h('aside', 'card'), codeCol = h('section', 'card'), ctxCol = h('aside', 'card fxcol');
+  const main = $('#main'); main.className = 'flush'; main.replaceChildren();
+  const grid = h('div', 'files3'), treeCol = h('aside', 'pane'), codeCol = h('section', 'pane'), ctxCol = h('aside', 'pane ctxpane');
   treeCol.setAttribute('aria-label', 'Árvore de arquivos'); ctxCol.setAttribute('aria-label', 'Contexto do arquivo');
   grid.append(treeCol, codeCol, ctxCol); main.append(grid);
   codeCol.append(h('div', 'fempty', ''));

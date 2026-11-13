@@ -1,4 +1,5 @@
 // @ts-check
+import { badge } from './badge.js';
 import { api } from '../api.js';
 import { h } from '../lib/dom.js';
 import { hashParams, setHashParams } from '../router.js';
@@ -10,13 +11,13 @@ import { md } from './markdown.js';
 import { skeleton } from './skeleton.js';
 import { guard } from './toast.js';
 
-const REVIEW = { approved: ['aprovado', 'tst'], changes_requested: ['mudanças pedidas', 'ai2'], review_required: ['aguardando revisão', 'no'], none: ['', ''] };
-const STATE = { OPEN: ['aberto', 'ai1'], MERGED: ['mergeado', 'ref'], CLOSED: ['fechado', 'ai2'] };
+const REVIEW = { approved: ['aprovado', 'ok'], changes_requested: ['mudanças pedidas', 'warn'], review_required: ['aguardando revisão', 'neutral'], none: ['', 'neutral'] };
+const STATE = { OPEN: ['aberto', 'accent'], MERGED: ['mergeado', 'info'], CLOSED: ['fechado', 'neutral'] };
 
 /** @param {string} review */
-const reviewTag = review => { const [t, c] = /** @type {Record<string, string[]>} */ (REVIEW)[review] || REVIEW.none; return t ? h('span', 'tag ' + c, t) : h('span'); };
+const reviewTag = review => { const [t, c] = /** @type {Record<string, string[]>} */ (REVIEW)[review] || REVIEW.none; return t ? badge(t, /** @type {'ok'} */ (c)) : h('span'); };
 /** @param {string} state */
-const stateTag = state => { const [t, c] = /** @type {Record<string, string[]>} */ (STATE)[state] || [state, 'no']; return h('span', 'tag ' + c, t); };
+const stateTag = state => { const [t, c] = /** @type {Record<string, string[]>} */ (STATE)[state] || [state, 'neutral']; return badge(t, /** @type {'ok'} */ (c)); };
 
 /** Detalhe de um PR: checks, revisões, commits e o diff (mesmo diff-view dos Commits). @param {HTMLElement} box @param {number | string} n */
 async function detail(box, n) {
@@ -24,32 +25,33 @@ async function detail(box, n) {
   const d = await api('gh/pr?n=' + n);
   if (d.unavailable) { box.replaceChildren(unavailableCard(d, () => detail(box, n))); return; }
   box.replaceChildren(h('h3', '', `#${d.number} ${d.title}`));
-  const meta = h('div', 'row'); meta.style.margin = '6px 0 10px';
-  meta.append(stateTag(d.state), d.draft ? h('span', 'tag no', 'rascunho') : h('span'), h('span', 'mono hint', `${d.branch} → ${d.base}`), h('span', 'hint', d.author ? '@' + d.author : ''), reviewTag(d.review), ghLink(d.url, 'Abrir no GitHub'));
+  const meta = h('div', 'row'); meta.style.margin = 'var(--s2) 0 var(--s3)';
+  meta.append(stateTag(d.state), d.draft ? badge('rascunho') : h('span'), h('span', 'mono small muted', `${d.branch} → ${d.base}`), h('span', 'small muted', d.author ? '@' + d.author : ''), ghLink(d.url, 'Abrir no GitHub'));
+  if (d.review && d.review !== 'none') meta.append(reviewTag(d.review));
   box.append(meta, labelChips(d.labels));
   if (d.body) { const m = md(d.body); m.classList.add('cbody'); box.append(m); }
   box.append(h('div', 'ctx-h', `Checks (${d.checks.length})`));
-  if (!d.checks.length) box.append(h('div', 'hint', 'nenhum check neste PR'));
+  if (!d.checks.length) box.append(h('div', 'small muted', 'nenhum check neste PR'));
   d.checks.forEach((/** @type {any} */ c) => {
     const state = c.status && c.status !== 'completed' ? 'pending' : ['failure', 'timed_out', 'error'].includes(c.conclusion || '') ? 'failure' : c.conclusion === 'success' ? 'success' : c.conclusion === 'pending' ? 'pending' : 'cancelled';
-    const r = h('div', 'gh-line'); r.append(ciBadge(state), h('span', 'nm', c.name)); if (c.url) r.append(ghLink(c.url, 'abrir', 'chipb')); box.append(r);
+    const r = h('div', 'gh-line'); r.append(ciBadge(state), h('span', 'nm', c.name)); if (c.url) r.append(ghLink(c.url, 'abrir', 'btn sm ghost')); box.append(r);
   });
   if (d.reviews.length) {
     box.append(h('div', 'ctx-h', `Revisões (${d.reviews.length})`));
-    d.reviews.forEach((/** @type {any} */ v) => { const r = h('div', 'gh-line'); r.append(h('b', '', '@' + v.author), h('span', 'tag ' + (v.state === 'approved' ? 'tst' : 'no'), (v.state || '').replace('_', ' ')), h('span', 'hint grow', v.body)); box.append(r); });
+    d.reviews.forEach((/** @type {any} */ v) => { const r = h('div', 'gh-line'); r.append(h('b', '', '@' + v.author), badge((v.state || '').replace('_', ' '), v.state === 'approved' ? 'ok' : 'neutral'), h('span', 'small muted grow', v.body)); box.append(r); });
   }
   box.append(h('div', 'ctx-h', `Commits (${d.commits.length})`));
-  d.commits.forEach((/** @type {any} */ c) => { const r = h('div', 'gh-line'); r.append(h('span', 'mono dim', c.short), h('span', 'nm', c.subject), h('span', 'hint', `${c.author} · ${since(c.t)}`)); box.append(r); });
+  d.commits.forEach((/** @type {any} */ c) => { const r = h('div', 'gh-line'); r.append(h('span', 'mono faint', c.short), h('span', 'nm', c.subject), h('span', 'small muted', `${c.author} · ${since(c.t)}`)); box.append(r); });
   box.append(h('div', 'ctx-h', 'Alterações'));
-  const dv = diffView(d.diff, { open: 2 }); box.append(dv); if (d.diff_truncated) box.append(h('div', 'hint', 'diff truncado (muito grande): veja o resto no GitHub'));
+  const dv = diffView(d.diff, { open: 2 }); box.append(dv); if (d.diff_truncated) box.append(h('div', 'small muted', 'diff truncado (muito grande): veja o resto no GitHub'));
   S.timers.push(diffKeys(dv));
 }
 
 /** Aba Pull requests: lista com filtro abertos/fechados/todos e detalhe ao lado. @param {HTMLElement} box @param {{ fresh: boolean }} o */
 export async function prsPanel(box, { fresh }) {
   let state = hashParams().get('state') || 'open';
-  const grid = h('div', 'gh-split'), left = h('div', 'card gh-list'), right = h('div', 'card gh-detail dv-scroll'); grid.append(left, right); box.replaceChildren(grid);
-  right.append(emptyState('Escolha um pull request', 'O diff, os checks e os commits aparecem aqui.'));
+  const grid = h('div', 'split'), left = h('div', 'gh-list'), right = h('div', 'gh-detail dv-scroll'); grid.append(left, right); box.replaceChildren(grid);
+  right.append(emptyState('Escolha um pull request para ver o diff, os checks e os commits.'));
   /** @type {HTMLElement | null} */ let on = null;
   const open = guard(async (/** @type {number} */ n, /** @type {HTMLElement} */ row) => { on?.classList.remove('on'); on = row; row.classList.add('on'); setHashParams({ pr: String(n) }); await detail(right, n); });
 
@@ -58,13 +60,13 @@ export async function prsPanel(box, { fresh }) {
     const r = await api(`gh/prs?state=${state}` + (refresh ? '&refresh=1' : ''));
     if (r.unavailable) { left.replaceChildren(unavailableCard(r, () => load(true))); return; }
     const seg = h('div', 'seg'); [['open', 'Abertos'], ['closed', 'Fechados'], ['all', 'Todos']].forEach(([k, l]) => { const b = h('button', state === k ? 'on' : '', l); b.onclick = () => { state = k; setHashParams({ state: k === 'open' ? '' : k, pr: '' }); load(false); }; seg.append(b); });
-    left.replaceChildren(seg);
-    if (!r.prs.length) { left.append(emptyState('Nenhum pull request', state === 'open' ? 'Não há PRs abertos.' : 'Nada por aqui.')); return; }
+    seg.style.margin = 'var(--s3)'; left.replaceChildren(seg);
+    if (!r.prs.length) { left.append(emptyState(state === 'open' ? 'Não há PRs abertos.' : 'Nenhum pull request por aqui.')); return; }
     const want = hashParams().get('pr'); /** @type {HTMLElement | null} */ let pre = null;
     r.prs.forEach((/** @type {any} */ p) => {
       const row = h('button', 'gh-row'); row.setAttribute('aria-label', `PR ${p.number}: ${p.title}`);
-      const top = h('div', 'row'); top.style.gap = '8px'; top.append(ciBadge(p.checks), h('b', 'grow', `#${p.number} ${p.title}`), ...(p.draft ? [h('span', 'tag no', 'rascunho')] : []), stateTag(p.state));
-      const mt = h('div', 'mt'); mt.append(h('span', 'mono', `${p.branch} → ${p.base}`), h('span', '', `@${p.author} · ${since(p.updated_at)}`), reviewTag(p.review), labelChips(p.labels));
+      const top = h('div', 'row'); top.style.gap = 'var(--s2)'; top.append(ciBadge(p.checks), h('b', 'grow', `#${p.number} ${p.title}`), ...(p.draft ? [badge('rascunho')] : []));
+      const mt = h('div', 'mt'); mt.append(h('span', 'mono', `${p.branch} → ${p.base}`), h('span', '', `@${p.author} · ${since(p.updated_at)}`), p.review && p.review !== 'none' ? reviewTag(p.review) : h('span'));
       row.append(top, mt); row.onclick = () => open(p.number, row); left.append(row); if (String(p.number) === want) pre = row;
     });
     if (pre) /** @type {HTMLElement} */ (pre).click();

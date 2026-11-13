@@ -1,4 +1,5 @@
 // @ts-check
+import { badge } from './badge.js';
 import { h, svgEl } from '../lib/dom.js';
 import { hideTip, showTip } from './tooltip.js';
 
@@ -15,14 +16,14 @@ import { hideTip, showTip } from './tooltip.js';
 export function depsView(data, { onOpen }) {
   const box = h('div', 'deps'), side = h('div', 'deps-side');
   const N = data.nodes.length;
-  if (!N) { box.append(h('div', 'hint', 'Nenhum módulo encontrado em back-end/src.')); return box; }
+  if (!N) { box.append(h('div', 'small muted', 'Nenhum módulo encontrado em back-end/src.')); return box; }
   const size = 440, cx = size / 2, cy = size / 2, R = size / 2 - 64;
   const maxLoc = Math.max(1, ...data.nodes.map(n => n.loc)), radius = (/** @type {MNode} */ n) => 14 + 16 * Math.sqrt(n.loc / maxLoc);
   const pos = new Map(data.nodes.map((n, i) => { const a = -Math.PI / 2 + (i / N) * Math.PI * 2; return [n.id, { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a), a, n }]; }));
   const inCycle = new Set(data.cycles.flat()), cycleOf = (/** @type {string} */ a, /** @type {string} */ b) => data.cycles.some(c => c.includes(a) && c.includes(b));
   const svg = svgEl('svg', { class: 'deps-svg', viewBox: `0 0 ${size} ${size}`, role: 'group', 'aria-label': `Dependências entre ${N} módulos` });
   const defs = svgEl('defs');
-  [['ok', 'var(--mut)'], ['cy', 'var(--err)']].forEach(([id, color]) => { const m = svgEl('marker', { id: 'dp-' + id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' }); m.append(svgEl('path', { d: 'M0 0L10 5L0 10z', fill: color })); defs.append(m); });
+  [['ok', 'var(--text-3)'], ['cy', 'var(--err)']].forEach(([id, color]) => { const m = svgEl('marker', { id: 'dp-' + id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' }); m.append(svgEl('path', { d: 'M0 0L10 5L0 10z', fill: color })); defs.append(m); });
   svg.append(defs);
   const mx = Math.max(1, ...data.edges.map(e => e.weight));
   data.edges.forEach(e => {
@@ -37,8 +38,8 @@ export function depsView(data, { onOpen }) {
   /** @type {SVGElement | null} */ let selected = null;
   const list = (/** @type {MNode} */ n, /** @type {SVGElement} */ g) => {
     selected?.classList.remove('sel'); selected = g; g.classList.add('sel'); side.replaceChildren();
-    side.append(h('h4', '', n.id), h('div', 'hint', `${n.files} arquivo(s) · ${n.loc} linhas lógicas · fan-in ${n.fan_in} · fan-out ${n.fan_out}`));
-    n.file_list.forEach(f => { const b = h('button', 'ctx-link', f.path.replace(/^back-end\/src\//, '')); b.title = f.path; b.append(h('span', 'dim', '  ' + f.loc)); b.onclick = () => onOpen(f.path); side.append(b); });
+    side.append(h('h4', '', n.id), h('div', 'small muted', `${n.files} arquivo(s) · ${n.loc} linhas lógicas · fan-in ${n.fan_in} · fan-out ${n.fan_out}`));
+    n.file_list.forEach(f => { const b = h('button', 'ctx-link', f.path.replace(/^back-end\/src\//, '')); b.title = f.path; b.append(h('span', 'faint', '  ' + f.loc)); b.onclick = () => onOpen(f.path); side.append(b); });
   };
   data.nodes.forEach(n => {
     const p = /** @type {{ x: number, y: number, a: number }} */ (pos.get(n.id)), r = radius(n), high = data.high_fan_in.includes(n.id), cyc = inCycle.has(n.id);
@@ -50,15 +51,15 @@ export function depsView(data, { onOpen }) {
     svg.append(g);
   });
   const top = [...data.nodes].sort((a, b) => b.fan_in - a.fan_in)[0];
-  side.append(h('div', 'hint', 'Clique em um módulo para listar os arquivos.'));
+  side.append(h('div', 'small muted', 'Clique em um módulo para listar os arquivos.'));
   const info = h('div', 'deps-info');
   if (data.cycles.length) {
     info.append(h('div', 'ctx-h', `Ciclos (${data.cycles.length})`));
-    data.cycles.forEach(c => info.append(h('div', 'tag cyc-tag', c.join(' ⇄ '))));
+    data.cycles.forEach(c => info.append(badge(c.join(' ⇄ '), 'err')));
     const inside = data.edges.filter(e => cycleOf(e.from, e.to)).sort((a, b) => b.weight - a.weight).slice(0, 6);
-    info.append(h('div', 'hint', 'Setas que mais pesam dentro do ciclo: ' + inside.map(e => `${e.from}→${e.to} (${e.weight})`).join(', ')));
-  } else info.append(h('div', 'hint ok-line', 'Nenhum ciclo entre módulos.'));
-  if (top && top.fan_in > 0) info.append(h('div', 'hint', `Maior fan-in: ${top.id} (${top.fan_in} módulos dependem dele)` + (data.high_fan_in.length ? ` · fan-in alto: ${data.high_fan_in.join(', ')}` : '')));
+    info.append(h('div', 'small muted', 'Setas que mais pesam dentro do ciclo: ' + inside.map(e => `${e.from}→${e.to} (${e.weight})`).join(', ')));
+  } else info.append(h('div', 'small ok-line', 'Nenhum ciclo entre módulos.'));
+  if (top && top.fan_in > 0) info.append(h('div', 'small muted', `Maior fan-in: ${top.id} (${top.fan_in} módulos dependem dele)` + (data.high_fan_in.length ? ` · fan-in alto: ${data.high_fan_in.join(', ')}` : '')));
   box.append(svg, h('div', 'deps-col', ''));
   /** @type {HTMLElement} */ (box.lastElementChild).append(info, side);
   return box;

@@ -41,7 +41,9 @@
 .dp-node.cyc circle { fill: var(--err-soft); stroke: var(--err); } .dp-node.high circle { stroke: var(--warn); stroke-width: 3.5; }
 .dp-node text { font: 10px var(--mono); fill: var(--text-1); pointer-events: none; } .dp-node:hover circle, .dp-node:focus-visible circle, .dp-node.sel circle { stroke: var(--text-1); }
 .deps-col { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; } .deps-info { display: flex; flex-direction: column; gap: var(--s2); align-items: flex-start; }
-.cyc-tag { color: var(--err); } .ok-line { color: var(--ok); } .deps-side h4 { margin: 0 0 var(--s1); font-size: var(--fs-16); } .deps-side .ctx-link { display: flex; gap: var(--s2); }
+.ok-line { color: var(--ok); } .deps-side h4 { margin: 0 0 var(--s1); font-size: var(--fs-16); } .deps-side .ctx-link { display: flex; gap: var(--s2); }
 /* acoplamento */
 .coup .cbar { display: inline-block; vertical-align: middle; width: 70px; height: 6px; border-radius: 3px; background: var(--surface-3); margin-right: var(--s2); overflow: hidden; }
 .coup .cbar i { display: block; height: 100%; background: var(--viz-3); } .coup td .ctx-link { display: block; padding: 2px var(--s2); }
+/* abas com margem negativa geravam barra de rolagem vertical (ui.css) */
+.tabs { overflow-y: hidden; }

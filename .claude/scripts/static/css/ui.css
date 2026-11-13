@@ -36,7 +36,7 @@ select option { background: var(--surface); color: var(--text-1); }
 label.check { display: inline-flex; align-items: center; gap: var(--s2); font-size: var(--fs-13); color: var(--text-2); cursor: pointer; }
 
 /* abas */
-.tabs { display: flex; gap: var(--s4); border-bottom: 1px solid var(--border); margin-bottom: var(--s4); overflow-x: auto; }
+.tabs { display: flex; gap: var(--s4); border-bottom: 1px solid var(--border); margin-bottom: var(--s4); overflow-x: auto; overflow-y: hidden; }
 .tabs button { all: unset; box-sizing: border-box; cursor: pointer; padding: var(--s2) 0; margin-bottom: -1px; color: var(--text-2); font-size: var(--fs-14); border-bottom: 2px solid transparent; white-space: nowrap; }
 .tabs button:hover { color: var(--text-1); }
 .tabs button[aria-selected="true"] { color: var(--text-1); font-weight: var(--fw-medium); border-bottom-color: var(--accent); }

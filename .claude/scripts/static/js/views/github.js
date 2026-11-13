@@ -1,4 +1,6 @@
 // @ts-check
+import { tabs } from '../ui/tabs.js';
+import { button } from '../ui/button.js';
 import { api } from '../api.js';
 import { $, h } from '../lib/dom.js';
 import { hashParams, setHashParams } from '../router.js';
@@ -16,13 +18,13 @@ export async function renderGithub(fresh = false) {
   const st = await api('gh/status' + (fresh ? '?refresh=1' : ''));
   if (!st.installed || !st.authenticated || !st.repo) { main.replaceChildren(unavailableCard({ ...st, reason: st.installed ? 'not_authenticated' : 'not_installed' }, () => renderGithub(true))); return; }
   main.replaceChildren();
-  const bar = h('div', 'row'); bar.style.cssText = 'gap:12px;margin-bottom:14px';
-  const seg = h('div', 'seg'), body = h('div');
+  const bar = h('div', 'row'); bar.style.marginBottom = 'var(--s3)';
+  const body = h('div');
   let tab = hashParams().get('tab') || 'prs'; if (!TABS.some(t => t[0] === tab)) tab = 'prs';
   /** @param {string} key @param {boolean} refresh */
-  const show = (key, refresh) => { tab = key; seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', /** @type {HTMLElement} */ (b).dataset.tab === key)); setHashParams({ tab: key === 'prs' ? '' : key }); const t = TABS.find(x => x[0] === key) || TABS[0]; return t[2](body, { fresh: refresh }); };
-  TABS.forEach(([k, label]) => { const b = h('button', k === tab ? 'on' : '', label); b.dataset.tab = k; b.onclick = () => { setHashParams({ pr: '', run: '' }); show(k, false); }; seg.append(b); });
-  const refresh = h('button', 'btn sm', 'Atualizar'); refresh.title = 'Ignora o cache de 60 s'; refresh.onclick = () => show(tab, true);
-  bar.append(seg, h('span', 'grow'), h('span', 'hint', st.user ? `@${st.user} em ` : ''), ghLink('https://github.com/' + st.repo, st.repo, 'chipb'), refresh);
+  const show = (key, refresh) => { tab = key; setHashParams({ tab: key === 'prs' ? '' : key }); const t = TABS.find(x => x[0] === key) || TABS[0]; return t[2](body, { fresh: refresh }); };
+  const tb = tabs(TABS.map(([id, label]) => ({ id, label })), { active: tab, label: 'Seções do GitHub', onChange: k => { setHashParams({ pr: '', run: '' }); show(k, false); } });
+  tb.el.style.flex = '1'; tb.el.style.marginBottom = '0';
+  bar.append(tb.el, h('span', 'small muted', st.user ? `@${st.user} em ` : ''), ghLink('https://github.com/' + st.repo, st.repo, 'btn sm ghost'), button('Atualizar', { small: true, title: 'Ignora o cache de 60 s', onClick: () => show(tab, true) }));
   main.append(bar, body); await show(tab, false);
 }

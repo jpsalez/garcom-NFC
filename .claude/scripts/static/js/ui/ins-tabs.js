@@ -18,8 +18,8 @@ const open = path => go('arquivos', '', 'path=' + encodeURIComponent(path).repla
  * @template T @param {{ title: string, hint?: string, load: () => Promise<T>, render: (d: T) => HTMLElement, controls?: HTMLElement[] }} o
  */
 function section({ title, hint, load, render, controls = [] }) {
-  const card = h('div', 'card ins-sec'), head = h('div', 'row'); head.append(h('h3', 'grow', title), ...controls);
-  const slot = h('div'); card.append(head); if (hint) card.append(h('div', 'hint', hint)); card.append(slot);
+  const card = h('section', 'ins-sec'), head = h('div', 'head'); head.append(h('h3', '', title), ...controls);
+  const slot = h('div'); card.append(head); if (hint) card.append(h('p', 'small muted', hint)); card.append(slot);
   const run = () => { slot.replaceChildren(skeleton(5)); load().then(d => slot.replaceChildren(render(d))).catch(e => { if (!isAbort(e)) slot.replaceChildren(errorState(e, run)); }); };
   run();
   return { card, run };
@@ -38,7 +38,7 @@ export function mapaTab(body) {
     load: () => api('insights/treemap?days=' + days),
     render: d => {
       if (!d.files.length) return emptyState('Nenhum arquivo de código encontrado', 'O mapa cobre back-end/src e front-end.');
-      const wrap = h('div'); if (!d.max_commits) wrap.append(h('div', 'hint short', `Nenhum commit nos últimos ${d.days} dias: o mapa mostra só o tamanho. Aumente o período.`));
+      const wrap = h('div'); if (!d.max_commits) wrap.append(h('div', 'small muted short', `Nenhum commit nos últimos ${d.days} dias: o mapa mostra só o tamanho. Aumente o período.`));
       wrap.append(treemapView(d, { onOpen: open })); return wrap;
     },
     controls: [select([['30', '30 dias'], ['90', '90 dias'], ['180', '180 dias'], ['365', '1 ano']], days, 'Período do mapa', v => { days = v; tm.run(); })],

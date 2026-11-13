@@ -21,8 +21,6 @@ const ICONS = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
 };
 export function ico(n) { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'i'); s.innerHTML = ICONS[n] || ''; return s; }
-export function countUp(el, to, fmt = v => Math.round(v).toLocaleString('pt-BR')) { if (matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = fmt(to); return; } const t0 = performance.now(), dur = 900; const f = now => { const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(to * e); if (p < 1) requestAnimationFrame(f); }; requestAnimationFrame(f); }
-export function stagger(parent) { [...parent.children].forEach((c, i) => { c.classList.add('rise'); c.style.setProperty('--i', i); }); }
 
 /** Elemento SVG com atributos. @param {string} tag @param {Record<string, string | number>} [attrs] */
 export function svgEl(tag, attrs = {}) { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, String(v))); return e; }

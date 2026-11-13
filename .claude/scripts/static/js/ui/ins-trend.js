@@ -3,7 +3,7 @@ import { h, svgEl } from '../lib/dom.js';
 import { LANE_COLORS as BASE } from './commit-graph.js';
 import { hideTip, showTip } from './tooltip.js';
 
-const LANE_COLORS = [...BASE, '#c9d1d9', '#e5c07b'];  // 10 arquivos = 10 cores
+const LANE_COLORS = [...BASE, 'var(--text-2)', 'var(--text-3)'];  // 10 arquivos = 10 cores
 
 /** @typedef {{ path: string, cc_now: number, series: { sha: string, short: string, t: string, ts: number, cc_max: number, loc: number }[] }} TFile */
 
@@ -15,8 +15,8 @@ export function trendView(data, { onOpen }) {
   const box = h('div', 'trend');
   const files = data.files.filter(f => f.series.length);
   const longest = Math.max(0, ...files.map(f => f.series.length));
-  if (!files.length) { box.append(h('div', 'hint', 'Nenhum arquivo com histórico para mostrar.')); return box; }
-  if (longest < 2) box.append(h('div', 'hint short', 'Histórico curto: cada arquivo tem uma única versão commitada, então ainda não há evolução para desenhar. Os pontos mostram a complexidade atual e a linha aparece conforme os arquivos forem alterados.'));
+  if (!files.length) { box.append(h('div', 'small muted', 'Nenhum arquivo com histórico para mostrar.')); return box; }
+  if (longest < 2) box.append(h('div', 'small muted short', 'Histórico curto: cada arquivo tem uma única versão commitada, então ainda não há evolução para desenhar. Os pontos mostram a complexidade atual e a linha aparece conforme os arquivos forem alterados.'));
   const W = 760, H = 250, L = 34, R = 12, T = 12, B = 24;
   const ts = files.flatMap(f => f.series.map(s => s.ts)), t0 = Math.min(...ts), t1 = Math.max(...ts, t0 + 1), dots = longest < 2;
   const ymax = Math.max(24, ...files.flatMap(f => f.series.map(s => s.cc_max))), X = (/** @type {number} */ t, /** @type {number} */ col = 0) => L + (dots ? (col + 0.5) / files.length : (t - t0) / (t1 - t0)) * (W - L - R), Y = (/** @type {number} */ v) => H - B - (v / ymax) * (H - B - T);
@@ -27,9 +27,9 @@ export function trendView(data, { onOpen }) {
   files.forEach((f, i) => {
     const color = LANE_COLORS[i % LANE_COLORS.length], els = [];
     const pts = f.series.map(s => `${X(s.ts, i).toFixed(1)},${Y(s.cc_max).toFixed(1)}`).join(' ');
-    if (f.series.length > 1) { const pl = svgEl('polyline', { points: pts, fill: 'none', stroke: color, 'stroke-width': 2, class: 'tr-line', 'stroke-linejoin': 'round' }); pl.addEventListener('click', () => onOpen(f.path)); svg.append(pl); els.push(pl); }
+    if (f.series.length > 1) { const pl = svgEl('polyline', { points: pts, fill: 'none', style: `stroke:${color}`, 'stroke-width': 2, class: 'tr-line', 'stroke-linejoin': 'round' }); pl.addEventListener('click', () => onOpen(f.path)); svg.append(pl); els.push(pl); }
     f.series.forEach(s => {
-      const c = svgEl('circle', { cx: X(s.ts, i), cy: Y(s.cc_max), r: dots ? 5 : 4, fill: color, class: 'tr-pt', tabindex: 0, role: 'button', 'aria-label': `${f.path} em ${s.short}: complexidade ${s.cc_max}` });
+      const c = svgEl('circle', { cx: X(s.ts, i), cy: Y(s.cc_max), r: dots ? 5 : 4, style: `fill:${color}`, class: 'tr-pt', tabindex: 0, role: 'button', 'aria-label': `${f.path} em ${s.short}: complexidade ${s.cc_max}` });
       const lines = [f.path, `${s.short} · ${new Date(s.t).toLocaleDateString('pt-BR')}`, `complexidade máx. ${s.cc_max} · ${s.loc} linhas`];
       c.addEventListener('mousemove', e => showTip(/** @type {MouseEvent} */ (e), lines)); c.addEventListener('mouseleave', hideTip); c.addEventListener('click', () => onOpen(f.path));
       c.addEventListener('keydown', e => { if (e.key === 'Enter') onOpen(f.path); }); svg.append(c); els.push(c);

@@ -21,7 +21,7 @@ function worst(row, side) {
  * @template T @param {(T & { value: number })[]} items em ordem decrescente de valor @param {Box} box
  * @returns {{ item: T, x: number, y: number, w: number, h: number }[]}
  */
-export function squarify(items, { x, y, w, h }) {
+function squarify(items, { x, y, w, h }) {
   const total = items.reduce((t, i) => t + i.value, 0), out = [];
   if (!total || w <= 0 || h <= 0) return out;
   const scale = (w * h) / total;
@@ -42,7 +42,7 @@ export function squarify(items, { x, y, w, h }) {
 }
 
 /** Árvore de pastas; pastas com um único filho pasta são juntadas (back-end/src/modules vira um rótulo só). @param {TFile[]} files */
-export function buildTree(files) {
+function buildTree(files) {
   /** @type {TNode} */ const root = { name: '', value: 0, kids: new Map() };
   files.forEach(f => {
     let n = root;
@@ -63,9 +63,9 @@ export function buildTree(files) {
 
 /** Cor por nº de commits: neutro → âmbar → vermelho (legível nos dois temas, sempre sobre o fundo opaco). @param {number} c @param {number} max */
 export function heat(c, max) {
-  if (!c || !max) return 'color-mix(in srgb, var(--dim) 14%, var(--bg2))';
+  if (!c || !max) return 'var(--surface-3)';
   const p = Math.min(1, c / max);
-  return p < 0.5 ? `color-mix(in srgb, var(--warn) ${Math.round(18 + p * 2 * 52)}%, var(--bg2))` : `color-mix(in srgb, var(--err) ${Math.round(20 + (p - 0.5) * 2 * 55)}%, var(--warn))`;
+  return p < 0.5 ? `color-mix(in srgb, var(--warn) ${Math.round(18 + p * 2 * 52)}%, var(--surface-3))` : `color-mix(in srgb, var(--err) ${Math.round(20 + (p - 0.5) * 2 * 55)}%, var(--warn))`;
 }
 
 /**
@@ -104,7 +104,7 @@ export function treemapView(data, { onOpen, width = 1000, height = 520 }) {
   }
   draw(buildTree(data.files), { x: 0, y: 0, w: width, h: height }, 0);
   const legend = h('div', 'tm-legend'), bar = h('i', 'tm-grad');
-  legend.append(h('span', 'hint', `commits em ${data.days} dias:`), h('span', 'mono', '0'), bar, h('span', 'mono', String(data.max_commits)), h('span', 'hint', '· área = linhas lógicas · contorno âmbar/vermelho = nível atenção/alto'));
+  legend.append(h('span', 'small muted', `commits em ${data.days} dias:`), h('span', 'mono', '0'), bar, h('span', 'mono', String(data.max_commits)), h('span', 'small muted', '· área = linhas lógicas · contorno âmbar/vermelho = nível atenção/alto'));
   wrap.append(svg, legend);
   return wrap;
 }

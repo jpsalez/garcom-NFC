@@ -1,4 +1,6 @@
 // @ts-check
+import { button } from './button.js';
+import { badge } from './badge.js';
 import { h } from '../lib/dom.js';
 import { ago } from '../lib/format.js';
 
@@ -22,10 +24,10 @@ export function runState(r) {
 }
 
 /** Só abre links do próprio GitHub. @param {string} url */
-export const safeUrl = url => (/^https:\/\/github\.com\//.test(url || '') ? url : '#');
+const safeUrl = url => (/^https:\/\/github\.com\//.test(url || '') ? url : '#');
 
 /** Link para o GitHub em nova aba. @param {string} url @param {string} label @param {string} [cls] */
-export function ghLink(url, label, cls = 'btn sm') {
+export function ghLink(url, label, cls = 'btn sm ghost') {
   const a = h('a', cls, label); a.href = safeUrl(url); a.target = '_blank'; a.rel = 'noopener noreferrer'; return a;
 }
 
@@ -34,7 +36,7 @@ export const since = iso => (iso ? ago(Date.parse(iso) / 1000) : '');
 
 /** Chips de rótulos. @param {string[]} labels */
 export function labelChips(labels) {
-  const box = h('span', 'gh-labels'); labels.forEach(l => box.append(h('span', 'tag ref', l))); return box;
+  const box = h('span', 'gh-labels'); labels.slice(0, 3).forEach(l => box.append(badge(l, 'info'))); return box;
 }
 
 /**
@@ -42,10 +44,9 @@ export function labelChips(labels) {
  * @param {{ message?: string, help?: string[], reason?: string }} r @param {() => void} retry
  */
 export function unavailableCard(r, retry) {
-  const box = h('div', 'card gh-setup');
-  box.append(h('h3', '', r.reason === 'error' ? 'O GitHub não respondeu' : 'Conectar ao GitHub'), h('div', 'hint', r.message || 'GitHub indisponível.'));
+  const box = h('div', 'gh-setup');
+  box.append(h('h3', '', r.reason === 'error' ? 'O GitHub não respondeu' : 'Conectar ao GitHub'), h('p', 'small muted', r.message || 'GitHub indisponível.'));
   if (r.help && r.help.length) { const ol = h('ol'); r.help.forEach(x => ol.append(h('li', '', x))); box.append(ol); }
-  box.append(h('div', 'hint', 'O resto do painel funciona normalmente sem o GitHub.'));
-  const b = h('button', 'btn sm p', 'Verificar de novo'); b.onclick = retry; box.append(b);
+  box.append(h('p', 'small muted', 'O resto do painel funciona normalmente sem o GitHub.'), button('Verificar de novo', { variant: 'primary', onClick: retry }));
   return box;
 }

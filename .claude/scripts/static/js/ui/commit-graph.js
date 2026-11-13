@@ -3,7 +3,7 @@ import { svgEl as el } from '../lib/dom.js';
 // Grafo de commits: o servidor manda os commits em ordem topológica com `parents`; aqui calculamos as faixas (lanes)
 // e desenhamos cada linha em SVG. Cada faixa tem uma cor própria, que acompanha o branch ao longo do histórico.
 
-export const LANE_COLORS = ['#b6f04e', '#55d6e0', '#ffb454', '#b79bff', '#ff7ab2', '#5ee69a', '#ff8a5b', '#7aa2ff'];
+export const LANE_COLORS = [1, 2, 3, 4, 5, 6, 7, 8].map(n => `var(--viz-${n})`);
 const GW = 14, PAD = 10;
 
 /**
@@ -53,12 +53,12 @@ export function graphSvg(r, maxLanes, H) {
   const svg = el('svg', { class: 'gr', width: W, height: H, viewBox: `0 0 ${W} ${H}`, 'aria-hidden': 'true' });
   const col = (/** @type {number} */ c) => LANE_COLORS[c % LANE_COLORS.length];
   /** @param {string} d @param {number} c */
-  const path = (d, c) => svg.append(el('path', { d, stroke: col(c), 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round' }));
+  const path = (d, c) => svg.append(el('path', { d, style: `stroke:${col(c)}`, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round' }));
   r.pass.forEach(s => path(`M${X(s.k)} 0V${H}`, s.c));
   if (r.hasTop) path(`M${X(r.lane)} 0V${mid}`, r.color);
   r.merge.forEach(s => path(`M${X(s.k)} 0C${X(s.k)} ${mid * 0.9} ${X(r.lane)} ${mid * 0.1} ${X(r.lane)} ${mid}`, s.c));
   r.toParents.forEach(s => path(s.k === r.lane ? `M${X(r.lane)} ${mid}V${H}` : `M${X(r.lane)} ${mid}C${X(r.lane)} ${mid + (H - mid) * 0.9} ${X(s.k)} ${mid + (H - mid) * 0.1} ${X(s.k)} ${H}`, s.c));
-  if (r.head) svg.append(el('circle', { cx: X(r.lane), cy: mid, r: 8, fill: 'none', stroke: col(r.color), 'stroke-width': 1.5, opacity: 0.6 }));
-  svg.append(el('circle', { cx: X(r.lane), cy: mid, r: r.isMerge ? 5.5 : 4.5, fill: r.isMerge ? 'var(--bg2)' : col(r.color), stroke: col(r.color), 'stroke-width': r.isMerge ? 2.5 : 0 }));
+  if (r.head) svg.append(el('circle', { cx: X(r.lane), cy: mid, r: 8, fill: 'none', style: `stroke:${col(r.color)}`, 'stroke-width': 1.5, opacity: 0.6 }));
+  svg.append(el('circle', { cx: X(r.lane), cy: mid, r: r.isMerge ? 5.5 : 4.5, style: `fill:${r.isMerge ? 'var(--surface)' : col(r.color)};stroke:${col(r.color)}`, 'stroke-width': r.isMerge ? 2.5 : 0 }));
   return svg;
 }

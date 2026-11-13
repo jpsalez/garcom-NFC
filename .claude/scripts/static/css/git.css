@@ -81,4 +81,6 @@ mark.wd { background: color-mix(in srgb, var(--ok) 38%, transparent); color: inh
 .grec:hover { background: var(--hover); } .grec .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--fw-medium); font-size: var(--fs-13); }
 .grec .m { font: var(--fs-12) var(--mono); color: var(--text-3); white-space: nowrap; }
 .vgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s6); align-items: start; } @media (max-width: 1000px) { .vgrid { grid-template-columns: 1fr; } }
-.vout { margin-top: var(--s3); max-height: 460px; }
+.vout { max-height: 460px; }
+.vgrid > .section { border-top: 0; padding-top: 0; }
+.vout { margin: var(--s3) 0; }

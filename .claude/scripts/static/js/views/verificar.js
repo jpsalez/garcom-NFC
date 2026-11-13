@@ -1,27 +1,57 @@
 // @ts-check
 import { api } from '../api.js';
-import { $, h, stagger } from '../lib/dom.js';
+import { $, h } from '../lib/dom.js';
 import { ago } from '../lib/format.js';
 import { go } from '../router.js';
 import { S } from '../store.js';
+import { badge } from '../ui/badge.js';
+import { button } from '../ui/button.js';
+import { section } from '../ui/section.js';
 import { guard } from '../ui/toast.js';
 
-/* ---------- Verificar / Decisões ---------- */
-export async function renderVerificar() {
-  const main = $('#main'); main.className = ''; main.replaceChildren(); const g = h('div', 'bento'); main.append(g); const a = h('div', 'card s6'), b = h('div', 'card s6'); g.append(a, b);
-  a.append(h('h3', '', 'Verificações')); const row = h('div', 'row'); const out = h('pre', '', 'Escolha uma verificação.'); out.style.marginTop = '12px';
-  [['verify', 'Typecheck + lint + testes'], ['check_tenant', 'Isolamento por restaurante'], ['routes', 'Rotas'], ['doc_drift', 'Documentação x código'], ['repo_map', 'Mapa do código'], ['ai_mode', 'Modo IA']].forEach(([k, l]) => { const bt = h('button', 'btn sm', l); bt.onclick = guard(async () => { bt.disabled = true; out.textContent = 'executando…'; try { const r = await api('script/' + k, 'POST', {}); out.textContent = (r.code === 0 ? '✔ ' : '✖ código ' + r.code + '\n') + r.out; } finally { bt.disabled = false; } }); row.append(bt); });
-  a.append(row, out, h('div', 'hint', 'Só roda os scripts de .claude/scripts (lista fixa). Testes com banco precisam do Docker.'));
-  b.classList.add('gsum'); b.append(h('h3', '', 'Git do monorepo'));
-  const gbox = h('div'); const rf = h('button', 'btn sm', 'Atualizar'); b.append(rf, gbox);
+const CHECKS = [['verify', 'Typecheck + lint + testes'], ['check_tenant', 'Isolamento por restaurante'], ['routes', 'Rotas'], ['doc_drift', 'Documentação x código'], ['repo_map', 'Mapa do código'], ['ai_mode', 'Modo IA']];
+const STATUS = /** @type {Record<string, string>} */ ({ M: 'modificado', A: 'novo', D: 'apagado', '?': 'não rastreado' });
+
+/** Coluna "Verificações": um botão por script (lista fixa do servidor) e a saída embaixo. */
+function verificacoes() {
+  const s = section('Verificações'), row = h('div', 'row'), out = h('pre', 'vout'); out.textContent = 'Escolha uma verificação.';
+  CHECKS.forEach(([k, label]) => {
+    const b = button(label, { small: true });
+    b.onclick = guard(async () => {
+      b.setAttribute('disabled', ''); out.textContent = 'executando…';
+      try { const r = await api('script/' + k, 'POST', {}); out.textContent = (r.code === 0 ? '✔ ' : '✖ código ' + r.code + '\n') + r.out; } finally { b.removeAttribute('disabled'); }
+    });
+    row.append(b);
+  });
+  s.body.append(row, out, h('p', 'small muted', 'Só roda os scripts de .claude/scripts (lista fixa). Testes com banco precisam do Docker.'));
+  return s.el;
+}
+
+/** Coluna "Git do monorepo": branch, à frente/atrás, alterações por pasta e os últimos commits. */
+function gitDoMonorepo() {
+  const s = section('Git do monorepo'), box = h('div');
   const load = guard(async () => {
-    const x = await api('gitsummary'); gbox.replaceChildren();
-    const sync = x.upstream ? `${x.branch} → ${x.upstream}` : `${x.branch} (sem remoto configurado)`;
-    const line = h('div', 'row'); line.style.margin = '10px 0'; line.append(h('b', 'mono', sync), x.ahead ? h('span', 'tag ai1', '↑ ' + x.ahead + ' a enviar') : h('span'), x.behind ? h('span', 'tag ai2', '↓ ' + x.behind + ' a receber') : h('span'), x.clean ? h('span', 'tag tst', 'árvore limpa') : h('span', 'tag ai2', 'há alterações'));
+    const x = await api('gitsummary'); box.replaceChildren();
+    const line = h('div', 'row'); line.append(h('b', 'mono', x.upstream ? `${x.branch} → ${x.upstream}` : `${x.branch} (sem remoto configurado)`));
+    if (x.ahead) line.append(badge('↑ ' + x.ahead + ' a enviar', 'accent'));
+    if (x.behind) line.append(badge('↓ ' + x.behind + ' a receber', 'warn'));
+    if (!x.ahead && !x.behind) line.append(badge(x.clean ? 'árvore limpa' : 'há alterações', x.clean ? 'ok' : 'warn'));
     const areas = h('div', 'areas');
-    ['back-end', 'front-end', 'raiz'].forEach(k => { const c = x.areas[k], n = Object.values(c).reduce((a, v) => a + /** @type {number} */ (v), 0), box = h('div', 'garea'); box.append(h('b', '', k), h('div', 'n', String(n)));
-      const cs = h('div', 'cs'); Object.entries(c).forEach(([code, v]) => cs.append(h('span', 'c' + code, `${{ M: 'modificado', A: 'novo', D: 'apagado', '?': 'não rastreado' }[/** @type {'M'} */ (code)] || code} ${v}`))); box.append(cs); areas.append(box); });
-    gbox.append(line, areas, h('div', 'hint', 'Últimos commits (clique para abrir em Commits)'));
-    x.recent.forEach((/** @type {any} */ c) => { const r = h('button', 'grec'); r.append(h('span', 't', c.subject), h('span', 'm', c.short + ' · ' + ago(c.ts))); r.onclick = () => { S.commitSel = c.sha; go('commits'); }; gbox.append(r); });
-  }); rf.onclick = load; load(); stagger(g);
+    ['back-end', 'front-end', 'raiz'].forEach(k => {
+      const c = x.areas[k], n = Object.values(c).reduce((a, v) => a + /** @type {number} */ (v), 0), a = h('div', 'area'), cs = h('div', 'cs');
+      Object.entries(c).forEach(([code, v]) => cs.append(h('span', 'c' + code, `${STATUS[code] || code} ${v}`)));
+      a.append(h('b', '', k), h('div', 'n', String(n)), cs); areas.append(a);
+    });
+    const rec = h('div'); rec.append(h('div', 'small muted', 'Últimos commits (clique para abrir em Commits)'));
+    x.recent.forEach((/** @type {any} */ c) => { const r = h('button', 'grec'); r.append(h('span', 't', c.subject), h('span', 'm', c.short + ' · ' + ago(c.ts))); r.onclick = () => { S.commitSel = c.sha; go('commits'); }; rec.append(r); });
+    box.append(line, areas, rec);
+  });
+  s.el.querySelector('.head')?.append(button('Atualizar', { variant: 'ghost', small: true, onClick: load }));
+  s.body.append(box); load();
+  return s.el;
+}
+
+export async function renderVerificar() {
+  const main = $('#main'); main.className = ''; main.replaceChildren();
+  const g = h('div', 'vgrid'); g.append(verificacoes(), gitDoMonorepo()); main.append(g);
 }
