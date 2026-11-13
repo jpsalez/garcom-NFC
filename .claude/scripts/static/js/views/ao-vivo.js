@@ -1,47 +1,72 @@
 // @ts-check
-import { watch } from '../lib/realtime.js';
 import { api } from '../api.js';
 import { $, h } from '../lib/dom.js';
-import { hh } from '../lib/format.js';
+import { poll } from '../poll.js';
 import { S } from '../store.js';
-import { emptyState } from '../ui/empty-state.js';
-import { rotulado } from '../ui/obs-common.js';
-import { agentCard } from '../ui/obs-trace.js';
-import { section, stats } from '../ui/section.js';
-import { table } from '../ui/table.js';
-import { guard } from '../ui/toast.js';
+import { go } from '../router.js';
+import { button } from '../ui/button.js';
+import { statusBadge } from '../ui/obs-common.js';
+import { guard, toast } from '../ui/toast.js';
 
-/* ---------- Ao vivo: a sua sessão interativa (somente leitura) ---------- */
+const working = a => ['rodando', 'pausado'].includes(a.status);
+const origin = source => ({ orquestrar: 'Orquestrar', conversa: 'Conversa', receita: 'Receita', externo: 'Sessão externa', painel: 'Painel · origem anterior não registrada' }[source] || 'Painel');
+
+/** Agentes, atribuição e controle. Atualiza resumos; não recebe o rastro de ferramentas. */
 export async function renderVivo() {
-  const main = $('#main'); main.className = ''; main.replaceChildren();
-  const sel = h('select'); sel.setAttribute('aria-label', 'Sessão');
-  const top = h('div', 'row'); top.append(rotulado('Sessão', sel), h('span', 'muted small grow', 'Somente leitura: o Claude Code não deixa controlar de fora os agentes de uma sessão interativa. Para conversar, pausar ou parar, use a tela Conversa.')); main.append(top);
-  const body = h('div', 'stack'); body.style.marginTop = 'var(--s5)'; main.append(body);
-  const paintRaw = async () => {
-    const s = await api('live' + (S.liveSession ? '?session=' + S.liveSession : ''));
-    const ss = await api('sessions'); sel.replaceChildren();
-    ss.forEach((/** @type {any} */ x) => sel.append(new Option(x.title.slice(0, 40) + ' · ' + x.mtime + (x.panel ? ' (painel)' : ''), x.id))); sel.value = s.session; sel.onchange = () => { S.liveSession = sel.value; paint(); };
-    body.replaceChildren();
-    const rodando = s.agents.filter((/** @type {any} */ a) => a.status === 'rodando').length;
-    body.append(stats([{ label: 'agentes rodando', value: rodando }, { label: 'agentes na sessão', value: s.agents.length }, { label: 'arquivos editados', value: s.files.length }]));
-    const ag = section('Agentes');
-    if (!s.agents.length) ag.body.append(emptyState('Nenhum subagente nesta sessão.'));
-    s.agents.forEach((/** @type {any} */ a) => {
-      const it = { type: 'agent', e: { id: 'live-' + a.id, stype: a.type, desc: a.name }, status: a.status === 'concluido' ? 'ok' : 'rodando', nested: a.events.map((/** @type {any} */ e) => ({ type: 'tool', e: { tool: e.tool, kind: e.kind, target: e.target }, status: 'ok', t0: e.t })), t0: a.first, t1: a.status === 'concluido' ? a.last : null };
-      const card = agentCard(it); if (a.status === 'ocioso') card.classList.remove('running'); ag.body.append(card);
+  const main = $('#main'); main.className = 'activity-page'; main.replaceChildren();
+  const root = h('div', 'activity-root'); main.append(root);
+  let data = null, loading = null, alive = true, sessions = [], sessionVersion = 0;
+  const openPrompts = new Set(), pending = new Set();
+  const intro = h('div', 'ov-intro'), title = h('div'); title.append(h('span', 'ov-kicker', 'Workspace / agentes'), h('h2', '', 'Ao vivo'), h('p', '', 'Quem está trabalhando, em quê e a pedido de quem.')); intro.append(title); root.append(intro);
+  const summary = h('div', 'ov-summary'), tools = h('div', 'activity-tools'), filterLabel = h('label', '', 'Exibir'), filter = h('select');
+  [['active', 'Em execução e pausados'], ['all', 'Todos os estados'], ['owned', 'Controláveis pelo painel']].forEach(([value, label]) => filter.append(new Option(label, value))); filterLabel.append(filter);
+  const sessionLabel = h('label', '', 'Sessão externa'), session = h('select'); session.append(new Option('Mais recente', '')); sessionLabel.append(session);
+  const updated = h('span', 'ov-note'), refreshButton = button('Atualizar', { onClick: guard(async () => { await refresh(); }) }); tools.append(filterLabel, sessionLabel, refreshButton, updated); root.append(summary, tools);
+  const notice = h('p', 'activity-notice'); notice.setAttribute('role', 'status'); notice.setAttribute('aria-live', 'polite');
+  const panel = h('section', 'activity-surface'), head = h('div', 'activity-head'), list = h('div'); head.append(h('h3', '', 'Agentes'), h('span', 'ov-note', 'Agente / tarefa / acionamento / controle')); panel.append(head, list); root.append(notice, panel, h('p', 'ov-note', 'Pausar mantém o processo para continuar depois. Parar encerra a execução; retomar a tarefa inicia um novo envio com custo. Sessões externas só podem ser observadas. O painel não recebe cada ação de ferramenta nesta tela.'));
+  const dialog = h('dialog', 'activity-dialog'), dialogTitle = h('h3'), dialogText = h('p'), dialogActions = h('div', 'ov-actions'); dialogTitle.id = 'activity-dialog-title'; dialog.setAttribute('aria-labelledby', dialogTitle.id); dialog.append(dialogTitle, dialogText, dialogActions); document.body.append(dialog);
+  S.timers.push({ remove() { alive = false; if (dialog.open) dialog.close(); dialog.remove(); } });
+  function confirm(titleText, text, label, fn) {
+    dialogTitle.textContent = titleText; dialogText.textContent = text;
+    dialogActions.replaceChildren(button('Cancelar', { onClick: () => dialog.close() }), button(label, { variant: 'danger', onClick: guard(async () => { dialog.close(); await fn(); }) })); dialog.showModal();
+  }
+  async function control(agent, command) {
+    if (pending.has(agent.id)) return; pending.add(agent.id); paint();
+    try { await api('runs/' + encodeURIComponent(agent.id) + '/' + command, 'POST', command === 'send' ? { prompt: 'Retome a tarefa anterior a partir do ponto em que parou. Confira o estado atual antes de continuar. Não repita ações já concluídas sem necessidade.', attach: [] } : {}); await refresh(); notice.textContent = command === 'send' ? 'Novo envio iniciado para retomar a tarefa.' : 'Comando enviado. Confira o estado atualizado do agente.'; }
+    catch (e) { if (alive) notice.textContent = e instanceof Error ? e.message : String(e); throw e; }
+    finally { pending.delete(agent.id); if (alive) paint(); }
+  }
+  function paint() {
+    if (!alive || !root.isConnected || !data) return;
+    const agents = data.agents || []; summary.replaceChildren(h('span', '', `${agents.filter(a => a.status === 'rodando').length} em execução`), h('span', '', `${agents.filter(a => a.status === 'pausado').length} pausado(s)`), h('span', '', `${agents.filter(a => a.controllable).length} controláveis pelo painel`));
+    if (data.external_error) notice.textContent = data.external_error;
+    updated.textContent = 'Última leitura · ' + new Date(data.updated_at).toLocaleTimeString('pt-BR');
+    // Não interrompe foco/teclado durante uma atualização periódica.
+    if (list.contains(document.activeElement)) return;
+    list.replaceChildren(); const shown = agents.filter(a => filter.value === 'all' || filter.value === 'owned' && a.controllable || filter.value === 'active' && working(a));
+    if (!shown.length) { list.append(h('p', 'ov-empty', 'Nenhum agente neste filtro.')); return; }
+    shown.forEach(a => {
+      const row = h('article', 'activity-agent'), identity = h('div'), task = h('div', 'activity-task'), controls = h('div', 'activity-controls');
+      identity.append(h('h3', '', a.agent.replace(/^garcom-/, '')), statusBadge(a.status), h('span', 'activity-id', a.id));
+      task.append(h('h3', '', a.task || 'Tarefa não registrada'), h('p', 'ov-note', 'Acionado por: ' + (a.triggered_by || 'Não registrado') + ' · ' + origin(a.source)));
+      if (a.session) task.append(h('span', 'activity-id', 'Sessão ' + a.session));
+      const prompt = h('details'), promptTitle = h('summary', '', 'Ver prompt recebido'); prompt.open = openPrompts.has(a.id); prompt.ontoggle = () => { prompt.open ? openPrompts.add(a.id) : openPrompts.delete(a.id); }; prompt.append(promptTitle, h('pre', 'activity-prompt', a.prompt || 'O registro desta execução não forneceu o prompt.')); task.append(prompt);
+      const add = (label, command, danger = false) => { const b = button(label, { small: true, variant: danger ? 'danger' : 'secondary', onClick: guard(async () => { if (command === 'stop') confirm('Parar ' + a.agent + '?', 'Isso encerra o processo. Continuar depois exige um novo envio usando a sessão anterior.', 'Parar execução', () => control(a, command)); else if (command === 'send') confirm('Retomar tarefa', `Um novo envio será iniciado na sessão anterior, com teto de US$ ${Number(a.budget || 0.5).toFixed(2)} e consumo de tokens.`, 'Retomar tarefa', () => control(a, command)); else await control(a, command); }) }); b.disabled = pending.has(a.id); controls.append(b); };
+      if (a.controllable) { if (a.status === 'rodando' && a.can_pause) add('Pausar', 'pause'); if (a.status === 'pausado' && a.can_resume) add('Continuar', 'resume'); if (working(a)) add('Parar', 'stop', true); if (!a.can_pause && a.status === 'rodando') controls.append(h('p', 'ov-note', 'Pausa indisponível neste sistema.')); }
+      else if (a.resumable) add('Retomar tarefa', 'send');
+      else controls.append(h('p', 'ov-note', a.source === 'externo' ? 'Sem controle do processo externo.' : 'Sem processo ativo ou sessão para retomar.'));
+      if (a.source !== 'externo') controls.append(button('Abrir conversa', { small: true, onClick: () => { S.sel = a.id; S.selTeam = null; go('conversa'); } }));
+      row.append(identity, task, controls); list.append(row);
     });
-    body.append(ag.el);
-    if (s.files.length) {
-      const f = section('Arquivos editados na sessão');
-      f.body.append(table({ columns: [
-        { key: 'path', label: 'Arquivo', render: (/** @type {any} */ r) => { const sp = h('span', r.conflict ? 'err-t' : '', (r.conflict ? 'conflito · ' : '') + r.path); return sp; } },
-        { key: 'edits', label: 'Edições', align: 'r' },
-        { key: 'agents', label: 'Quem', render: (/** @type {any} */ r) => [...new Set(r.agents)].join(', ') },
-        { key: 't', label: 'Hora', align: 'r', render: (/** @type {any} */ r) => hh(r.t) },
-      ], rows: s.files }));
-      body.append(f.el);
-    }
-  };
-  const paint = guard(paintRaw);
-  await paint(); S.timers.push(watch('live', paintRaw, 6000));
+  }
+  async function fetchData() {
+    const version = sessionVersion;
+    try { const result = await api('agent-activity' + (session.value ? '?session=' + encodeURIComponent(session.value) : '')); if (!alive || !root.isConnected || version !== sessionVersion) return; data = result; notice.textContent = ''; paint(); }
+    catch (e) { if (alive) { notice.textContent = 'Não foi possível atualizar os agentes. Os estados exibidos podem estar desatualizados.'; if (!data) list.replaceChildren(h('p', 'ov-empty', 'Dados indisponíveis. Use Atualizar para tentar novamente.')); } throw e; }
+  }
+  function refresh() { if (!loading) loading = fetchData().finally(() => { loading = null; }); return loading; }
+  filter.onchange = paint;
+  session.onchange = guard(async () => { sessionVersion++; if (loading) await loading.catch(() => {}); await refresh(); });
+  try { sessions = await api('sessions'); if (!alive) return; sessions.filter(s => !s.panel).forEach(s => session.append(new Option(s.title.slice(0, 50) + ' · ' + s.mtime, s.id))); } catch (e) { toast('Lista de sessões externas indisponível; consultando a mais recente.', true); }
+  await guard(refresh)(); if (alive) S.timers.push(poll(refresh, 6000));
 }

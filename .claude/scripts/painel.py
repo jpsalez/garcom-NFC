@@ -7,7 +7,7 @@
 O que faz:
   - Agentes: inicia agentes do projeto (.claude/agents) como sessões próprias do Claude Code em modo
     não interativo, deixa você conversar (continua a sessão), anexar contexto, pausar, continuar e parar.
-  - Ao vivo: mostra o que os agentes da sua sessão interativa estão fazendo (somente leitura).
+  - Ao vivo: mostra agentes, tarefa/prompt e origem; controla processos do painel e observa sessões externas.
   - Projeto: navega, busca e lê arquivos; anexa arquivos ao contexto dos agentes.
   - Verificar: roda os scripts de verificação e mostra o git; Decisões: edita decisoes.md.
 
@@ -24,6 +24,7 @@ import re
 import secrets
 import signal
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -36,6 +37,7 @@ import analise
 import ghapi
 import gitinfo
 import insights
+import quality
 import realtime
 import tarefas
 import monitor as mon
@@ -51,12 +53,12 @@ SKIP_DIRS = {"node_modules", ".git", "generated", "__pycache__", ".vscode", ".ne
 TEXT_EXT = {".ts", ".js", ".json", ".md", ".prisma", ".sql", ".yml", ".yaml", ".toml", ".py", ".sh", ".html",
             ".css", ".txt", ".example", ".test", ".dot", ".svg", ".tsx", ".mjs", ".cjs", ".env"}
 SCRIPT_CMDS = {
-    "verify": ["python3", "-B", str(SCRIPTS / "verify.py")],
-    "check_tenant": ["python3", "-B", str(SCRIPTS / "check_tenant.py")],
-    "routes": ["python3", "-B", str(SCRIPTS / "routes_inventory.py")],
-    "doc_drift": ["python3", "-B", str(SCRIPTS / "doc_drift.py")],
-    "repo_map": ["python3", "-B", str(SCRIPTS / "repo_map.py")],
-    "ai_mode": ["python3", "-B", str(SCRIPTS / "ai_mode.py"), "status"],
+    "verify": [sys.executable, "-B", str(SCRIPTS / "verify.py")],
+    "check_tenant": [sys.executable, "-B", str(SCRIPTS / "check_tenant.py")],
+    "routes": [sys.executable, "-B", str(SCRIPTS / "routes_inventory.py")],
+    "doc_drift": [sys.executable, "-B", str(SCRIPTS / "doc_drift.py")],
+    "repo_map": [sys.executable, "-B", str(SCRIPTS / "repo_map.py")],
+    "ai_mode": [sys.executable, "-B", str(SCRIPTS / "ai_mode.py"), "status"],
 }
 LOCK = threading.Lock()
 STATIC = SCRIPTS / "static"
@@ -226,13 +228,14 @@ class Run:
         self.pipeline = None
         self.team = None
         self.team_task = ""
+        self.source = "conversa"
         self.agent_ids = set()
 
     def meta(self):
         return {"id": self.id, "agent": self.agent, "status": self.status, "title": self.title,
                 "session": self.session, "cost": round(self.cost, 4), "turns": self.turns,
                 "started": self.started, "n": len(self.events), "edit": self.edit, "pipeline": self.pipeline,
-                "budget": self.budget, "team": self.team, "team_task": self.team_task}
+                "budget": self.budget, "team": self.team, "team_task": self.team_task, "source": self.source}
 
     def save_meta(self):
         RUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -335,17 +338,24 @@ class Run:
 
     def _signal(self, sig):
         if self.proc and self.proc.poll() is None:
-            os.killpg(self.proc.pid, sig)
-            return True
+            try:
+                os.killpg(self.proc.pid, sig)
+                return True
+            except ProcessLookupError:
+                pass
         return False
 
     def pause(self):
+        if not hasattr(signal, "SIGSTOP") or not hasattr(os, "killpg"):
+            raise RuntimeError("pausar processos não está disponível neste sistema")
         if self.status == "rodando" and self._signal(signal.SIGSTOP):
             self.status = "pausado"
             self.emit({"k": "sys", "text": "pausado (processo congelado)"})
             self.save_meta()
 
     def resume(self):
+        if not hasattr(signal, "SIGCONT") or not hasattr(os, "killpg"):
+            raise RuntimeError("continuar processos pausados não está disponível neste sistema")
         if self.status == "pausado" and self._signal(signal.SIGCONT):
             self.status = "rodando"
             self.emit({"k": "sys", "text": "continuando"})
@@ -353,11 +363,26 @@ class Run:
 
     def stop(self):
         if self.status in ("rodando", "pausado"):
+            proc = self.proc
+            if not proc or proc.poll() is not None:
+                return
             self.stopping = True
-            if self.status == "pausado":
+            if self.status == "pausado" and hasattr(signal, "SIGCONT"):
                 self._signal(signal.SIGCONT)
-            self._signal(signal.SIGTERM)
-            threading.Timer(4, lambda: self._signal(signal.SIGKILL)).start()
+            if hasattr(os, "killpg"):
+                self._signal(signal.SIGTERM)
+            else:
+                proc.terminate()
+            def kill_if_needed():
+                if proc.poll() is None:
+                    try:
+                        if hasattr(os, "killpg"):
+                            os.killpg(proc.pid, signal.SIGKILL)
+                        else:
+                            proc.kill()
+                    except ProcessLookupError:
+                        pass
+            threading.Timer(4, kill_if_needed).start()
 
 
 RUNS = {}
@@ -368,11 +393,12 @@ def load_runs():
     for mp in RUNS_DIR.glob("*.meta.json"):
         try:
             m = json.loads(mp.read_text(encoding="utf-8"))
-            r = Run(m["id"], m["agent"], m.get("edit", False))
+            r = Run(m["id"], m["agent"], m.get("edit", False), m.get("budget", 0.5))
             r.status = m["status"] if m["status"] not in ("rodando", "pausado") else "parado"
             r.session, r.cost, r.turns = m.get("session"), m.get("cost", 0), m.get("turns", 0)
             r.started, r.title = m.get("started", now()), m.get("title", "")
             r.team, r.team_task, r.pipeline = m.get("team"), m.get("team_task", ""), m.get("pipeline")
+            r.source = m.get("source", "painel")
             ep = RUNS_DIR / f"{r.id}.jsonl"
             if ep.exists():
                 r.events = [json.loads(x) for x in ep.read_text(encoding="utf-8").splitlines() if x.strip()]
@@ -413,6 +439,39 @@ def live(session=None):
     snap["sessions"] = [{"id": f.stem, "mtime": datetime.fromtimestamp(f.stat().st_mtime).strftime("%d/%m %H:%M"),
                          "panel": f.stem in panel_sessions} for f in files]
     return snap
+
+
+def activity(session=None):
+    """Resumo de atribuição e controle, sem devolver o rastro de ferramentas."""
+    agents = []
+    for r in RUNS.values():
+        prompt = next((e.get("text", "") for e in reversed(r.events) if e.get("k") == "user"), "")
+        prompt = prompt.split("\n\n[Contexto compartilhado", 1)[0]
+        pipe = PIPES.get(r.pipeline) if r.pipeline else None
+        process = bool(r.proc and r.proc.poll() is None)
+        agents.append({
+            "id": r.id, "agent": r.agent, "status": r.status, "prompt": prompt[:30000],
+            "task": r.team_task or (pipe.task if pipe else "") or r.title,
+            "triggered_by": ("Receita: " + pipe.recipe.get("nome", pipe.recipe["id"])) if pipe else "Você / painel",
+            "source": "receita" if pipe else r.source, "session": r.session,
+            "controllable": process, "resumable": bool(not process and r.session and r.status not in ("rodando", "pausado")),
+            "can_pause": process and hasattr(os, "killpg") and hasattr(signal, "SIGSTOP"),
+            "can_resume": process and hasattr(os, "killpg") and hasattr(signal, "SIGCONT"),
+            "started": r.started, "budget": r.budget,
+        })
+    try:
+        snap = live(session)
+        external = [{"id": "external:" + str(snap["session"]) + ":" + a["id"],
+                     "agent": a["type"] if a["id"] != "principal" else a["name"],
+                     "status": a["status"], "prompt": a.get("prompt", ""), "task": a["name"],
+                     "triggered_by": a.get("triggered_by", "Não registrado"), "source": "externo",
+                     "session": snap["session"], "controllable": False, "resumable": False,
+                     "started": a["first"], "budget": None} for a in snap["agents"]]
+        agents.extend(external)
+        external_error = None
+    except (OSError, ValueError, RuntimeError, AttributeError) as e:
+        external_error = "Não foi possível consultar a sessão externa."
+    return {"agents": agents, "external_error": external_error, "updated_at": now()}
 
 
 # ---------- configurações, gasto, receitas e pipelines ----------
@@ -730,6 +789,8 @@ def route_ext(h, m, parts, q):
             return timeline(max(1, min(int(q.get("days", 7)), 60)))
         if parts == ["teams"]:
             return teams_list()
+        if parts == ["agent-activity"]:
+            return activity(q.get("session"))
         if parts == ["sessions"]:
             return sessions_list()
         if parts == ["analysis"]:
@@ -767,6 +828,7 @@ def route_ext(h, m, parts, q):
         for it in items:
             r = Run(secrets.token_hex(4), it["agent"], False, min(float(b.get("budget", 0.5)), 3.0))
             r.team, r.team_task = tid, str(b.get("task", ""))[:300]
+            r.source = "orquestrar" if b.get("source") == "orquestrar" else "conversa"
             RUNS[r.id] = r
             made.append(r)
         for r, it in zip(made, items):
@@ -894,6 +956,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def route(self, m, path, q):
         parts = path.strip("/").split("/")[1:]
+        if m == "POST" and parts == ["quality", "scan"]:
+            return quality.scan()
         if parts and parts[0] == "gh":
             return ghapi.handle(m, parts[1:], q)
         if parts and parts[0] == "insights":

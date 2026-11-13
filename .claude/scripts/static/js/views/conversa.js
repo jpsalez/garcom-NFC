@@ -22,7 +22,7 @@ const SUGESTOES = [
 let optsAbertas = false; // o painel "Opções" lembra se estava aberto
 
 export async function renderChat() {
-  const main = $('#main'); main.className = 'flush'; main.replaceChildren();
+  const main = $('#main'); main.className = 'flush conversation-page'; main.replaceChildren();
   const wrap = h('div', 'chatwrap'), convs = h('aside', 'convs'), chat = h('div', 'chat'); wrap.append(convs, chat); main.append(wrap);
   convs.setAttribute('aria-label', 'Conversas');
   function paintList() {
@@ -53,24 +53,24 @@ export async function loadRuns() {
 
 /**
  * Compositor: texto, "Opções" recolhidas (anexos e o que mais a tela pedir) e Enviar.
- * @param {(text: string) => Promise<void>} onSend @param {{ placeholder?: string, extra?: HTMLElement }} [opts]
+ * @param {(text: string) => Promise<void | boolean>} onSend @param {{ placeholder?: string, extra?: HTMLElement }} [opts]
  */
 function composer(onSend, opts = {}) {
   const dock = h('div', 'dock'), box = h('div', 'composer');
   const ta = h('textarea'); ta.rows = 1; ta.placeholder = opts.placeholder || 'Escreva para o agente…'; ta.setAttribute('aria-label', 'Mensagem para o agente');
   ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 220) + 'px'; };
-  const send = button('', { variant: 'primary', icon: 'send', title: 'Enviar (Enter)' }); send.classList.add('icon');
+  const send = button('Enviar', { variant: 'primary', icon: 'send', title: 'Enviar (Enter)' });
   const stop = button('', { variant: 'danger', icon: 'stop', title: 'Parar' }); stop.classList.add('icon'); stop.hidden = true;
-  const opt = button('Opções', { variant: 'ghost', small: true }); opt.setAttribute('aria-expanded', String(optsAbertas));
+  const opt = button('Contexto e anexos', { small: true }); opt.setAttribute('aria-expanded', String(optsAbertas));
   const panel = h('div', 'copts'); panel.hidden = !optsAbertas;
-  const rotulo = () => { opt.textContent = S.draft.length ? `Opções · ${S.draft.length} anexo(s)` : 'Opções'; };
+  const rotulo = () => { opt.textContent = S.draft.length ? `Contexto e anexos · ${S.draft.length}` : 'Contexto e anexos'; };
   let anexos = attachPanel(rotulo);
   panel.append(...(opts.extra ? [opts.extra] : []), anexos);
   opt.onclick = () => { optsAbertas = !optsAbertas; panel.hidden = !optsAbertas; opt.setAttribute('aria-expanded', String(optsAbertas)); };
   rotulo();
   const enviar = guard(async () => {
-    if (!ta.value.trim()) return; send.disabled = true;
-    try { await onSend(ta.value); ta.value = ''; ta.style.height = 'auto'; S.draft = []; const novo = attachPanel(rotulo); anexos.replaceWith(novo); anexos = novo; updFoot(); rotulo(); } finally { send.disabled = false; }
+    if (!ta.value.trim() || send.disabled) return; send.disabled = true;
+    try { const consumed = await onSend(ta.value); if (consumed === false) return; ta.value = ''; ta.style.height = 'auto'; S.draft = []; const novo = attachPanel(rotulo); anexos.replaceWith(novo); anexos = novo; updFoot(); rotulo(); } finally { send.disabled = false; }
   });
   send.onclick = enviar; ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviar(); } };
   const foot = h('div', 'composer-foot'); foot.append(opt, h('span', 'grow'), stop, send);
@@ -81,22 +81,22 @@ function composer(onSend, opts = {}) {
   });
 }
 
-/** Conversa nova: modo, agente e teto ficam em "Opções"; sugestões são links de texto. @param {HTMLElement} chat */
+/** Conversa nova: modo e teto visíveis; contexto e anexos ficam no compositor. @param {HTMLElement} chat */
 function welcome(chat) {
   const st = h('div', 'stream'), hero = h('div', 'hero'); st.append(hero);
   hero.append(h('h2', '', 'Nova conversa'));
   const sub = h('p', 'muted'); hero.append(sub);
   const sug = h('div', 'sugs'); sug.append(h('span', 'faint small', 'Sugestões:'));
   /** @type {{ dock?: ReturnType<typeof composer> }} */ const ref = {};
-  SUGESTOES.forEach(([t, p]) => { const b = h('button', 'linkbtn', t); b.type = 'button'; b.onclick = () => { const ta = /** @type {any} */ (ref.dock).ta; ta.value = p; ta.oninput(); ta.focus(); }; sug.append(b); });
+  SUGESTOES.forEach(([t, p]) => { const b = button(t, { small: true }); b.onclick = () => { const ta = /** @type {any} */ (ref.dock).ta; ta.value = p; ta.oninput(); ta.focus(); }; sug.append(b); });
   hero.append(sug);
 
-  const extra = h('div', 'opts-grid');
+  const extra = h('div', 'opts-grid chat-setup');
   const seg = h('div', 'seg'), bL = h('button', '', 'Orquestrador local'), bU = h('button', '', 'Agente único'); [bL, bU].forEach(b => { b.type = 'button'; }); seg.append(bL, bU);
   const selAg = h('select'); selAg.setAttribute('aria-label', 'Agente'); S.cat.agents.forEach((/** @type {any} */ a) => selAg.append(new Option(a.name.replace('garcom-', '') + '  (' + a.model + ')', a.name))); selAg.value = 'garcom-arquiteto';
-  const bud = h('input'); bud.type = 'number'; bud.step = '0.1'; bud.min = '0.1'; bud.max = '3'; bud.value = '0.5'; bud.setAttribute('aria-label', 'Teto por agente em dólares');
+  const bud = h('input'); bud.type = 'number'; bud.step = '0.1'; bud.min = '0.1'; bud.max = '3'; bud.required = true; bud.value = '0.5'; bud.setAttribute('aria-label', 'Teto por agente em dólares');
   const fAg = rotulado('Conversar com', selAg), fBud = rotulado('Teto por agente (US$)', bud);
-  extra.append(rotulado('Modo', seg), fAg, fBud);
+  extra.append(rotulado('Modo', seg), fAg, fBud); hero.insertBefore(extra, sug);
   const planBox = h('div', 'plan'); st.append(planBox);
 
   /** @param {string} m */
@@ -105,17 +105,19 @@ function welcome(chat) {
     sub.textContent = m === 'local'
       ? 'O orquestrador local escolhe os especialistas por regras e monta o plano sem gastar tokens. Só os especialistas que você disparar consomem.'
       : 'Conversa direta com um especialista. Cada mensagem gasta tokens dele.';
+    if (ref.dock) { ref.dock.send.replaceChildren(document.createTextNode(m === 'local' ? 'Preparar plano' : 'Enviar ao agente')); ref.dock.ta.placeholder = m === 'local' ? 'Descreva a tarefa e o resultado esperado…' : 'Escreva para o especialista…'; }
   }
   bL.onclick = () => setMode('local'); bU.onclick = () => setMode('single'); setMode(S.mode);
 
   const dock = composer(async text => {
+    if (!bud.reportValidity()) throw new Error('Informe um teto entre US$ 0,10 e US$ 3,00 por agente.');
     if (S.mode === 'single') {
       const r = await api('runs', 'POST', { agent: selAg.value, prompt: text, attach: S.draft, budget: parseFloat(bud.value) });
       S.sel = r.id; S.selTeam = null; S.ev[r.id] = { n: 0, list: [] }; await loadRuns(); S.paintAll(); return;
     }
-    const pl = await api('plan', 'POST', { task: text }); showPlan(planBox, text, pl, parseFloat(bud.value), dock); planBox.scrollIntoView({ behavior: 'smooth' });
-  }, { placeholder: 'Descreva a tarefa. O plano é montado localmente, sem custo…', extra });
-  ref.dock = dock; chat.append(st, dock);
+    const pl = await api('plan', 'POST', { task: text }); showPlan(planBox, text, pl, parseFloat(bud.value), dock); planBox.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth' }); return false;
+  }, { placeholder: 'Descreva a tarefa. O plano é montado localmente, sem custo…' });
+  ref.dock = dock; setMode(S.mode); chat.append(st, dock);
   if (S.prefill) { dock.ta.value = S.prefill; S.prefill = ''; dock.ta.oninput(); dock.ta.focus(); }
 }
 
@@ -127,7 +129,7 @@ function showPlan(box, task, pl, budget, dock) {
   const escolhidos = new Set(pl.agents.map((/** @type {any} */ a) => a.agent)), rows = /** @type {{ cb: HTMLInputElement, a: any, ta: HTMLTextAreaElement }[]} */ ([]);
   const cnt = h('span', 'muted small');
   const disparar = button('Disparar equipe', { variant: 'primary', icon: 'play' });
-  const upd = () => { const n = rows.filter(r => r.cb.checked).length; cnt.textContent = n + ' de 3 especialistas selecionados'; rows.forEach(r => { r.cb.disabled = !r.cb.checked && n >= 3; }); disparar.toggleAttribute('disabled', n === 0); };
+  const upd = () => { const n = rows.filter(r => r.cb.checked).length; cnt.textContent = n + ' de 3 especialistas · teto inicial da equipe ' + money(n * budget); rows.forEach(r => { r.cb.disabled = !r.cb.checked && n >= 3; }); disparar.toggleAttribute('disabled', n === 0); };
   S.cat.agents.filter((/** @type {any} */ a) => a.name !== 'garcom-orquestrador').forEach((/** @type {any} */ a) => {
     const hit = pl.agents.find((/** @type {any} */ x) => x.agent === a.name), nome = a.name.replace('garcom-', '');
     const row = h('div', 'prow'), cb = h('input'); cb.type = 'checkbox'; cb.checked = escolhidos.has(a.name); cb.onchange = upd; cb.setAttribute('aria-label', 'Incluir ' + nome);
@@ -136,8 +138,11 @@ function showPlan(box, task, pl, budget, dock) {
     row.append(cb, t, ta); c.append(row); rows.push({ cb, a, ta });
   });
   disparar.onclick = guard(async () => {
-    disparar.setAttribute('disabled', ''); const items = rows.filter(r => r.cb.checked).map(r => ({ agent: r.a.name, prompt: r.ta.value }));
-    const t = await api('teams', 'POST', { task, items, budget, attach: S.draft }); S.draft = []; S.selTeam = t.id; S.sel = null; await loadRuns(); S.paintAll();
+    const items = rows.filter(r => r.cb.checked).map(r => ({ agent: r.a.name, prompt: r.ta.value.trim() }));
+    if (!items.length || items.some(i => !i.prompt)) throw new Error('Selecione especialistas e preencha o pedido de cada um.');
+    disparar.setAttribute('disabled', '');
+    try { const t = await api('teams', 'POST', { task, items, budget, attach: S.draft }); S.draft = []; S.selTeam = t.id; S.sel = null; await loadRuns(); S.paintAll(); }
+    finally { upd(); }
   });
   const r = h('div', 'row'); r.append(disparar, cnt); c.append(r); upd();
 }

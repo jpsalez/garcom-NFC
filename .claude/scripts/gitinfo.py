@@ -262,7 +262,7 @@ def health():
     return {"summary": {"files": len(rows), "functions": len(funcs), "complex_functions": sum(1 for f in funcs if f["cc"] > 10), "hotspots": sum(1 for r in rows if r["hotspot"] >= 20),
                         "todos": sum(r["todos"] for r in rows), "untested": sum(1 for r in rows if not r["has_test"] and r["loc"] > 60), "bands": bands,
                         "max_cc": max((f["cc"] for f in funcs), default=0), "loc": sum(r["loc"] for r in rows)},
-            "priorities": prio, "all_ok": not flagged, "files": rows, "functions": funcs[:10],
+            "priorities": prio, "all_ok": not flagged, "files": rows, "functions": funcs[:10], "all_functions": funcs,
             "top_churn": sorted(({"path": k, **v} for k, v in cur.items() if k.startswith("src/")), key=lambda x: -(x["commits"] * 10 + x["add"] + x["del"]))[:8],
             "definitions": DEFINITIONS,
             "note": "Métricas estáticas aproximadas (regex, sem parser). Limites são convenções, não normas. Servem para priorizar leitura, não para julgar o código."}

@@ -1,118 +1,34 @@
-// @ts-check
 import { api } from '../api.js';
-import { $, h } from '../lib/dom.js';
-import { fmtN } from '../lib/format.js';
 import { go } from '../router.js';
 import { S } from '../store.js';
-import { button } from '../ui/button.js';
 import { arqTab, mapaTab } from '../ui/ins-tabs.js';
-import { inline } from '../ui/markdown.js';
-import { stats } from '../ui/section.js';
-import { table } from '../ui/table.js';
-import { tabs } from '../ui/tabs.js';
-import { guard, toast } from '../ui/toast.js';
-import { updFoot } from './conversa.js';
+import { defaults, evaluate as evaluateRule, validateReport } from '../ui/quality-model.js';
+import { ruleEditor } from '../ui/quality-editor.js';
+export async function renderSaude(){
+const main=document.querySelector('main'), e=(t,c,text)=>{const n=document.createElement(t);if(c)n.className=c;if(text!==undefined)n.textContent=text;return n},btn=(s,fn,c='')=>{const b=e('button',c,s);b.type='button';b.onclick=async()=>{if(b.disabled)return;b.disabled=true;try{await fn()}catch(err){if(alive){notice=err.message;render()}}finally{b.disabled=false}};return b},link=(s,url)=>{const a=e('a','',s);a.href=url;a.target='_blank';a.rel='noopener';return a};
+let alive=true;S.timers.push({remove(){alive=false}});main.className='health-review';const data=await api('quality/scan','POST',{}, {timeout:60000});if(!alive)return;
+const files=data.functions.map(f=>({...f,text:''}));
+if(!files.length){main.replaceChildren(e('p','','Nenhuma função reconhecida no back-end/src. Use Arquivos para ler o código.'));return;}
+const STORE='garcom-nfc:quality:v1';let saved={};try{saved=JSON.parse(localStorage.getItem(STORE)||'{}')}catch{}
 
-const LVL = { 'ok': 'ok', 'atenção': 'atencao', 'alto': 'alto' };
-const TABS = [['prio', 'Prioridades'], ['mapa', 'Mapa'], ['arq', 'Arquitetura'], ['files', 'Arquivos'], ['funcs', 'Funções'], ['ver', 'Verificações'], ['concept', 'Conceitos']];
-const nivel = (/** @type {string} */ l) => h('span', 'lv ' + (/** @type {Record<string, string>} */ (LVL)[l] || l), l);
+let policy=defaults.map(r=>{const old=saved.policy?.find(x=>x.id===r.id);return {...r,...(old&&['off','warn','block'].includes(old.mode)&&Number.isFinite(old.limit??0)?{limit:old.limit??r.limit,mode:old.mode}:{})}}),draft=structuredClone(policy),tab='Diagnóstico',file=files[0],ruleId='cc',query='',report=saved.report||null,version=saved.version||1,notice='';
+const snapshot=data.snapshot,audit=Array.isArray(saved.audit)?saved.audit.slice(0,80):[],exceptions=new Map(saved.exceptions||[]),reviews=new Map(saved.reviews||[]);
+const persist=()=>{try{localStorage.setItem(STORE,JSON.stringify({policy,version,report,audit:audit.slice(0,80),exceptions:[...exceptions],reviews:[...reviews]}))}catch{notice='Não foi possível salvar neste navegador. Exporte seus critérios.'}};
+const HealthReviewModel={evaluate:evaluateRule};
+const key=r=>snapshot+':'+file.id+':'+r.id;const evaluate=r=>{const v=HealthReviewModel.evaluate(r,file,report,snapshot);if(exceptions.get(key(r))?.until>=new Date().toISOString().slice(0,10)&&['Atenção','Bloqueio'].includes(v.state))v.state='Exceção registrada';if(r.manual&&r.mode!=='off'&&reviews.has(key(r)))v.state=(reviews.get(key(r)).passed?'Revisado manualmente':r.mode==='block'?'Bloqueio':'Atenção');return v};
+function log(s){audit.unshift(new Date().toLocaleString('pt-BR')+' · '+s);persist()}
+function jump(t){tab=t;notice='';render()}
+function card(title){const n=e('section','hp-card');if(title)n.append(e('h3','',title));return n}
+function tag(s){return e('span','hp-tag'+(s==='Bloqueio'?' bad':s==='Dentro do critério'?' good':''),s)}
+function current(){return policy.find(r=>r.id===ruleId)||policy[0]}
+function render(){if(!alive)return;main.className='health-review';main.replaceChildren();const head=e('header'),left=e('div');left.append(e('span','eyebrow','Engenharia / saúde do código'),e('h2','','Qualidade com critério.'),e('p','','Encontre o risco, veja a evidência e decida o que precisa mudar.'));const badge=e('div');badge.append(tag('Leitura sob demanda'),e('p','',data.scope),btn('Atualizar diagnóstico',()=>renderSaude()));head.append(left,badge);main.append(head);const nav=e('nav','hp-nav');['Diagnóstico','Regras e critérios','Explorar código','Arquitetura','Histórico e relatórios'].forEach(t=>nav.append(btn(t,()=>jump(t),tab===t?'active':'')));main.append(nav);if(notice)main.append(e('div','hp-notice',notice));if(tab==='Diagnóstico')diagnostic();if(tab==='Regras e critérios')rules();if(tab==='Explorar código')explorer();if(tab==='Arquitetura')architecture();if(tab==='Histórico e relatórios')history();main.append(e('p','hp-muted','Ferramenta de desenvolvimento. Critérios e relatórios ficam neste navegador. O parecer orienta revisão; não altera o Git ou a CI. Não há análise contínua ou chamadas automáticas a agentes.'))}
+function diagnostic(){const results=policy.map(r=>({r,...evaluate(r)}));const blocked=results.filter(x=>x.state==='Bloqueio').length,missing=results.some(x=>x.state==='Não medido'&&x.r.mode==='block');const hero=card();hero.classList.add('hp-hero');const text=e('div');text.append(e('span','eyebrow','Parecer · função selecionada'),e('p','',file.path+':'+file.line+' · '+file.name+'()'),e('strong','',blocked?'Requer correção':missing?'Avaliação inconclusiva':results.some(x=>x.state==='Revisão humana')?'Requer revisão humana':results.some(x=>x.state==='Atenção'||x.state==='Exceção registrada')?'Requer atenção':'Critérios ativos atendidos'),e('p','',`${blocked} bloqueios · ${results.filter(x=>x.state==='Atenção').length} alertas · ${results.filter(x=>x.state==='Não medido').length} sem medição`));hero.append(text,btn('Definir critérios →',()=>jump('Regras e critérios')));main.append(hero);const layout=e('div','hp-grid'),list=card('Achados e pendências'),detail=card('Evidência e decisão');const search=e('input');search.placeholder='Filtrar caminho ou função…';search.setAttribute('aria-label','Filtrar funções');search.value=query;const holder=e('div');function options(){const select=e('select','hp-file-picker');select.setAttribute('aria-label','Função em análise');files.filter(f=>!query||(f.path+' '+f.name).toLowerCase().includes(query.toLowerCase())||f===file).forEach(f=>{const o=e('option','',f.path+':'+f.line+' · '+f.name+'()');o.value=f.id;o.selected=f===file;select.append(o)});select.onchange=()=>{file=files.find(f=>f.id===select.value);render()};holder.replaceChildren(select)}search.oninput=()=>{query=search.value;options()};options();list.append(search,holder,e('p','hp-muted','O parecer se refere à função selecionada. '+data.files+' arquivos · '+files.length+' funções.'));
+results.forEach(({r,state})=>{const b=btn('',()=>{ruleId=r.id;render()},'hp-item'+(r.id===ruleId?' active':''));b.append(e('b','',r.title),tag(state),e('small','',r.method));list.append(b)});const r=current(),v=evaluate(r);detail.append(tag(v.state),e('h3','',r.title),e('div','hp-value',v.value==null?'—':Number(v.value.toFixed(2)).toLocaleString('pt-BR')),e('p','',r.manual?'Critério qualitativo':`Critério: ${r.min?'mínimo':'máximo'} ${r.limit} · política v${version}`),e('p','',r.why),e('div','hp-notice',r.method+' · Métricas estáticas são estimativas por regex. Testes, cobertura e mutação dependem de um relatório importado da mesma versão.'));const actions=e('div','hp-actions');actions.append(btn('Inspecionar código',()=>jump('Explorar código')),btn('Ajustar regra',()=>jump('Regras e critérios')),btn('Criar tarefa de revisão',async()=>{try{const t=await api('tasks','POST',{titulo:'Revisar '+r.title+': '+file.name,descricao:file.path+':'+file.line+' · '+r.why,prioridade:'P2'});log('Tarefa '+t.id+' criada · '+file.id);notice='Tarefa '+t.id+' criada em Tarefas.';render()}catch(err){notice=err.message;render()}}));detail.append(actions);if(r.manual){const note=e('textarea');note.placeholder='Justifique a decisão com responsabilidade, contrato ou dependência observada…';note.value=reviews.get(key(r))?.note||'';note.setAttribute('aria-label','Justificativa da revisão');detail.append(note,btn('Registrar ajuste necessário',()=>{if(!note.value.trim()){note.focus();return}reviews.set(key(r),{passed:false,note:note.value});log(r.title+' · ajuste necessário · '+file.id+' · '+note.value);render()}),btn('Aprovar revisão',()=>{if(!note.value.trim()){note.focus();return}reviews.set(key(r),{passed:true,note:note.value});log(r.title+': '+note.value);render()}))}if(['Atenção','Bloqueio','Exceção registrada'].includes(v.state)){const reason=e('input');reason.placeholder='Motivo da exceção';reason.setAttribute('aria-label','Motivo da exceção');const date=e('input');date.type='date';date.setAttribute('aria-label','Validade da exceção');date.min=new Date().toISOString().slice(0,10);if(exceptions.has(key(r))){const x=exceptions.get(key(r));detail.append(e('p','','Exceção: '+x.reason+' · até '+x.until),btn('Remover exceção',()=>{exceptions.delete(key(r));log('Exceção removida · '+file.id);render()}))}const box=e('div','hp-actions');box.append(reason,date,btn('Registrar exceção',()=>{if(!reason.value.trim()||!date.value||date.value<date.min){notice='Informe motivo e uma validade futura para a exceção.';render();return}exceptions.set(key(r),{reason:reason.value,until:date.value});log('Exceção '+r.title+' até '+date.value+': '+reason.value);render()}));detail.append(e('p','','Exceção mantém o risco visível; não transforma o resultado em aprovado.'),box)}layout.append(list,detail);main.append(layout)}
 
-export async function renderSaude() {
-  const main = $('#main'); main.className = ''; main.replaceChildren();
-  const [hl, hist] = await Promise.all([api('health'), api('history')]); const sm = hl.summary, B = sm.bands;
-
-  // resumo: uma frase, a barra de níveis e no máximo 4 números
-  const head = h('div'); head.style.marginBottom = 'var(--s5)';
-  head.append(h('h2', '', hl.all_ok ? 'Nenhum arquivo ultrapassa os limites.' : (B['atenção'] + B.alto) + ' arquivo(s) pedem atenção.'),
-    h('p', 'small muted', hl.all_ok ? `Todos os ${sm.files} arquivos estão dentro dos limites de complexidade, tamanho e churn. A aba Prioridades mostra onde acompanhar mesmo assim.` : 'Veja a aba Prioridades: cada item explica o motivo técnico e o que fazer.'));
-  const band = h('div', 'band'); [[B.ok, 'ok'], [B['atenção'], 'warn'], [B.alto, 'bad']].forEach(([v, c]) => { const i = h('i', /** @type {string} */ (c)); i.style.width = (/** @type {number} */ (v) / sm.files * 100) + '%'; band.append(i); });
-  band.title = `${B.ok} ok · ${B['atenção']} atenção · ${B.alto} alto`; band.style.margin = 'var(--s3) 0 var(--s4)';
-  head.append(band, stats([{ label: 'arquivos', value: sm.files }, { label: 'linhas lógicas', value: fmtN(sm.loc) }, { label: 'funções', value: sm.functions }, { label: 'CC máxima', value: sm.max_cc }]));
-  main.append(head);
-
-  const body = h('div');
-  const show = (/** @type {string} */ k) => { S.saudeTab = k; body.replaceChildren(); VIEWS[k](); };
-  const tb = tabs(TABS.map(([id, label]) => ({ id, label })), { active: S.saudeTab || 'prio', onChange: show, label: 'Seções da saúde do código' });
-  main.append(tb.el, body);
-
-  const askRefactor = (/** @type {any} */ f, /** @type {string[]} */ why) => guard(async () => {
-    const rr = await api('runs', 'POST', { agent: 'garcom-arquiteto', prompt: 'Sugira refatorações pequenas e simples (sem abstração antecipada, sem novas camadas) para o arquivo anexado. Liste em ordem de impacto, cada uma com o motivo e o trecho a mudar. Pontos levantados: ' + (why.join(' ') || 'nenhum, é só acompanhamento.'), attach: [{ type: 'file', path: 'back-end/' + f.path }], budget: 0.4 });
-    S.sel = rr.id; S.selTeam = null; go('conversa');
-  });
-  /** Uma linha com as métricas do arquivo; as fora do limite ficam coloridas. @param {any} f */
-  const metricas = f => {
-    const l = h('div', 'small muted'), parte = (/** @type {string} */ t, /** @type {'' | 'warn' | 'err'} */ tom) => { const s = h('span', '', t); if (tom) s.style.color = `var(--${tom})`; return s; };
-    l.append(parte(`${f.loc} linhas`, f.loc > 400 ? 'err' : f.loc > 250 ? 'warn' : ''), document.createTextNode(' · '), parte(`CC ${f.cc_max}`, f.cc_max > 20 ? 'err' : f.cc_max > 10 ? 'warn' : ''), document.createTextNode(' · '),
-      parte(`maior função ${f.longest_fn} linhas`, f.longest_fn > 80 ? 'err' : f.longest_fn > 40 ? 'warn' : ''), document.createTextNode(' · '), parte(`${f.churn.commits} commit(s) em 30 d`, f.churn.commits >= 4 ? 'warn' : ''), document.createTextNode(' · '),
-      parte(`hotspot ${f.hotspot}`, f.hotspot >= 45 ? 'err' : f.hotspot >= 20 ? 'warn' : ''), document.createTextNode(` · fan-in ${f.fan_in} / fan-out ${f.fan_out}`));
-    return l;
-  };
-
-  /** @type {Record<string, () => void>} */
-  const VIEWS = {
-    mapa() { mapaTab(body); },
-    arq() { arqTab(body); },
-    prio() {
-      if (hl.all_ok) body.append(h('p', 'small muted', 'Dentro dos limites. Abaixo, os 3 arquivos com mais atividade (churn e tamanho) para você acompanhar.'));
-      hl.priorities.forEach((/** @type {any} */ pr) => {
-        const f = pr.row, c = h('div', 'prio'), t = h('div', 'row'); t.append(h('b', 'grow mono', f.path), nivel(pr.level)); c.append(t, metricas(f));
-        if (pr.advice.length) { const ul = h('ul'); pr.advice.forEach((/** @type {string} */ a) => { const li = h('li'); li.append(inline(a)); ul.append(li); }); c.append(ul); } else c.append(h('p', 'small muted', 'Sem ação recomendada: métricas dentro dos limites.'));
-        const ac = h('div', 'row'); ac.style.marginTop = 'var(--s3)';
-        ac.append(button('Pedir sugestão ao arquiteto', { small: true, title: 'Gasta tokens (teto US$ 0,40)', onClick: askRefactor(f, pr.advice) }),
-          button('Anexar', { small: true, variant: 'ghost', icon: 'clip', onClick: () => { S.draft.push({ type: 'file', path: 'back-end/' + f.path }); updFoot(); toast('anexado'); } }));
-        c.append(ac); body.append(c);
-      });
-    },
-    files() {
-      const bar = h('div', 'row'); bar.style.marginBottom = 'var(--s3)'; const holder = h('div'); let lv = 'todos';
-      const draw = () => holder.replaceChildren(table({
-        columns: [
-          { key: 'path', label: 'Arquivo', sortable: true, render: f => h('span', 'mono', f.path) },
-          { key: 'level', label: 'Nível', sortable: true, value: f => ({ ok: 0, 'atenção': 1, alto: 2 })[/** @type {'ok'} */ (f.level)], render: f => nivel(f.level) },
-          { key: 'loc', label: 'Linhas', align: 'r', sortable: true }, { key: 'functions', label: 'Funções', align: 'r', sortable: true },
-          { key: 'cc_max', label: 'CC', align: 'r', sortable: true }, { key: 'longest_fn', label: 'Maior fn', align: 'r', sortable: true },
-          { key: 'commits', label: 'Churn', align: 'r', sortable: true, value: f => f.churn.commits }, { key: 'hotspot', label: 'Hotspot', align: 'r', sortable: true },
-          { key: 'fan_in', label: 'Fan-in', align: 'r', sortable: true }, { key: 'fan_out', label: 'Fan-out', align: 'r', sortable: true },
-        ],
-        rows: hl.files.filter((/** @type {any} */ f) => lv === 'todos' || f.level === lv), sort: { key: 'hotspot', dir: -1 }, empty: 'Nenhum arquivo neste nível.',
-      }));
-      const seg = h('div', 'seg'); ['todos', 'ok', 'atenção', 'alto'].forEach(k => { const b = h('button', k === 'todos' ? 'on' : '', k); b.onclick = () => { lv = k; seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); draw(); }; seg.append(b); });
-      bar.append(seg, h('span', 'small muted', 'Churn = commits em 30 dias · hotspot = churn × CC'));
-      draw(); body.append(bar, holder);
-    },
-    funcs() {
-      body.append(h('p', 'small muted', 'Complexidade ciclomática aproximada. Linhas tracejadas na barra: 10 (atenção) e 20 (alto).'));
-      const MX = Math.max(25, ...hl.functions.map((/** @type {any} */ f) => f.cc));
-      body.append(table({
-        columns: [
-          { key: 'name', label: 'Função', render: f => { const c = h('div'); c.append(h('b', 'mono', f.name + '()'), h('div', 'small muted mono', f.path + ':' + f.line)); return c; } },
-          { key: 'cc', label: 'Complexidade', sortable: true, render: f => { const bar = h('div', 'ccbar'), i = h('i', f.cc > 20 ? 'b' : f.cc > 10 ? 'w' : ''); i.style.width = (f.cc / MX * 100) + '%'; bar.append(i); [10, 20].forEach(t => { const u = h('u'); u.style.left = (t / MX * 100) + '%'; bar.append(u); }); bar.style.minWidth = '160px'; return bar; } },
-          { key: 'cc', label: 'CC', align: 'r', sortable: true }, { key: 'lines', label: 'Linhas', align: 'r', sortable: true },
-        ], rows: hl.functions, sort: { key: 'cc', dir: -1 },
-      }));
-    },
-    ver() {
-      const names = /** @type {Record<string, string>} */ ({ verify: 'typecheck · lint · testes', check_tenant: 'isolamento por restaurante', doc_drift: 'documentação x código' });
-      const run = button('Rodar e registrar agora', { variant: 'primary', onClick: guard(async () => {
-        run.setAttribute('disabled', '');
-        try { for (const k of ['verify', 'check_tenant', 'doc_drift']) { run.textContent = 'rodando ' + k + '…'; await api('script/' + k, 'POST', {}); } toast('verificações registradas'); renderSaude(); } finally { run.removeAttribute('disabled'); run.textContent = 'Rodar e registrar agora'; }
-      }) });
-      const hv = h('div'); hv.append(h('h3', '', 'Histórico das verificações'));
-      Object.keys(names).forEach(n => {
-        const rows = hist.filter((/** @type {any} */ x) => x.name === n).slice(-30), blk = h('div'); blk.style.margin = 'var(--s4) 0';
-        blk.append(h('div', '', names[n]), h('div', 'small muted', rows.length ? 'última: ' + rows[rows.length - 1].summary : 'nunca rodou'));
-        const dots = h('div', 'dots'); dots.style.marginTop = 'var(--s2)'; rows.forEach((/** @type {any} */ x) => { const i = h('i', x.ok ? '' : 'no'); i.title = new Date(x.t * 1000).toLocaleString('pt-BR') + ' · ' + x.summary; dots.append(i); }); blk.append(dots); hv.append(blk);
-      });
-      hv.append(run);
-      const ch = h('div'); ch.style.marginTop = 'var(--s6)'; ch.append(h('h3', '', 'Churn em 30 dias'), h('p', 'small muted', 'Commits por arquivo (só src/). Arquivo que muda muito pode estar instável ou faltar contexto à IA.'));
-      const cmx = Math.max(1, ...hl.top_churn.map((/** @type {any} */ x) => x.commits)), bars = h('div', 'bars');
-      hl.top_churn.forEach((/** @type {any} */ x) => { const r = h('div', 'barrow'), tr = h('div', 'tr'), b = h('div', 'br'); b.style.width = (x.commits / cmx * 100) + '%'; tr.append(b); r.append(h('span', 'lb', x.path.split('/').pop()), tr, h('span', 'num faint', `${x.commits} · +${x.add} −${x.del}`)); bars.append(r); });
-      ch.append(bars); body.append(hv, ch);
-    },
-    concept() {
-      body.append(h('p', 'small muted', hl.note));
-      hl.definitions.forEach((/** @type {any} */ d) => { const r = h('div', 'def'); r.append(h('b', '', d.term), h('div', '', d.def), h('div', 'lm', 'limites: ' + d.limit)); body.append(r); });
-    },
-  };
-  show(S.saudeTab || 'prio');
+function rules(){const box=card('A equipe define o que é aceitável.');box.append(e('p','','Escolha o que aceitar e o que deve acontecer quando uma regra não for atendida. Cada escolha explica seu efeito. Você só precisa personalizar números se quiser; os perfis abaixo preparam um rascunho para revisar.'));const actions=e('div','hp-actions');['Gradual','IA supervisionada','Mais rigoroso'].forEach((s,i)=>actions.append(btn(s,()=>{draft=structuredClone(defaults);if(i===1)draft.forEach(r=>{if(['coverage','crap'].includes(r.id))r.mode='block';if(r.id==='mutation')r.mode='warn'});if(i===2)draft.forEach(r=>{if(r.id==='cc')r.limit=5;if(r.id==='length')r.limit=20;if(r.id==='coverage'){r.limit=90;r.mode='block'}});notice='Perfil carregado no rascunho. Revise antes de salvar.';render()})));box.append(actions);draft.forEach(r=>box.append(ruleEditor(r)));box.append(btn('Salvar política',()=>{if(draft.some(r=>!r.manual&&(!Number.isFinite(r.limit)||r.limit<0||(['coverage','mutation'].includes(r.id)&&r.limit>100)))){notice='Revise os limites: percentuais devem estar entre 0 e 100.';render();return}policy=structuredClone(draft);version++;log('Política v'+version+' salva');notice='Política salva neste navegador e aplicada ao parecer.';render()},'active'));main.append(box);const refs=card('Referências e interpretação');refs.append(e('p','','Clean Code e SOLID orientam revisão e responsabilidade humana. Limites numéricos devem ser calibrados pelo projeto. Na discussão sobre IA, testes e verificação ganham destaque; não dispensam avaliar o comportamento e a arquitetura.'),link('Entrevista com Robert C. Martin · IA e Clean Code','https://www.aviator.co/podcast/uncle-bob-martin-ai-clean-code'),e('br'),link('Responsabilidade única · explicação do autor','https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html'),e('br'),link('CRAP · proposta original da métrica','https://www.artima.com/weblogs/viewpost.jsp?thread=215899'));refs.style.marginTop='22px';main.append(refs)}
+function explorer(){const box=card('Código e contexto');box.append(e('p','',file.path+':'+file.line+' · '+file.name+'()'),e('p','','Abra o visualizador completo para buscar, selecionar linhas, consultar imports, blame e histórico e anexar o código ao contexto dos agentes.'),btn('Abrir código nesta linha →',()=>go('arquivos','','path='+encodeURIComponent(file.path)+'&L='+file.line)),btn('Voltar ao diagnóstico',()=>jump('Diagnóstico')));main.append(box)}
+function architecture(){const box=card('Dependências reais do repositório');box.append(e('p','','Os gráficos orientam a revisão; acoplamento detectado não prova sozinho uma violação de SOLID.'),btn('Revisar critério de arquitetura',()=>{ruleId='boundaries';jump('Diagnóstico')}));main.append(box);const graph=e('div');main.append(graph);arqTab(graph);const optional=card('Hotspots e evolução'),slot=e('div');optional.append(btn('Carregar mapa e evolução',()=>{slot.replaceChildren();mapaTab(slot)}),slot);main.append(optional)}
+function download(name,value){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=e('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+function history(){const layout=e('div','hp-grid'),box=card('Relatórios da mesma versão'),hist=card('Registro de decisões');box.append(e('p','','Importe os resultados medidos pelas ferramentas do projeto. O painel não executa nem certifica este relatório. Dados de outra versão aparecem como Não medido.'),e('p','hp-muted','Snapshot: '+snapshot),e('p','hp-notice',report?report.snapshot===snapshot?'Relatório importado da versão atual.':'Relatório desatualizado: medições não usadas.':'Nenhum relatório importado.'));const input=e('textarea','hp-report');input.setAttribute('aria-label','Relatório JSON');input.placeholder='Cole o JSON com snapshot, testsPassed (true/false) e functions por ID. Cobertura e mutation: 0 a 100; sem medição: null.';const actions=e('div','hp-actions');actions.append(btn('Baixar modelo com IDs reais',()=>download('quality-report-template.json',{snapshot,testsPassed:null,functions:Object.fromEntries(files.map(f=>[f.id,{coverage:null,mutation:null}]))})),btn('Importar relatório',()=>{try{if(input.value.length>500000)throw Error('Relatório maior que 500 KB.');report=validateReport(JSON.parse(input.value));log('Relatório importado · '+report.snapshot);notice='Relatório salvo neste navegador.';render()}catch(err){notice=err.message;render()}}),btn('Remover relatório',()=>{report=null;log('Relatório removido');render()}),btn('Exportar política e registro',()=>download('quality-policy.json',{policy,version,audit,exceptions:[...exceptions],reviews:[...reviews]})));box.append(input,actions,e('p','','Baixe o modelo e adapte a saída de cobertura/mutação usando os IDs exatos das funções. Não preencha resultados que não foram medidos. Testes, lint e typecheck podem ser executados em Verificar.'),btn('Abrir Verificar',()=>go('verificar')));hist.append(e('p','','Política v'+version+' · registros deste navegador'));const entries=e('div','hp-audit');(audit.length?audit:['Nenhuma decisão registrada.']).forEach(s=>entries.append(e('p','',s)));hist.append(entries);layout.append(box,hist);main.append(layout)}
+render();
 }

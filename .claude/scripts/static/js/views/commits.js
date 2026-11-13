@@ -23,16 +23,19 @@ const FILTER_LABEL = { branch: 'ramo', author: 'autor', path: 'pasta', since: 'd
 /** @typedef {{ sha: string, short: string, parents: string[], author: string, t: string, ts: number, refs: { name: string, kind: string, current: boolean }[], subject: string, add: number, del: number, nfiles: number, tests: boolean, merge: boolean }} GCommit */
 
 export async function renderCommits() {
-  const main = $('#main'); main.className = ''; main.replaceChildren();
-  const [act, wt, br] = await Promise.all([api('activity?days=84'), api('worktree'), api('branches')]);
-  main.append(activityOverview(act));
+  const main = $('#main'); main.className = 'commits-page'; main.replaceChildren();
+  let alive = true;
+  const wt = { branch: '', ahead: 0, behind: 0, clean: true, groups: { staged: [], unstaged: [], untracked: [] } };
+  let br = [], worktreeLoaded = false, worktreeError = false;
+  const intro = h('div', 'commits-heading'); intro.append(h('h2', '', 'Commits'), h('p', '', 'Histórico, alterações locais e revisão de código.'));
+  const activityBox = h('div'); activityBox.append(h('p', 'small muted', 'Carregando atividade do repositório…')); main.append(intro, activityBox);
 
   // ----- barra de filtros: o essencial à vista, o resto atrás de "Filtros" -----
   const bar = h('div', 'toolbar');
-  const seg = h('div', 'seg'); [['todos', 'Todos'], ['semtestes', 'Sem testes'], ['merge', 'Merges']].forEach(([k, l]) => { const b = h('button', F.flt === k ? 'on' : '', l); b.onclick = () => { F.flt = k; seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); paint(true); }; seg.append(b); });
+  const seg = h('div', 'seg'); [['todos', 'Todos'], ['semtestes', 'Sem alterações em testes'], ['merge', 'Merges']].forEach(([k, l]) => { const b = h('button', F.flt === k ? 'on' : '', l); b.type = 'button'; b.setAttribute('aria-pressed', String(F.flt === k)); b.onclick = () => { F.flt = k; seg.querySelectorAll('button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }); paint(true); }; seg.append(b); });
   const q = h('input'); q.type = 'search'; q.placeholder = 'mensagem, autor ou sha'; q.value = F.q; q.style.width = '220px'; q.setAttribute('aria-label', 'Buscar nos commits carregados');
   const branch = h('select'); branch.setAttribute('aria-label', 'Ramo'); branch.append(new Option('todos os ramos', ''));
-  br.filter((/** @type {any} */ x) => !x.remote).concat(br.filter((/** @type {any} */ x) => x.remote)).forEach((/** @type {any} */ x) => branch.append(new Option(x.name, x.name))); branch.value = F.branch;
+  if (F.branch) branch.append(new Option(F.branch, F.branch)); branch.value = F.branch;
   const more = button('Filtros', { small: true, onClick: () => { adv.hidden = !adv.hidden; more.setAttribute('aria-expanded', String(!adv.hidden)); } }); more.setAttribute('aria-expanded', 'false');
   const cmp = button('Comparar', { small: true, title: 'Comparar dois branches, tags ou commits' });
   bar.append(seg, q, branch, more, h('span', 'grow'), cmp);
@@ -40,7 +43,8 @@ export async function renderCommits() {
   const author = h('select'); author.setAttribute('aria-label', 'Filtrar por autor');
   const path = h('input'); path.type = 'text'; path.placeholder = 'pasta ou arquivo (ex.: back-end/src)'; path.value = F.path; path.style.width = '250px'; path.setAttribute('aria-label', 'Filtrar por pasta ou arquivo');
   const since = h('input'), until = h('input'); [since, until].forEach((d, i) => { d.type = 'date'; d.value = i ? F.until : F.since; d.setAttribute('aria-label', i ? 'até a data' : 'a partir da data'); });
-  adv.append(h('span', 'small muted', 'Autor'), author, path, h('span', 'small muted', 'de'), since, h('span', 'small muted', 'até'), until, button('Limpar filtros', { small: true, variant: 'ghost', onClick: () => { Object.assign(F, { flt: 'todos', q: '', branch: '', author: '', path: '', since: '', until: '' }); renderCommits(); } }));
+  const resetFilters = guard(async () => { Object.assign(F, { flt: 'todos', q: '', branch: '', author: '', path: '', since: '', until: '' }); [q, branch, author, path, since, until].forEach(el => { el.value = ''; }); seg.querySelectorAll('button').forEach((el, i) => { el.classList.toggle('on', i === 0); el.setAttribute('aria-pressed', String(i === 0)); }); await reload(); });
+  adv.append(h('span', 'small muted', 'Autor'), author, path, h('span', 'small muted', 'de'), since, h('span', 'small muted', 'até'), until, button('Limpar filtros', { small: true, onClick: resetFilters }));
   const chips = h('div', 'chipsrow'), status = h('div', 'small muted'); status.style.marginBottom = 'var(--s2)';
   main.append(bar, adv, chips, status);
 
@@ -96,7 +100,8 @@ export async function renderCommits() {
     const a = Math.max(0, Math.floor(tp / ROW) - OVER), b = Math.min(shown.length, Math.ceil((tp + hg) / ROW) + OVER);
     win.style.transform = `translateY(${a * ROW}px)`; win.replaceChildren(...shown.slice(a, b).map((c, i) => row(c, a + i)));
     status.textContent = `${shown.length} de ${commits.length} commit(s) carregados · ${total} no total` + (filtersOn() ? ' · o grafo fica oculto enquanto há filtros' : '');
-    if (b >= shown.length - 8 && commits.length < total && !loading) loadMore();
+    if (!shown.length && !loading) { const message = h('div', 'commits-empty'); message.append(h('p', '', 'Nenhum commit corresponde aos filtros atuais.'), button('Limpar filtros', { small: true, onClick: resetFilters })); win.replaceChildren(message); spacer.style.height = '120px'; }
+    if (b >= shown.length - 8 && commits.length < total && !loading) loadMore().catch(e => { if (!isAbort(e) && alive) toast(e.message, true); });
   }
   let raf = 0; scroller.onscroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => paint()); };
 
@@ -106,24 +111,27 @@ export async function renderCommits() {
   }
   async function loadMore() {
     const my = ticket; loading = true;
-    try { const r = await api('graph?' + params()); if (my !== ticket) return; commits = commits.concat(r.commits); total = r.total; layout = filtersOn() ? null : layoutGraph(commits); paint(); } finally { loading = false; }
+    try { const r = await api('graph?' + params()); if (!alive || my !== ticket) return; commits = commits.concat(r.commits); total = r.total; layout = filtersOn() ? null : layoutGraph(commits); paint(); } finally { loading = false; }
   }
   async function reload() {
+    if (F.since && F.until && F.since > F.until) { toast('A data inicial deve ser anterior à data final.', true); return; }
     const my = ++ticket; commits = []; loading = true; paintChips();
     try {
-      const r = await api('graph?' + params()); if (my !== ticket) return;
+      const r = await api('graph?' + params()); if (!alive || my !== ticket) return;
       commits = r.commits; total = r.total;
       author.replaceChildren(new Option('todos', '')); r.authors.forEach((/** @type {string} */ a) => author.append(new Option(a, a))); author.value = F.author;
       paint(true);
       if (!S.commitSel || (S.commitSel !== 'WIP' && S.commitSel !== 'CMP' && !commits.length)) S.commitSel = !wt.clean ? 'WIP' : commits[0]?.sha || '';
       detail();
-    } finally { loading = false; }
+    } finally { loading = false; if (alive && my === ticket && !shown.length) paint(); }
   }
 
   // ----- seleção e painel direito -----
   const wipRow = () => {
-    wipBox.replaceChildren(); if (wt.clean) return;
-    const w = h('div', 'wip' + (S.commitSel === 'WIP' ? ' on' : '')), n = wt.groups.staged.length + wt.groups.unstaged.length + wt.groups.untracked.length, d = h('div', 'grow');
+    wipBox.replaceChildren();
+    if (!worktreeLoaded) { const message = h('div', 'commits-local-status'); message.append(h('p', 'small muted', worktreeError ? 'Alterações locais indisponíveis. O histórico continua disponível.' : 'Carregando alterações locais…')); if (worktreeError) message.append(button('Tentar novamente', { small: true, onClick: loadWorktree })); wipBox.append(message); return; }
+    if (wt.clean) return;
+    const w = h('div', 'wip' + (S.commitSel === 'WIP' ? ' on' : '')), n = new Set([...wt.groups.staged, ...wt.groups.unstaged, ...wt.groups.untracked].map(f => f.path)).size, d = h('div', 'grow');
     w.tabIndex = 0; d.append(h('b', '', n + ' arquivo(s) não commitado(s)'), h('div', 'small muted', `${wt.groups.staged.length} preparado(s) · ${wt.groups.unstaged.length} não preparado(s) · ${wt.groups.untracked.length} novo(s)`));
     w.append(d); w.onclick = () => select('WIP'); w.onkeydown = e => { if (e.key === 'Enter') select('WIP'); }; wipBox.append(w);
   };
@@ -140,7 +148,8 @@ export async function renderCommits() {
   }
   const detail = guard(async () => {
     wipRow();
-    if (S.commitSel === 'WIP' && !wt.clean) await renderWip(right, wt);
+    if (S.commitSel === 'WIP' && !worktreeLoaded) right.replaceChildren(h('p', 'small muted', 'Aguardando alterações locais. Você pode selecionar um commit no histórico.'));
+    else if (S.commitSel === 'WIP' && !wt.clean) await renderWip(right, wt);
     else if (S.commitSel === 'CMP') renderCompare(right, br.map((/** @type {any} */ x) => x.name), cb);
     else if (S.commitSel) { await renderCommitDetail(right, S.commitSel, cb); githubExtras(S.commitSel); }
     else right.replaceChildren(emptyState('Nenhum commit com estes filtros.'));
@@ -155,24 +164,35 @@ export async function renderCommits() {
 
   // ----- eventos -----
   q.oninput = () => { F.q = q.value; paint(true); };
-  branch.onchange = () => { F.branch = branch.value; reload(); };
-  author.onchange = () => { F.author = author.value; reload(); };
+  branch.onchange = guard(async () => { F.branch = branch.value; await reload(); });
+  author.onchange = guard(async () => { F.author = author.value; await reload(); });
   let tm = 0; path.oninput = () => { clearTimeout(tm); tm = window.setTimeout(() => { F.path = path.value.trim().replace(/^\/+/, ''); reload().catch(e => { if (!isAbort(e)) toast(e.message, true); }); }, 400); };
-  since.onchange = () => { F.since = since.value; reload(); }; until.onchange = () => { F.until = until.value; reload(); };
+  since.onchange = guard(async () => { F.since = since.value; await reload(); }); until.onchange = guard(async () => { F.until = until.value; await reload(); });
   cmp.onclick = () => select('CMP');
   const key = (/** @type {KeyboardEvent} */ e) => {
     if (!['ArrowDown', 'ArrowUp'].includes(e.key) || /INPUT|TEXTAREA|SELECT/.test(/** @type {HTMLElement} */ (e.target).tagName || '')) return;
     e.preventDefault(); const i = shown.findIndex(c => c.sha === S.commitSel), n = shown[Math.max(0, Math.min(shown.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))]; if (n) select(n.sha);
   };
   document.addEventListener('keydown', key); S.timers.push({ remove: () => document.removeEventListener('keydown', key) });
+  S.timers.push({ remove() { alive = false; ticket++; clearTimeout(tm); cancelAnimationFrame(raf); } });
   S.timers.push(watch('git', async () => {
-    Object.assign(wt, await api('worktree', 'GET', undefined, { global: true })); wipRow();
-    const top = (await api('graph?limit=1', 'GET', undefined, { global: true })).commits[0];
+    if (!alive) return; if (!worktreeError) loadWorktree();
+    const top = (await api('graph?limit=1')).commits[0]; if (!alive) return;
     if (top && commits.length && top.sha !== commits[0].sha && !loading) await reload();  // commit novo: refaz a lista
     else if (S.commitSel === 'WIP') detail();
   }, 20_000));
 
   const dica = h('div', 'small faint'); dica.style.marginTop = 'var(--s3)'; dica.textContent = 'Atalhos: ↑ ↓ trocam de commit · j k trocam de arquivo no diff · n p pulam entre trechos alterados.'; main.append(dica);
-  api('gh/overview').then(r => { if (!r.unavailable) { gh = r; paint(); githubExtras(S.commitSel); } }).catch(() => { /* sem GitHub: a tela segue normal */ });
+  let worktreePending = false;
+  async function loadWorktree() {
+    if (!alive || worktreePending) return; worktreePending = true;
+    try { const updated = await api('worktree', 'GET', undefined, { timeout: 15000 }); if (!alive) return; Object.assign(wt, updated); worktreeLoaded = true; worktreeError = false; wipRow(); if (S.commitSel === 'WIP') await detail(); }
+    catch (e) { if (alive && !isAbort(e)) { worktreeError = true; wipRow(); } }
+    finally { worktreePending = false; }
+  }
+  api('activity?days=84').then(a => { if (alive) activityBox.replaceChildren(activityOverview(a)); }).catch(e => { if (alive && !isAbort(e)) activityBox.replaceChildren(h('p', 'small muted', 'Resumo de atividade indisponível. O histórico continua disponível.')); });
+  api('branches').then(result => { if (!alive) return; br = result; branch.replaceChildren(new Option('todos os ramos', '')); br.filter(x => !x.remote).concat(br.filter(x => x.remote)).forEach(x => branch.append(new Option(x.name, x.name))); if (F.branch && !br.some(x => x.name === F.branch)) branch.append(new Option(F.branch, F.branch)); branch.value = F.branch; }).catch(e => { if (alive && !isAbort(e)) branch.title = 'Lista de ramos indisponível. O histórico continua disponível.'; });
+  wipRow(); loadWorktree();
+  api('gh/overview').then(r => { if (alive && !r.unavailable) { gh = r; paint(); githubExtras(S.commitSel); } }).catch(() => { /* sem GitHub: a tela segue normal */ });
   await reload();
 }

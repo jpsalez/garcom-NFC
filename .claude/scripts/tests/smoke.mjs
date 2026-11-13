@@ -3,25 +3,25 @@
 //
 //   node .claude/scripts/tests/smoke.mjs [--shots <pasta>] [--only tab1,tab2] [--port 8799]
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** Endereços antigos que têm de continuar abrindo a tela certa. */
-const REDIRECT = { geral: 'visao-geral', chat: 'conversa', projeto: 'arquivos', vivo: 'ao-vivo', tempo: 'linha-do-tempo', saude: 'saude-do-codigo' };
+const REDIRECT = { geral: 'visao-geral', chat: 'conversa', projeto: 'arquivos', vivo: 'ao-vivo', tempo: 'linha-do-tempo', saude: 'saude-do-codigo', dicionario: 'faq' };
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const PORT = Number(arg('port', 8799)), CDP = PORT + 1000;
 const SHOTS = arg('shots', '');
 const DARK = process.argv.includes('--dark'), SIZE = (arg('size', '1440x900')).split('x').map(Number);
-const EVAL = arg('eval', ''), NAME = arg('name', '');
+const EVAL = arg('eval-file', '') ? readFileSync(arg('eval-file', ''), 'utf8') : arg('eval', ''), NAME = arg('name', '');
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TABS = (arg('only', '') || (process.argv.includes('--legacy') ? Object.keys(REDIRECT).join(',') : '') || 'visao-geral,conversa,orquestrar,ao-vivo,analise,linha-do-tempo,tarefas,commits,saude-do-codigo,arquivos,verificar,decisoes,dicionario').split(',');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const server = spawn('python3', ['-B', join(HERE, '..', 'painel.py'), '--port', String(PORT)], { stdio: 'ignore' });
+const server = spawn(process.env.PANEL_PYTHON || 'python3', ['-B', join(HERE, '..', 'painel.py'), '--port', String(PORT)], { stdio: 'ignore', windowsHide: true });
 const profile = mkdtempSync(join(tmpdir(), 'painel-smoke-'));
-const chrome = spawn('chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--window-size=' + SIZE.join(','), `--remote-debugging-port=${CDP}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(process.env.PANEL_CHROME || 'chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--window-size=' + SIZE.join(','), `--remote-debugging-port=${CDP}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore', windowsHide: true });
 const stop = () => { server.kill(); chrome.kill(); };
 process.on('exit', stop);
 

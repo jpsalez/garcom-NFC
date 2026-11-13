@@ -1,139 +1,66 @@
-// @ts-check
+﻿// @ts-check
 import { api } from '../api.js';
 import { $, h } from '../lib/dom.js';
 import { watch } from '../lib/realtime.js';
-import { go, hashParams, setHashParams } from '../router.js';
+import { hashParams, setHashParams } from '../router.js';
 import { S } from '../store.js';
 import { button } from '../ui/button.js';
-import { emptyState } from '../ui/empty-state.js';
-import { tabs } from '../ui/tabs.js';
-import { FASES, PRIORIDADES, STATUS, criarModelo, proximoStatus } from '../ui/tk-model.js';
-import { abrirTarefa, novaTarefa } from '../ui/tk-panel.js';
-import { lista, quadro, tabela } from '../ui/tk-views.js';
+import { criarModelo, FASES, PRIORIDADES, STATUS } from '../ui/tk-model.js';
+import { taskCopy, taskEditor, taskPatch } from '../ui/task-editor.js';
 import { guard } from '../ui/toast.js';
 
-/** @typedef {import('../ui/tk-model.js').Task} Task */
-const ABAS = [{ id: 'agora', label: 'Agora' }, { id: 'quadro', label: 'Quadro' }, { id: 'todas', label: 'Todas' }];
-const CHAVES = ['aba', 'q', 'fase', 'prioridade', 'status', 'quem', 'modulo', 'arquivadas'];
-
-/** Filtros e aba vivem na URL (#tarefas?aba=quadro&fase=MVP-2&q=sessão), então dá para guardar e compartilhar a tela. */
-const lerUrl = () => { const p = hashParams(); return Object.fromEntries(CHAVES.map(k => [k, p.get(k) || ''])); };
-
 export async function renderTarefas() {
-  const main = $('#main'); main.className = ''; main.replaceChildren();
-  /** @type {Record<string, string>} */ let F = lerUrl(); if (!F.aba) F.aba = 'agora';
-  /** @type {ReturnType<typeof criarModelo>} */ let m;
-  const area = h('div'), cabeca = h('div');
-  main.append(cabeca, area);
-  let filtrosAbertos = false;
-
-  async function carregar() {
-    const [t, d] = await Promise.all([api('tasks'), api('decisoes')]);
-    m = criarModelo(t.tasks, d);
+  const main = $('#main'); main.className = 'tasks-page'; main.replaceChildren();
+  const root = h('div', 'taskdesk'); main.append(root);
+  const params = hashParams(), F = { scope: params.get('escopo') || (params.get('status') === 'arquivada' ? 'archived' : 'now'), view: params.get('aba') === 'quadro' ? 'board' : params.get('aba') === 'todas' ? 'table' : 'list', q: params.get('q') || '', fase: params.get('fase') || '', prioridade: params.get('prioridade') || '', quem: params.get('quem') || '', modulo: params.get('modulo') || '', status: params.get('status') || '' };
+  if (F.q) F.scope = 'all';
+  let tasks = [], decisions = null, model = null, selected = params.get('abrir') || '', filterOpen = false, busy = false, alive = true;
+  const drafts = new Map(), bases = new Map(), bulk = new Set();
+  const top = h('div', 'taskdesk-top'), title = h('div'); title.append(h('h2', '', 'Tarefas'), h('p', '', 'Organize o trabalho e edite sem sair da lista.')); top.append(title); root.append(top);
+  const modes = h('div', 'taskdesk-modes'), scopes = h('div', 'taskdesk-scopes'), views = h('div', 'taskdesk-view'); modes.append(scopes, views); root.append(modes);
+  [['list', 'Lista'], ['board', 'Quadro'], ['table', 'Tabela']].forEach(([key, label]) => views.append(button(label, { small: true, onClick: () => { F.view = key; url(); paintRows(); } })));
+  const layout = h('div', 'taskdesk-layout'), listPane = h('section', 'taskdesk-list'), side = h('aside', 'taskdesk-side'); side.setAttribute('aria-label', 'Tarefa selecionada'); layout.append(listPane, side); root.append(layout);
+  const tools = h('div', 'taskdesk-list-tools'), search = h('input', 'taskdesk-input'); search.type = 'search'; search.placeholder = 'Buscar tarefa, ID ou módulo…'; search.setAttribute('aria-label', 'Buscar tarefa'); search.value = F.q;
+  tools.append(search, button('Filtros', { small: true, onClick: () => { filterOpen = !filterOpen; paintFilters(); } })); listPane.append(tools);
+  const filters = h('div', 'taskdesk-filterbar'); listPane.append(filters);
+  const quick = h('form', 'taskdesk-quick'), newTitle = h('input'), create = button('Criar', { small: true }); newTitle.type = 'text'; newTitle.maxLength = 200; newTitle.placeholder = '+ Criar tarefa · digite e pressione Enter'; newTitle.setAttribute('aria-label', 'Título da nova tarefa'); newTitle.required = true; create.type = 'submit'; quick.append(newTitle, create); listPane.append(quick);
+  const bulkBar = h('div', 'taskdesk-bulk'), rows = h('div'); listPane.append(bulkBar, rows);
+  const feedback = h('p', 'taskdesk-status'); feedback.setAttribute('role', 'status'); feedback.setAttribute('aria-live', 'polite'); root.append(feedback);
+  const url = () => setHashParams({ escopo: F.scope === 'now' ? '' : F.scope, aba: F.view === 'board' ? 'quadro' : F.view === 'table' ? 'todas' : '', q: F.q, fase: F.fase, prioridade: F.prioridade, quem: F.quem, modulo: F.modulo, status: F.status, abrir: selected });
+  const report = text => { feedback.textContent = text; };
+  const dirty = id => drafts.has(id) && Object.keys(taskPatch(bases.get(id), drafts.get(id))).length > 0;
+  const getDraft = task => { if (!drafts.has(task.id)) { drafts.set(task.id, taskCopy(task)); bases.set(task.id, taskCopy(task)); } return drafts.get(task.id); };
+  const modelFor = draft => criarModelo(tasks.map(t => t.id === draft.id ? draft : t), decisions);
+  const editorContext = { draft: getDraft, dirty, model: () => model, modelFor, changed: () => paintRows(), select: id => select(id), discard: id => { drafts.delete(id); bases.delete(id); paintEditor(); paintRows(); }, redrawEditor: () => paintEditor(), save: async (id, draft) => {
+    const fresh = await api('tasks'); const current = fresh.tasks.find(t => t.id === id); if (!current) throw new Error('Esta tarefa não existe mais. Atualize a tela.');
+    if (JSON.stringify(current) !== JSON.stringify(bases.get(id))) throw new Error('A tarefa mudou em outra tela. Preserve seu rascunho e confira a versão atual antes de sobrescrever.');
+    const patch = taskPatch(current, draft); if (Object.keys(patch).length) await api('tasks/' + encodeURIComponent(id), 'PUT', patch); drafts.delete(id); bases.delete(id); await load(); paintEditor(); report('Tarefa salva.');
+  }, remove: async id => { await api('tasks/' + encodeURIComponent(id), 'DELETE'); drafts.delete(id); bases.delete(id); bulk.delete(id); selected = ''; await load(); paintEditor(); } };
+  function paintEditor() { if (!alive) return; taskEditor(side, tasks.find(t => t.id === selected), editorContext); }
+  function select(id) { if (busy) return; selected = id; url(); paintRows(); paintEditor(); }
+  const matches = task => (F.scope === 'archived' ? task.status === 'arquivada' : task.status !== 'arquivada') && (F.scope !== 'now' || model.pronta(task) || task.status === 'fazendo') && (F.scope !== 'doing' || task.status === 'fazendo') && (F.scope !== 'blocked' || model.bloqueada(task)) && (!F.fase || task.fase === F.fase) && (!F.prioridade || task.prioridade === F.prioridade) && (!F.quem || task.quem === F.quem) && (!F.modulo || task.modulo === F.modulo) && (!F.status || task.status === F.status) && (!F.q || `${task.id} ${task.titulo} ${task.descricao || ''} ${task.modulo || ''}`.toLowerCase().includes(F.q.toLowerCase()));
+  function paintScopes() { scopes.replaceChildren(); const counts = { now: tasks.filter(t => model.pronta(t) || t.status === 'fazendo').length, doing: tasks.filter(t => t.status === 'fazendo').length, blocked: tasks.filter(t => model.aberta(t) && model.bloqueada(t)).length, all: tasks.filter(t => t.status !== 'arquivada').length, archived: tasks.filter(t => t.status === 'arquivada').length }; [['now', 'Agora'], ['doing', 'Em andamento'], ['blocked', 'Bloqueadas'], ['all', 'Todas'], ['archived', 'Arquivo']].forEach(([key, text]) => { const b = button(text + ' · ' + counts[key], { small: true, onClick: () => { F.scope = key; F.status = ''; bulk.clear(); url(); paintScopes(); paintRows(); } }); b.setAttribute('aria-pressed', String(key === F.scope)); scopes.append(b); }); }
+  function paintFilters() { filters.replaceChildren(); filters.hidden = !filterOpen; if (!filterOpen || !model) return; [['fase', 'Fase', FASES], ['prioridade', 'Prioridade', PRIORIDADES], ['quem', 'Responsável', ['você', 'IA ok']], ['modulo', 'Módulo', model.modulos()], ['status', 'Estado', Object.keys(STATUS)]].forEach(([key, text, options]) => { const label = h('label', '', text), input = h('select', 'taskdesk-select'); input.append(new Option('Todos', '')); options.forEach(v => input.append(new Option(STATUS[v] || v, v))); input.value = F[key]; input.onchange = () => { F[key] = input.value; if (key === 'status') F.scope = input.value === 'arquivada' ? 'archived' : 'all'; url(); paintScopes(); paintRows(); }; label.append(input); filters.append(label); }); filters.append(button('Limpar filtros', { small: true, onClick: () => { F.fase = F.prioridade = F.quem = F.modulo = F.status = F.q = ''; search.value = ''; url(); paintFilters(); paintRows(); } })); }
+  async function patchTasks(ids, patch) {
+    if (busy) return; if (ids.some(dirty)) { report('Salve ou descarte os rascunhos antes de aplicar uma ação em lote.'); return; }
+    if (patch.status === 'fazendo') { const blocked = ids.map(id => tasks.find(t => t.id === id)).find(t => t && model.motivoBloqueio({ ...t, status: 'a-fazer' })); if (blocked) { report('Resolva o bloqueio de ' + blocked.id + ' antes de iniciar.'); return; } }
+    busy = true; const failed = []; paintBulk();
+    try { for (const id of ids) { try { await api('tasks/' + encodeURIComponent(id), 'PUT', patch); bulk.delete(id); drafts.delete(id); bases.delete(id); } catch (e) { failed.push(id); } } await load(); paintEditor(); report(failed.length ? 'Falharam: ' + failed.join(', ') + '. Somente elas continuam selecionadas para nova tentativa.' : 'Alterações salvas.'); }
+    finally { busy = false; paintBulk(); }
   }
-  const mudarUrl = (/** @type {Record<string, string>} */ o) => { Object.assign(F, o); setHashParams(Object.fromEntries(CHAVES.map(k => [k, F[k] && !(k === 'aba' && F[k] === 'agora') ? F[k] : '']))); desenhar(); };
-
-  /** Aplica busca e filtros (arquivadas só aparecem com o filtro ligado ou escolhendo o status). @param {Task[]} tarefas */
-  function filtrar(tarefas) {
-    const q = F.q.trim().toLowerCase();
-    return tarefas.filter(t => (F.arquivadas || F.status === 'arquivada' || t.status !== 'arquivada')
-      && (!F.fase || t.fase === F.fase) && (!F.prioridade || t.prioridade === F.prioridade) && (!F.status || t.status === F.status)
-      && (!F.quem || t.quem === F.quem) && (!F.modulo || t.modulo === F.modulo)
-      && (!q || `${t.id} ${t.titulo} ${t.descricao || ''} ${t.modulo || ''}`.toLowerCase().includes(q)));
+  function paintBulk() { bulkBar.replaceChildren(); bulkBar.hidden = !bulk.size; if (!bulk.size) return; bulkBar.append(h('span', '', bulk.size + ' selecionada(s)')); const action = h('select', 'taskdesk-select'); action.setAttribute('aria-label', 'Ação em lote'); [['', 'Escolher ação…'], ['start', 'Iniciar'], ['archive', 'Arquivar'], ...PRIORIDADES.map(p => [p, 'Prioridade ' + p]), ['você', 'Responsável: você'], ['IA ok', 'Responsável: IA']].forEach(([key, text]) => action.append(new Option(text, key))); const reason = h('input', 'taskdesk-input'); reason.type = 'text'; reason.placeholder = 'Motivo do arquivamento'; reason.setAttribute('aria-label', 'Motivo do arquivamento em lote'); reason.hidden = true; action.onchange = () => { reason.hidden = action.value !== 'archive'; }; const apply = button('Aplicar', { small: true, onClick: guard(async () => { const value = action.value; if (!value) return; if (value === 'archive' && !reason.value.trim()) { report('Informe o motivo para arquivar.'); reason.focus(); return; } await patchTasks([...bulk], value === 'start' ? { status: 'fazendo' } : value === 'archive' ? { status: 'arquivada', motivo: reason.value.trim() } : PRIORIDADES.includes(value) ? { prioridade: value } : { quem: value }); }) }); apply.disabled = busy; bulkBar.append(action, reason, apply, button('Limpar seleção', { small: true, onClick: () => { bulk.clear(); paintRows(); } })); }
+  function checkbox(task) { const cb = h('input'); cb.type = 'checkbox'; cb.checked = bulk.has(task.id); cb.setAttribute('aria-label', 'Selecionar ' + task.id); cb.onchange = () => { cb.checked ? bulk.add(task.id) : bulk.delete(task.id); paintBulk(); }; return cb; }
+  function paintRows() {
+    if (!alive || !model) return; [...views.children].forEach((b, index) => b.setAttribute('aria-pressed', String(['list', 'board', 'table'][index] === F.view))); paintBulk(); rows.replaceChildren(); const visible = tasks.filter(matches).sort(model.porTrabalho);
+    if (!visible.length) { rows.append(h('p', 'taskdesk-empty', 'Nenhuma tarefa neste recorte. Confira os filtros ou crie uma tarefa acima.')); return; }
+    if (F.view === 'board') { const board = h('div', 'taskdesk-board'); [['a-fazer', 'A fazer'], ['fazendo', 'Em andamento'], ['blocked', 'Bloqueadas'], ['feita', 'Concluídas']].forEach(([state, label]) => { const column = h('section', 'taskdesk-column'), items = visible.filter(t => state === 'blocked' ? model.bloqueada(t) : !model.bloqueada(t) && t.status === state); column.append(h('h3', '', label + ' · ' + items.length)); items.forEach(t => { const b = button('', { onClick: () => select(t.id) }); b.className = 'taskdesk-card' + (selected === t.id ? ' selected' : ''); b.draggable = true; b.append(h('small', '', t.id + ' · ' + t.prioridade), h('span', '', t.titulo), h('span', 'taskdesk-row-reason', model.motivoBloqueio(t))); b.ondragstart = e => e.dataTransfer.setData('text/plain', t.id); column.append(b); }); column.ondragover = e => e.preventDefault(); column.ondrop = guard(async e => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); if (!tasks.some(t => t.id === id)) return; if (state === 'blocked') { select(id); report('Registre o motivo ou uma dependência no detalhe.'); return; } await patchTasks([id], { status: state }); }); board.append(column); }); rows.append(board); return; }
+    if (F.view === 'table') { const table = h('table', 'taskdesk-table'), header = h('tr'); ['', 'Tarefa', 'Estado', 'Prioridade'].forEach(text => header.append(h('th', '', text))); table.append(header); visible.forEach(t => { const row = h('tr'), cb = h('td'), title = h('td'); cb.append(checkbox(t)); title.append(button(t.id + ' · ' + t.titulo, { small: true, onClick: () => select(t.id) })); row.append(cb, title, h('td', '', model.bloqueada(t) ? 'Bloqueada' : STATUS[t.status]), h('td', '', t.prioridade)); table.append(row); }); rows.append(table); return; }
+    visible.forEach(t => { const row = h('article', 'taskdesk-row' + (selected === t.id ? ' selected' : '')), open = button('', { onClick: () => select(t.id) }); open.className = 'taskdesk-row-open'; open.setAttribute('aria-pressed', String(selected === t.id)); open.append(h('span', 'taskdesk-row-title', t.titulo + (dirty(t.id) ? ' · edição pendente' : '')), h('span', 'taskdesk-row-meta', [t.id, model.bloqueada(t) ? 'Bloqueada' : STATUS[t.status], t.quem || 'Não definido', t.fase, model.destrava(t.id) ? model.destrava(t.id) + ' dependente(s)' : ''].filter(Boolean).join(' · '))); const reason = model.motivoBloqueio(t); if (reason) open.append(h('span', 'taskdesk-row-reason', reason)); row.append(checkbox(t), open, h('span', 'taskdesk-priority', t.prioridade)); rows.append(row); });
   }
-
-  const acoes = {
-    abrir: (/** @type {string} */ id) => { setHashParams({ abrir: id }); abrirTarefa(id, ctx); },
-    avancar: guard(async (/** @type {Task} */ t) => { await api('tasks/' + t.id, 'PUT', { status: proximoStatus(t.status) }); await recarregar(); }),
-    mudar: guard(async (/** @type {Task} */ t, /** @type {string} */ status) => { await api('tasks/' + t.id, 'PUT', { status }); await recarregar(); }),
-  };
-  const ctx = { recarregar: async () => { await recarregar(); }, abrir: acoes.abrir, modelo: () => m, fechou: () => setHashParams({ abrir: '' }) };
-  async function recarregar() { await carregar(); desenhar(); }
-
-  function chips() {
-    const box = h('div', 'tk-chips');
-    CHAVES.filter(k => !['aba', 'q'].includes(k) && F[k]).forEach(k => {
-      const c = h('span', 'chipf', k === 'arquivadas' ? 'com arquivadas' : `${k}: ${F[k]}`); const x = h('button', '', '×'); x.type = 'button'; x.setAttribute('aria-label', 'remover filtro ' + k); x.onclick = () => mudarUrl({ [k]: '' }); c.append(x); box.append(c);
-    });
-    return box;
-  }
-
-  function filtros() {
-    const box = h('div', 'tk-filters');
-    /** @param {string} k @param {string} rotulo @param {string[]} valores */
-    const sel = (k, rotulo, valores) => { const s = h('select'); s.setAttribute('aria-label', rotulo); s.append(new Option(rotulo, '')); valores.forEach(v => s.append(new Option(STATUS[/** @type {keyof typeof STATUS} */ (v)] || v, v))); s.value = F[k]; s.onchange = () => mudarUrl({ [k]: s.value }); return s; };
-    const arq = h('label', 'check'); const cb = h('input'); cb.type = 'checkbox'; cb.checked = !!F.arquivadas; cb.onchange = () => mudarUrl({ arquivadas: cb.checked ? '1' : '' }); arq.append(cb, document.createTextNode('mostrar arquivadas'));
-    box.append(sel('fase', 'Fase', [...FASES]), sel('prioridade', 'Prioridade', [...PRIORIDADES]), sel('status', 'Status', Object.keys(STATUS)), sel('quem', 'Quem faz', ['você', 'IA ok']), sel('modulo', 'Módulo', m.modulos()), arq);
-    return box;
-  }
-
-  function desenhar() {
-    const fase = m.faseAtual(), n = m.contagem(fase), p = m.progressoFase(fase), bd = m.bloqueioPorDecisao();
-    cabeca.replaceChildren();
-    // controles
-    const topo = h('div', 'tk-top');
-    const ab = tabs(ABAS, { active: F.aba, onChange: id => mudarUrl({ aba: id }), label: 'Visões das tarefas' });
-    ab.el.style.margin = '0';
-    const busca = h('input', 'search'); busca.type = 'search'; busca.placeholder = 'Buscar tarefa  ( / )'; busca.value = F.q; busca.id = 'tk-busca'; busca.setAttribute('aria-label', 'Buscar tarefa');
-    let t0 = 0; busca.oninput = () => { clearTimeout(t0); t0 = window.setTimeout(() => { F.q = busca.value; setHashParams({ q: F.q }); desenharConteudo(); }, 150); };
-    const fb = button('Filtros', { on: filtrosAbertos || CHAVES.some(k => !['aba', 'q'].includes(k) && F[k]), onClick: () => { filtrosAbertos = !filtrosAbertos; desenhar(); } });
-    const nova = button('Nova tarefa', { variant: 'primary', onClick: () => novaTarefa(ctx, fase) }); nova.classList.add('push');
-    topo.append(ab.el, busca, fb, nova);
-    cabeca.append(topo);
-    if (filtrosAbertos) cabeca.append(filtros());
-    const ch = chips(); if (ch.children.length) cabeca.append(ch);
-    // resumo: fase atual + 3 números
-    const resumo = h('div', 'tk-phase');
-    const head = h('div', 'head'); head.append(h('h2', '', `Fase atual: ${fase}`), h('span', 'meta', `${p.feitas} de ${p.total} feitas · ${n.fazendo} fazendo · ${n.prontas} prontas · ${n.bloqueadas} bloqueadas`));
-    const pb = h('div', 'progress'); pb.append(Object.assign(h('i'), {})); /** @type {HTMLElement} */ (pb.firstChild).style.width = p.pct + '%';
-    pb.setAttribute('role', 'progressbar'); pb.setAttribute('aria-valuenow', String(p.pct)); pb.setAttribute('aria-label', `Progresso da fase ${fase}`);
-    resumo.append(head, pb);
-    cabeca.append(resumo);
-    if (bd.decisoes) {
-      const b = h('div', 'banner'); b.append(document.createTextNode(`${bd.decisoes} decisão(ões) pendente(s) bloqueiam ${bd.tarefas} tarefa(s).`));
-      const a = h('button', 'tk-banner-link', 'abrir Decisões'); a.type = 'button'; a.onclick = () => go('decisoes'); b.append(a); cabeca.append(b);
-    }
-    const mais = h('details', 'tk-more'); mais.append(h('summary', '', 'Progresso por fase'));
-    FASES.forEach(f => { const pf = m.progressoFase(f); const bar = h('div', 'progress'); bar.append(h('i')); /** @type {HTMLElement} */ (bar.firstChild).style.width = pf.pct + '%'; const g = h('div', 'tk-phases'); g.append(h('span', '', f), bar, h('span', 'num faint', `${pf.feitas}/${pf.total}`)); mais.append(g); });
-    cabeca.append(mais);
-    desenharConteudo();
-  }
-
-  function desenharConteudo() {
-    area.replaceChildren();
-    const todas = m.tasks, fase = m.faseAtual(), vistas = filtrar(todas);
-    if (F.aba === 'quadro') { area.append(quadro(vistas, m, acoes)); return; }
-    if (F.aba === 'todas') { area.append(tabela(vistas, m, acoes)); return; }
-    // Agora: a que está sendo feita + até 10 prontas da fase atual
-    const fazendo = vistas.filter(t => t.status === 'fazendo').sort(m.porTrabalho);
-    const prontas = vistas.filter(t => m.pronta(t) && (F.fase || t.fase === fase)).sort(m.porTrabalho).slice(0, 10);
-    if (fazendo.length) { const s = h('div', 'tk-sec'); s.append(h('h3', '', 'Fazendo agora'), lista(fazendo, m, acoes, '')); area.append(s); }
-    const s2 = h('div', 'tk-sec'); s2.append(h('h3', '', F.fase ? `Prontas para começar (${F.fase})` : `Prontas para começar na fase ${fase}`));
-    if (prontas.length) s2.append(lista(prontas, m, acoes, ''));
-    else {
-      const aviso = emptyState('Nada pronto para começar agora.');
-      const lst = m.bloqueioPorDecisao().lista.slice(0, 3);
-      if (lst.length) { const ul = h('div', 'small muted'); ul.append(document.createTextNode('O que mais trava: ')); lst.forEach((d, i) => { if (i) ul.append(document.createTextNode(' · ')); ul.append(document.createTextNode(`${d.id} ${d.titulo} (destrava ${d.total})`)); }); aviso.append(ul, button('Abrir Decisões', { onClick: () => go('decisoes') })); }
-      s2.append(aviso);
-    }
-    area.append(s2);
-  }
-
-  // ----- teclado: / busca · j k navega · s status · n nova · Enter abre (as linhas tratam) -----
-  const foco = () => /** @type {HTMLElement | null} */ (document.activeElement?.closest('.tk-row, .tk-card') || null);
-  const key = (/** @type {KeyboardEvent} */ e) => {
-    const alvo = /** @type {HTMLElement} */ (e.target), digitando = /INPUT|TEXTAREA|SELECT/.test(alvo.tagName || '');
-    if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('.side-panel, [role=dialog]:not(.side-panel)')) return;
-    if (e.key === '/' && !digitando) { e.preventDefault(); /** @type {HTMLElement | null} */ (document.getElementById('tk-busca'))?.focus(); return; }
-    if (digitando) return;
-    if (e.key === 'n') { e.preventDefault(); novaTarefa(ctx, m.faseAtual()); return; }
-    const itens = /** @type {HTMLElement[]} */ ([...area.querySelectorAll('.tk-row, .tk-card')]);
-    if (e.key === 'j' || e.key === 'k') { e.preventDefault(); const i = itens.indexOf(/** @type {HTMLElement} */ (foco())); itens[Math.max(0, Math.min(itens.length - 1, i + (e.key === 'j' ? 1 : -1)))]?.focus(); }
-    if (e.key === 's') { const f = foco(), t = f && m.porId.get(/** @type {string} */ (f.dataset.id)); if (t) { e.preventDefault(); acoes.avancar(t); } }
-  };
-  document.addEventListener('keydown', key); S.timers.push({ remove: () => document.removeEventListener('keydown', key) });
-
-  await carregar(); desenhar();
-  S.timers.push(watch(['tasks', 'decisions'], recarregar, 15_000));
-  const abrir = hashParams().get('abrir'); if (abrir && m.porId.has(abrir)) abrirTarefa(abrir, ctx);
+  async function load() { const [result, dec] = await Promise.all([api('tasks'), api('decisoes')]); if (!alive || !root.isConnected) return; tasks = result.tasks; decisions = dec; model = criarModelo(tasks, decisions); if (!tasks.some(t => t.id === selected)) selected = tasks.find(matches)?.id || tasks[0]?.id || ''; bulk.forEach(id => { if (!tasks.some(t => t.id === id)) bulk.delete(id); }); paintScopes(); paintRows(); }
+  quick.onsubmit = guard(async e => { e.preventDefault(); if (busy || !newTitle.value.trim()) return; create.disabled = true; try { const task = await api('tasks', 'POST', { titulo: newTitle.value.trim(), fase: F.fase || model.faseAtual(), prioridade: F.prioridade || 'P2', quem: F.quem || 'você', modulo: F.modulo }); F.scope = 'now'; F.q = ''; search.value = newTitle.value = ''; await load(); select(task.id); report('Tarefa criada. Complete o escopo e os critérios ao lado.'); } finally { create.disabled = false; } });
+  search.oninput = () => { F.q = search.value; if (F.q && F.scope === 'now') { F.scope = 'all'; paintScopes(); } url(); paintRows(); };
+  const key = e => { if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName || '')) return; if (e.key === '/') { e.preventDefault(); search.focus(); } else if (e.key === 'n') { e.preventDefault(); newTitle.focus(); } };
+  document.addEventListener('keydown', key); S.timers.push({ remove() { alive = false; document.removeEventListener('keydown', key); } });
+  await load(); paintFilters(); paintEditor(); S.timers.push(watch(['tasks', 'decisions'], load, 15000));
 }

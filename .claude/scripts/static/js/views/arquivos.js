@@ -81,7 +81,7 @@ function toolbar({ path, f, meta, lines, show, cv, blame }) {
 }
 
 export async function renderProjeto() {
-  const main = $('#main'); main.className = 'flush'; main.replaceChildren();
+  const main = $('#main'); main.className = 'flush files-premium'; main.replaceChildren();
   const grid = h('div', 'files3'), treeCol = h('aside', 'pane'), codeCol = h('section', 'pane'), ctxCol = h('aside', 'pane ctxpane');
   treeCol.setAttribute('aria-label', 'Árvore de arquivos'); ctxCol.setAttribute('aria-label', 'Contexto do arquivo');
   grid.append(treeCol, codeCol, ctxCol); main.append(grid);

@@ -12,7 +12,7 @@ import { renderProjeto } from './views/arquivos.js';
 import { renderCommits } from './views/commits.js';
 import { renderChat } from './views/conversa.js';
 import { renderDecisoes } from './views/decisoes.js';
-import { renderDicionario } from './views/dicionario.js';
+import { renderFaq } from './views/faq.js';
 import { renderGeral } from './views/geral.js';
 import { renderGithub } from './views/github.js';
 import { renderTempo } from './views/linha-do-tempo.js';
@@ -28,22 +28,22 @@ import { renderVerificar } from './views/verificar.js';
 export const ROUTES = [
   { hash: 'visao-geral', label: 'Visão geral', sub: 'o estado do projeto e dos agentes', icon: 'home', group: 'Controle', view: renderGeral },
   { hash: 'conversa', label: 'Conversa', sub: 'fale com o orquestrador e acompanhe cada subagente', icon: 'chat', group: 'Controle', view: renderChat, badge: 'b-run' },
-  { hash: 'orquestrar', label: 'Orquestrar', sub: 'receitas que encadeiam agentes', icon: 'flow', group: 'Controle', view: renderOrquestrar, badge: 'b-pipe' },
-  { hash: 'ao-vivo', label: 'Ao vivo', sub: 'sua sessão interativa, em tempo real', icon: 'pulse', group: 'Observar', view: renderVivo, badge: 'b-live' },
+  { hash: 'orquestrar', label: 'Orquestrar', sub: 'discuta decisões com um ou vários agentes', icon: 'flow', group: 'Controle', view: renderOrquestrar, badge: 'b-pipe' },
+  { hash: 'ao-vivo', label: 'Ao vivo', sub: 'agentes, tarefas, origem e controle de execução', icon: 'pulse', group: 'Observar', view: renderVivo, badge: 'b-live' },
   { hash: 'analise', label: 'Análise', sub: 'sessões, custo e qualidade da orquestração', icon: 'chart', group: 'Observar', view: renderAnalise },
   { hash: 'linha-do-tempo', label: 'Linha do tempo', sub: 'sessões, agentes, commits e verificações no mesmo eixo', icon: 'clock', group: 'Observar', view: renderTempo },
   { hash: 'tarefas', label: 'Tarefas', sub: 'o que fazer agora, o que está bloqueado e por quê', icon: 'check', group: 'Projeto', view: renderTarefas },
   { hash: 'commits', label: 'Commits', sub: 'histórico, alterações não commitadas e diff', icon: 'git', group: 'Projeto', view: renderCommits },
-  { hash: 'github', label: 'GitHub', sub: 'pull requests, Actions e issues', icon: 'github', group: 'Projeto', view: renderGithub },
-  { hash: 'saude-do-codigo', label: 'Saúde do código', sub: 'candidatos a refatorar, churn e histórico de verificações', icon: 'heart', group: 'Projeto', view: renderSaude },
+  { hash: 'github', label: 'GitHub', sub: 'repositório associado ao projeto', icon: 'github', group: 'Projeto', view: renderGithub },
+  { hash: 'saude-do-codigo', label: 'Saúde do código', sub: 'critérios de qualidade, evidências e revisão humana', icon: 'heart', group: 'Projeto', view: renderSaude },
   { hash: 'arquivos', label: 'Arquivos', sub: 'estrutura do projeto e contexto', icon: 'folder', group: 'Projeto', view: renderProjeto },
-  { hash: 'verificar', label: 'Verificar', sub: 'checagens e git', icon: 'shield', group: 'Projeto', view: renderVerificar },
-  { hash: 'decisoes', label: 'Decisões', sub: 'o que já foi decidido', icon: 'scale', group: 'Projeto', view: renderDecisoes },
-  { hash: 'dicionario', label: 'Dicionário', sub: 'o que cada termo do painel e do projeto significa', icon: 'book', group: 'Ajuda', view: renderDicionario },
+  { hash: 'verificar', label: 'Verificar', sub: 'execute checagens locais e leia o resultado', icon: 'shield', group: 'Projeto', view: renderVerificar },
+  { hash: 'decisoes', label: 'Decisões', sub: 'registre escolhas e entenda as tarefas bloqueadas', icon: 'scale', group: 'Projeto', view: renderDecisoes },
+  { hash: 'faq', label: 'FAQ', sub: 'como usar cada parte do sistema', icon: 'book', group: 'Ajuda', view: renderFaq },
 ];
 
 /** Endereços antigos continuam valendo (favoritos e chamadas das telas). */
-const LEGACY = { geral: 'visao-geral', chat: 'conversa', projeto: 'arquivos', vivo: 'ao-vivo', tempo: 'linha-do-tempo', saude: 'saude-do-codigo' };
+const LEGACY = { geral: 'visao-geral', chat: 'conversa', projeto: 'arquivos', vivo: 'ao-vivo', tempo: 'linha-do-tempo', saude: 'saude-do-codigo', dicionario: 'faq' };
 /** @param {string} key */
 const canonical = key => /** @type {Record<string, string>} */ (LEGACY)[key] || key;
 const find = (/** @type {string} */ key) => ROUTES.find(r => r.hash === canonical(key)) || ROUTES[0];
@@ -64,7 +64,7 @@ let seq = 0;
 async function show(/** @type {typeof ROUTES[number]} */ route, /** @type {string} */ sub = '') {
   const mine = ++seq;
   clearTimers(); newScreen(); S.tab = route.hash; S.view = null;
-  if (sub) { if (route.hash === 'dicionario') S.dictQ = decodeURIComponent(sub); else if (route.hash === 'conversa') S.sel = sub; }
+  if (sub) { if (route.hash === 'faq') S.dictQ = decodeURIComponent(sub); else if (route.hash === 'conversa') S.sel = sub; }
   $('#title').textContent = route.label; $('#sub').textContent = route.sub; document.title = route.label + ' · Painel garcom-NFC';
   document.querySelectorAll('nav button[data-tab]').forEach(b => { const on = /** @type {HTMLElement} */ (b).dataset.tab === route.hash; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   const main = $('#main'); main.className = ''; main.replaceChildren(skeleton());

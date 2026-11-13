@@ -8,7 +8,8 @@
 
 Fonte dos dados: os transcritos que o próprio Claude Code grava em ~/.claude/projects/<projeto>/
 (sessão principal e subagentes). Não usa hooks e não altera nada. Mostra só o nome da ferramenta
-e o alvo (arquivo, padrão, comando truncado), nunca o conteúdo lido nem os resultados.
+e o alvo (arquivo, padrão, comando truncado), além do último prompt recebido para identificar a tarefa.
+Não devolve o conteúdo dos arquivos lidos nem os resultados das ferramentas.
 Escuta apenas em 127.0.0.1.
 """
 import argparse
@@ -74,6 +75,7 @@ class Tail:
         self.path, self.off = Path(path), 0
         self.events, self.counts, self.edited = deque(maxlen=300), Counter(), {}
         self.first = self.last = None
+        self.prompt = ""
 
     def pump(self):
         try:
@@ -101,6 +103,12 @@ class Tail:
                 self.first = self.first or ts
                 self.last = ts
             content = (d.get("message") or {}).get("content")
+            if d.get("type") == "user":
+                text = content if isinstance(content, str) else "\n".join(
+                    b.get("text", "") for b in (content or []) if isinstance(b, dict) and b.get("type") == "text"
+                ) if isinstance(content, list) else ""
+                if text.strip():
+                    self.prompt = text[:30000]
             if d.get("type") != "assistant" or not isinstance(content, list):
                 continue
             for b in content:
@@ -168,6 +176,8 @@ class Monitor:
                 "id": aid, "name": name, "type": typ, "status": status, "idle": int(idle),
                 "first": t.first, "last": t.last, "counts": dict(t.counts.most_common()),
                 "events": list(t.events)[-12:], "edited": sorted(t.edited, key=lambda k: -t.edited[k]["n"])[:8],
+                "prompt": t.prompt,
+                "triggered_by": (meta or {}).get("parentAgentId") or ("Usuário da sessão" if aid == "principal" else "Não registrado"),
             })
             for p, e in t.edited.items():
                 f = files.setdefault(p, {"path": p, "agents": [], "edits": 0, "t": e["t"]})

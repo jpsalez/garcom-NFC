@@ -1,137 +1,100 @@
 // @ts-check
-import { api } from '../api.js';
+import { api, isAbort } from '../api.js';
 import { $, h } from '../lib/dom.js';
 import { fmtDur } from '../lib/format.js';
 import { go } from '../router.js';
 import { S } from '../store.js';
-import { rotulado } from '../ui/obs-common.js';
-import { guard } from '../ui/toast.js';
-import { hideTip, showTip } from '../ui/tooltip.js';
+import { button } from '../ui/button.js';
 
-/* ---------- Linha do tempo ---------- */
-const MIN_BAR_PX = 72;          // largura mínima de uma barra: o título precisa ser legível
-const MIN_SPAN = 60;            // menor janela possível (segundos)
-const LANE_LABEL = 150;         // largura da coluna de rótulos à esquerda
-const STEPS = [60, 300, 600, 1800, 3600, 10800, 21600, 43200, 86400, 172800, 432000];
+const MIN_SPAN = 60;
+const finite = value => Number.isFinite(Number(value));
+const time = seconds => new Date(seconds * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const clock = seconds => new Date(seconds * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-/** Empilha as barras que se sobrepõem em linhas (sem esconder nenhuma). `minSec` é a duração mínima visual. @param {any[]} items @param {number} minSec */
-function packRows(items, minSec) {
-  const rows = /** @type {number[]} */ ([]);
-  items.sort((x, y) => x.start - y.start).forEach(it => {
-    let r = rows.findIndex(end => end <= it.start);
-    if (r < 0) { r = rows.length; rows.push(0); }
-    rows[r] = Math.max(it.end, it.start + minSec); it.row = r;
-  });
-  return rows.length || 1;
+/** Normalização sem inventar vínculos entre agentes, commits e verificações. */
+export function timelineEvents(data, includePanel) {
+  const sessions = (data.sessions || []).filter(s => includePanel || (!s.panel && !(s.end - s.start < 30 && !s.agents))).map(s => ({ id: 'session:' + s.id, kind: 'session', start: s.start, end: s.end, name: s.title, who: `${s.agents} subagente(s) · ${s.panel ? 'sessão do painel' : 'sessão interativa'}`, detail: 'Registros da sessão, incluindo pausas entre atividades.', raw: s }));
+  const runs = (data.runs || []).map(r => ({ id: 'run:' + r.id, kind: 'agent', start: r.start, end: r.end, name: r.agent.replace(/^garcom-/, '') + ' · ' + (r.title || 'Execução sem título'), who: `${r.status} · US$ ${Number(r.cost || 0).toFixed(3)}`, detail: r.team ? 'Execução vinculada a uma equipe do painel.' : 'Execução iniciada pelo painel.', raw: r }));
+  const commits = (data.commits || []).map(c => ({ id: 'commit:' + c.sha, kind: 'commit', start: c.t, end: c.t, name: c.subject, who: `${c.short} · +${c.add} / −${c.del}`, detail: 'O horário não estabelece, sozinho, relação com uma execução ou verificação.', raw: c }));
+  const checks = (data.checks || []).map((c, i) => ({ id: 'check:' + c.t + ':' + c.name + ':' + i, kind: 'check', start: c.t, end: c.t, name: c.name, who: c.ok ? 'Verificação passou' : 'Verificação falhou', detail: c.summary || 'Sem resumo registrado.', raw: c }));
+  return [...sessions, ...runs, ...commits, ...checks].filter(e => finite(e.start) && finite(e.end) && e.end >= e.start).sort((a, b) => a.start - b.start);
+}
+
+/** Empilha apenas os eventos que colidem visualmente, sem mudar suas durações. */
+export function timelineRows(events, minSeconds) {
+  const ends = [];
+  return events.slice().sort((a, b) => a.start - b.start).map(e => { let row = ends.findIndex(end => end <= e.start); if (row < 0) row = ends.length; ends[row] = Math.max(e.end, e.start + minSeconds); return { ...e, row }; });
 }
 
 export async function renderTempo() {
-  const main = $('#main'); main.className = ''; main.replaceChildren();
-  const top = h('div', 'row'), sel = h('select'); sel.setAttribute('aria-label', 'Período');
-  [[0, 'ajustar aos dados'], [1, 'últimas 24 h'], [3, '3 dias'], [7, '7 dias'], [30, '30 dias']].forEach(([d, l]) => sel.append(new Option(String(l), String(d)))); sel.value = String(S.days == null ? 0 : S.days);
-  const lb = h('label', 'check'), cb = h('input'); cb.setAttribute('aria-label', 'Incluir sessões do painel e as muito curtas'); cb.type = 'checkbox'; cb.checked = !!S.showPanel; lb.append(cb, document.createTextNode(' incluir sessões do painel e as muito curtas'));
-  const rf = h('button', 'btn sm', 'Atualizar');
-  const zoomBox = h('div', 'tl-zoom'), zOut = h('button', 'btn sm ic', '−'), zIn = h('button', 'btn sm ic', '+'), zReset = h('button', 'btn sm', 'Tudo'), winLab = h('span', 'muted small num');
-  zOut.title = 'Afastar (Ctrl + roda do mouse, ou tecla −)'; zIn.title = 'Aproximar (Ctrl + roda do mouse, ou tecla +)'; zReset.title = 'Mostrar o período inteiro (tecla 0)';
-  zOut.setAttribute('aria-label', 'Afastar'); zIn.setAttribute('aria-label', 'Aproximar');
-  zoomBox.append(zOut, zIn, zReset, winLab);
-  top.append(rotulado('Período', sel), lb, rf, zoomBox); main.append(top);
-  const legenda = h('div', 'tl-legend');
-  [['s', 'sessões do Claude Code'], ['r', 'agentes do painel'], ['commit', 'commits'], ['ok', 'verificação ok'], ['bad', 'verificação com falha']].forEach(([k, t]) => { const i = h('span', 'tl-key'); i.append(h('i', 'k-' + k), document.createTextNode(t)); legenda.append(i); });
-  legenda.append(h('span', 'faint', 'Ctrl + roda aproxima · arrastar move · clique abre'));
-  main.append(legenda);
-  const card = h('div', 'tlcard'); main.append(card);
-  S.timers.push({ remove: hideTip });
-
-  /** @type {any} */ let d = null;
-  let full = [0, 1], win = [0, 1];
-  const spanOf = () => win[1] - win[0];
-  const X = (/** @type {number} */ t) => (t - win[0]) / spanOf() * 100;
-
-  /** Troca a janela visível, sempre dentro do período carregado. @param {number} a @param {number} b */
-  function setWindow(a, b) {
-    const span = Math.max(MIN_SPAN, Math.min(b - a, full[1] - full[0]));
-    a = Math.min(Math.max(a, full[0]), full[1] - span); win = [a, a + span]; draw();
+  const main = $('#main'); main.className = 'timeline-page'; main.replaceChildren();
+  const root = h('div', 'timeline-root'); main.append(root);
+  let data = null, events = [], full = [0, MIN_SPAN], win = [...full], selected = '', mode = 'chart', version = 0, alive = true, drag = null, frame = 0;
+  const intro = h('div', 'ov-intro'), title = h('div'); title.append(h('span', 'ov-kicker', 'Workspace / histórico'), h('h2', '', 'Linha do tempo'), h('p', '', 'Sessões, agentes e entregas na mesma escala.')); intro.append(title); root.append(intro);
+  const shell = h('div', 'chronos'), toolbar = h('div', 'chronos-toolbar'), leftTools = h('div', 'chronos-tools'), rightTools = h('div', 'chronos-tools'); toolbar.append(leftTools, rightTools); root.append(shell); shell.append(toolbar);
+  const period = h('select', 'chronos-select'); period.setAttribute('aria-label', 'Período'); [[0, 'Ajustar aos dados'], [1, 'Últimas 24 horas'], [3, '3 dias'], [7, '7 dias'], [30, '30 dias']].forEach(([v, l]) => period.append(new Option(String(l), String(v)))); period.value = String(S.days || 0);
+  const filter = h('select', 'chronos-select'); filter.setAttribute('aria-label', 'Tipo de evento'); [['all', 'Todos os eventos'], ['session', 'Sessões'], ['agent', 'Agentes'], ['commit', 'Commits'], ['check', 'Verificações']].forEach(([v, l]) => filter.append(new Option(l, v)));
+  const previous = button('←', { small: true, title: 'Janela anterior' }), next = button('→', { small: true, title: 'Próxima janela' }), out = button('−', { small: true, title: 'Afastar' }), inside = button('+', { small: true, title: 'Aproximar' }), fit = button('Período inteiro', { small: true }), view = button('Ver histórico', { small: true }), refresh = button('Atualizar', { small: true, onClick: () => load() }); leftTools.append(period, filter, previous, next); rightTools.append(out, inside, fit, view, refresh);
+  const panelLabel = h('label', 'check'), panelCheck = h('input'); panelCheck.type = 'checkbox'; panelCheck.checked = !!S.showPanel; panelLabel.append(panelCheck, document.createTextNode('Incluir sessões do painel e muito curtas')); shell.append(panelLabel);
+  const surface = h('section', 'timeline-surface'), top = h('div', 'chronos-title'), heading = h('h3', '', 'Trabalho no projeto'), readout = h('span', 'chronos-readout'); top.append(heading, readout); surface.append(top);
+  const legend = h('div', 'chronos-legend'); [['', 'Sessões'], ['agent', 'Agentes'], ['commit', 'Commit'], ['pass', 'Verificação passou'], ['fail', 'Verificação falhou']].forEach(([cls, label]) => { const key = h('span'); key.append(h('i', cls), document.createTextNode(label)); legend.append(key); }); surface.append(legend);
+  const stage = h('div'), miniTitle = h('div', 'chronos-mini-title'), spanLabel = h('span'), mini = h('div', 'chronos-mini'), miniMarks = h('div'), brush = h('div', 'chronos-brush'), details = h('div', 'chronos-details');
+  miniTitle.append(h('span', '', 'Visão do período · arraste para navegar'), spanLabel); mini.setAttribute('role', 'slider'); mini.tabIndex = 0; mini.setAttribute('aria-label', 'Início da janela temporal'); mini.append(miniMarks, brush); details.setAttribute('role', 'region'); details.setAttribute('aria-label', 'Evento selecionado'); surface.append(stage, miniTitle, mini, details); shell.append(surface, h('p', 'chronos-footer', 'Selecione uma faixa ou marcador para inspecionar. Proximidade no horário não prova relação causal entre agente, commit e verificação. Ctrl + roda aproxima; setas movem a janela.'));
+  const status = h('p', 'chronos-controls-note'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); shell.append(status);
+  const span = () => win[1] - win[0], x = seconds => (seconds - win[0]) / span() * 100;
+  function setWindow(a, b) { const size = Math.min(full[1] - full[0], Math.max(MIN_SPAN, b - a)); const start = Math.max(full[0], Math.min(full[1] - size, a)); win = [start, start + size]; draw(); }
+  function zoom(factor, fraction = 0.5) { const size = Math.min(full[1] - full[0], Math.max(MIN_SPAN, span() * factor)); const center = win[0] + fraction * span(); setWindow(center - fraction * size, center + (1 - fraction) * size); }
+  function choose(event) { selected = event.id; draw(); status.textContent = 'Selecionado: ' + event.name + ' · ' + time(event.start); }
+  function open(event) {
+    if (event.kind === 'session') { S.anSession = event.raw.id; go('analise'); }
+    else if (event.kind === 'agent') { if (event.raw.team) { S.selTeam = event.raw.team; S.sel = null; } else { S.sel = event.raw.id; S.selTeam = null; } go('conversa'); }
+    else if (event.kind === 'commit') { S.commitSel = event.raw.sha; go('commits'); }
+    else go('verificar');
   }
-  /** @param {number} factor @param {number} [frac] ponto fixo da janela (0 a 1) */
-  const zoom = (factor, frac = 0.5) => { const span = spanOf(), next = Math.max(MIN_SPAN, Math.min(span * factor, full[1] - full[0])), c = win[0] + frac * span; setWindow(c - frac * next, c - frac * next + next); };
-
+  function paintDetails() {
+    details.replaceChildren(); const event = events.find(e => e.id === selected); if (!event) { details.append(h('p', 'ov-note', 'Selecione um evento para ver os detalhes.')); return; }
+    const copy = h('div'), labels = { session: 'Sessão', agent: 'Agente', commit: 'Commit', check: 'Verificação' }; copy.append(h('span', 'chronos-kicker', labels[event.kind]), h('h3', '', event.name), h('p', '', event.who), h('p', '', event.detail), h('div', 'chronos-time', time(event.start) + (event.end > event.start ? ' — ' + time(event.end) + ' · ' + fmtDur((event.end - event.start) * 1000) : '')));
+    const actions = h('div', 'ov-actions'); actions.append(button({ session: 'Analisar sessão', agent: 'Abrir conversa', commit: 'Abrir commit', check: 'Abrir verificações' }[event.kind], { small: true, onClick: () => open(event) })); details.append(copy, actions);
+  }
   function draw() {
-    card.replaceChildren(); if (!d) return;
-    const sessions = d.sessions.filter((/** @type {any} */ x) => S.showPanel || (!x.panel && !(x.end - x.start < 30 && !x.agents))), runs = d.runs, span = spanOf();
-    const tl = h('div', 'tl'); tl.tabIndex = 0; tl.setAttribute('aria-label', 'Linha do tempo. Setas movem, + e − aproximam, 0 mostra tudo.'); card.append(tl);
-    const W = Math.max(300, card.clientWidth - 2 - LANE_LABEL), minSec = MIN_BAR_PX / W * span;
-    winLab.textContent = 'janela: ' + fmtDur(span * 1000); zIn.disabled = span <= MIN_SPAN + 0.5; zOut.disabled = spanOf() >= full[1] - full[0] - 0.5; zReset.disabled = zOut.disabled;
-    const vis = (/** @type {{ start: number, end: number }} */ x) => x.end >= win[0] && x.start <= win[1];
-    const step = STEPS.find(x => span / x <= 9) || 432000, ticks = /** @type {number[]} */ ([]);
-
-    const axis = h('div', 'tlane axis'); const axClip = h('div', 'tlclip'); axis.append(axClip); tl.append(axis);
-    for (let t = Math.ceil(win[0] / step) * step; t < win[1]; t += step) {
-      const dt = new Date(t * 1000), lab = step >= 86400 ? dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : dt.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
-      const tx = h('div', 'tick axis'); tx.style.left = X(t) + '%'; const sp = h('span', '', lab); tx.append(sp); axClip.append(tx); ticks.push(t);
-    }
-    /** @param {string} name @param {string} sub @param {number} height */
-    const addLane = (name, sub, height) => {
-      const lane = h('div', 'tlane'); lane.style.height = height + 'px'; const l = h('div', 'tlbl'); l.append(h('b', '', name), document.createTextNode(sub)); lane.append(l);
-      const clip = h('div', 'tlclip'); lane.append(clip); ticks.forEach(t => { const k = h('div', 'tick'); k.style.left = X(t) + '%'; clip.append(k); }); tl.append(lane); return clip;
-    };
-    /** @param {string} name @param {string} sub @param {any[]} all @param {string} kind @param {(it: any) => string} label @param {(it: any) => string[]} tipFn @param {(it: any) => void} click */
-    const barLane = (name, sub, all, kind, label, tipFn, click) => {
-      const items = all.filter(vis), n = packRows(items, minSec), clip = addLane(name, sub, n * 28 + 16);
-      items.forEach(it => {
-        const bar = h('div', 'tbar ' + kind, label(it)); bar.style.left = X(it.start) + '%'; bar.style.width = Math.max(MIN_BAR_PX / W * 100, (it.end - it.start) / span * 100) + '%'; bar.style.top = 8 + it.row * 28 + 'px';
-        const lines = tipFn(it); bar.tabIndex = 0; bar.setAttribute('role', 'button'); bar.setAttribute('aria-label', lines.join('. '));
-        bar.onmousemove = e => showTip(e, lines); bar.onmouseleave = hideTip; bar.onclick = () => click(it); bar.onkeydown = e => { if (e.key === 'Enter') click(it); }; clip.append(bar);
-      });
-      if (!items.length) clip.append(h('div', 'tl-empty muted small', all.length ? 'nada nesta janela (afaste ou arraste)' : 'nada neste período'));
-    };
-    const when = (/** @type {any} */ it) => new Date(it.start * 1000).toLocaleString('pt-BR') + ' → ' + new Date(it.end * 1000).toLocaleTimeString('pt-BR');
-    barLane('Sessões', sessions.length + ' do Claude Code', sessions.map((/** @type {any} */ x) => ({ ...x, end: Math.max(x.end, x.start + 60) })), 's', it => it.title, it => [it.title, it.agents + ' subagente(s)', when(it)], it => { S.anSession = it.id; go('analise'); });
-    barLane('Agentes do painel', runs.length + ' execução(ões)', runs.map((/** @type {any} */ x) => ({ ...x, end: Math.max(x.end, x.start + 60) })), 'r', it => it.agent.replace('garcom-', '') + ' · ' + (it.title || ''), it => [it.agent.replace('garcom-', '') + ' · ' + (it.title || ''), 'US$ ' + it.cost.toFixed(3) + ' · ' + it.status, when(it)], it => { if (it.team) { S.selTeam = it.team; S.sel = null; } else { S.sel = it.id; S.selTeam = null; } go('conversa'); });
-    const cl = addLane('Commits', d.commits.length + ' no período', 56);
-    d.commits.filter((/** @type {any} */ c) => c.t >= win[0] && c.t <= win[1]).forEach((/** @type {any} */ c) => {
-      const sz = Math.max(12, Math.min(28, 10 + Math.log2(1 + c.add + c.del) * 1.7)), dot = h('div', 'tdot commit'); dot.style.cssText = 'left:' + X(c.t) + '%;top:' + (28 - sz / 2) + 'px;width:' + sz + 'px;height:' + sz + 'px';
-      const lines = [c.short + ' ' + c.subject, '+' + c.add + ' −' + c.del]; dot.tabIndex = 0; dot.setAttribute('role', 'button'); dot.setAttribute('aria-label', lines.join('. '));
-      dot.onmousemove = e => showTip(e, lines); dot.onmouseleave = hideTip; dot.onclick = () => { S.commitSel = c.sha; go('commits'); }; dot.onkeydown = e => { if (e.key === 'Enter') dot.click(); }; cl.append(dot);
+    if (!alive || !root.isConnected || !data) return;
+    const focus = stage.contains(document.activeElement); stage.replaceChildren(); const total = full[1] - full[0];
+    readout.textContent = time(win[0]) + ' — ' + time(win[1]); spanLabel.textContent = fmtDur(span() * 1000) + ' visíveis'; inside.disabled = span() <= MIN_SPAN; out.disabled = fit.disabled = span() >= total; previous.disabled = win[0] <= full[0]; next.disabled = win[1] >= full[1]; view.textContent = mode === 'chart' ? 'Ver histórico' : 'Ver gráfico';
+    brush.style.left = (win[0] - full[0]) / total * 100 + '%'; brush.style.width = span() / total * 100 + '%'; mini.setAttribute('aria-valuemin', String(full[0])); mini.setAttribute('aria-valuemax', String(full[1] - span())); mini.setAttribute('aria-valuenow', String(win[0])); mini.setAttribute('aria-valuetext', time(win[0]) + ' a ' + time(win[1]));
+    const visible = events.filter(e => (filter.value === 'all' || e.kind === filter.value) && e.end >= win[0] && e.start <= win[1]);
+    if (mode === 'list') { visible.slice().sort((a, b) => b.start - a.start).forEach(e => { const row = h('div', 'chronos-listitem'), copy = h('div'); copy.append(h('strong', '', e.name), h('p', '', e.who)); row.append(h('span', 'chronos-time', time(e.start)), copy, button('Inspecionar', { small: true, onClick: () => choose(e) })); stage.append(row); }); if (!visible.length) stage.append(h('p', 'ov-empty', 'Nenhum evento nesta janela e filtro.')); paintDetails(); return; }
+    const chart = h('div', 'chronos-chart'), axis = h('div', 'chronos-axis'), grid = h('div', 'chronos-grid'); chart.tabIndex = 0; chart.setAttribute('aria-label', 'Linha do tempo. Setas movem, + e − aproximam, 0 mostra todo o período.'); chart.append(axis, grid);
+    const narrow = main.clientWidth < 700, width = Math.max(180, main.clientWidth - (narrow ? 60 : 210)), ticks = width < 500 ? 3 : 5;
+    for (let i = 0; i <= ticks; i++) { const seconds = win[0] + i * span() / ticks, tick = h('span', 'chronos-tick', span() > 86400 ? new Date(seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : clock(seconds)); tick.style.left = i / ticks * 100 + '%'; axis.append(tick); const line = h('i'); line.style.left = i / ticks * 100 + '%'; grid.append(line); }
+    [['session', 'Sessões', 'Contexto do trabalho'], ['agent', 'Agentes', 'Execuções e sobreposições'], ['commit', 'Commits', 'Mudanças registradas'], ['check', 'Verificações', 'Resultados observados']].filter(([kind]) => filter.value === 'all' || filter.value === kind).forEach(([kind, name, description]) => {
+      const lane = h('div', 'chronos-lane'), label = h('span', 'chronos-lane-label', name); label.append(h('small', '', description)); lane.append(label);
+      const laneEvents = timelineRows(visible.filter(e => e.kind === kind), (kind === 'commit' || kind === 'check' ? 30 : 8) / width * span()), count = Math.max(1, ...laneEvents.map(e => e.row + 1)), offset = narrow ? 30 : 0; lane.style.height = Math.max(82, count * 44 + 36) + offset + 'px';
+      laneEvents.forEach(e => { if (e.end > e.start) { const bar = h('button', 'chronos-bar ' + (kind === 'agent' ? 'agent' : '') + (selected === e.id ? ' selected' : '')); bar.type = 'button'; const left = Math.max(0, x(e.start)), right = Math.min(100, x(e.end)); bar.style.left = left + '%'; bar.style.width = Math.max(0, right - left) + '%'; bar.style.top = offset + 18 + e.row * 44 + 'px'; bar.append(h('span', '', e.name)); bar.setAttribute('aria-label', e.name + ' · ' + time(e.start) + ' a ' + time(e.end)); bar.setAttribute('aria-pressed', String(selected === e.id)); bar.onclick = () => choose(e); lane.append(bar); }
+        else { const point = h('button', 'chronos-point ' + (kind === 'check' ? e.raw.ok ? 'pass' : 'fail' : '') + (selected === e.id ? ' selected' : '')); point.type = 'button'; point.style.left = x(e.start) + '%'; point.style.top = offset + 20 + e.row * 44 + 'px'; point.setAttribute('aria-label', e.name + ' · ' + time(e.start) + ' · ' + e.who); point.setAttribute('aria-pressed', String(selected === e.id)); if (kind === 'check') point.append(h('em', '', e.raw.ok ? '✓' : '×')); point.onclick = () => choose(e); lane.append(point); }
+      }); if (!laneEvents.length) { const empty = h('span', 'chronos-empty', 'Sem eventos nesta janela'); empty.style.top = offset + 24 + 'px'; lane.append(empty); } chart.append(lane);
     });
-    const kl = addLane('Verificações', 'verify · tenant · doc', 52), yk = /** @type {Record<string, number>} */ ({ verify: 6, check_tenant: 20, doc_drift: 34 });
-    d.checks.filter((/** @type {any} */ c) => c.t >= win[0] && c.t <= win[1]).forEach((/** @type {any} */ c) => {
-      const dot = h('div', 'tdot ' + (c.ok ? 'ok' : 'bad')); dot.style.cssText = 'left:' + X(c.t) + '%;top:' + (yk[c.name] || 6) + 'px';
-      dot.onmousemove = e => showTip(e, [c.name + (c.ok ? ' ✓' : ' ✕'), c.summary]); dot.onmouseleave = hideTip; kl.append(dot);
-    });
-    if (d.t1 >= win[0] && d.t1 <= win[1]) { const nw = h('div', 'now'); nw.style.left = X(d.t1) + '%'; axClip.append(nw); }
-
+    const cursor = h('div', 'chronos-cursor'); chart.append(cursor); chart.onpointermove = e => { if (e.pointerType === 'touch') return; const rect = chart.getBoundingClientRect(), fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)); cursor.style.left = fraction * 100 + '%'; cursor.style.display = 'block'; readout.textContent = clock(win[0] + fraction * span()) + ' · ' + time(win[0]) + ' — ' + time(win[1]); }; chart.onpointerleave = () => { cursor.style.display = 'none'; readout.textContent = time(win[0]) + ' — ' + time(win[1]); };
+    chart.onkeydown = e => { if (e.target !== chart) return; if (['ArrowLeft', 'ArrowRight', '+', '=', '-', '0'].includes(e.key)) e.preventDefault(); if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { const shift = span() * 0.2 * (e.key === 'ArrowLeft' ? -1 : 1); setWindow(win[0] + shift, win[1] + shift); } else if (e.key === '+' || e.key === '=') zoom(.6); else if (e.key === '-') zoom(1.6); else if (e.key === '0') setWindow(full[0], full[1]); };
+    chart.addEventListener('wheel', e => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); const rect = chart.getBoundingClientRect(); zoom(e.deltaY < 0 ? .8 : 1.25, Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))); }, { passive: false });
+    stage.append(chart); if (focus) chart.focus(); paintDetails();
   }
-  /** Arrasto: redesenha no próximo quadro (sem perder o ponteiro). @param {number} a @param {number} b */
-  let raf = 0;
-  function setWindowQuiet(a, b) { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const hadFocus = document.activeElement?.classList.contains('tl'); setWindow(a, b); if (hadFocus) /** @type {HTMLElement | null} */ (card.querySelector('.tl'))?.focus(); }); }
-
-  // ----- zoom e arrasto (no cartão, que não é recriado a cada desenho) -----
-  const clip = () => /** @type {HTMLElement | null} */ (card.querySelector('.tlclip'));
-  card.addEventListener('wheel', e => {
-    if (!(e.ctrlKey || e.metaKey || (/** @type {HTMLElement} */ (e.target)).closest('.tlane:first-of-type'))) return;
-    e.preventDefault(); const r = clip()?.getBoundingClientRect(); zoom(e.deltaY < 0 ? 0.8 : 1.25, r ? Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) : 0.5);
-  }, { passive: false });
-  card.addEventListener('pointerdown', e => {
-    if ((/** @type {HTMLElement} */ (e.target)).closest('.tbar, .tdot') || e.button !== 0 || !clip()) return;
-    const x0 = e.clientX, w0 = [...win], per = spanOf() / /** @type {HTMLElement} */ (clip()).getBoundingClientRect().width; card.classList.add('panning');
-    const move = (/** @type {PointerEvent} */ ev) => { const dt = (x0 - ev.clientX) * per; setWindowQuiet(w0[0] + dt, w0[1] + dt); };
-    const up = () => { card.classList.remove('panning'); removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); };
-    addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
-  });
-  card.addEventListener('keydown', e => {
-    if (!(/** @type {HTMLElement} */ (e.target)).classList.contains('tl')) return;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const s = spanOf() * 0.2 * (e.key === 'ArrowLeft' ? -1 : 1); setWindowQuiet(win[0] + s, win[1] + s); }
-    else if (e.key === '+' || e.key === '=') { e.preventDefault(); zoom(0.7); } else if (e.key === '-') { e.preventDefault(); zoom(1.4); } else if (e.key === '0') { e.preventDefault(); setWindow(full[0], full[1]); }
-  });
-
-  zIn.onclick = () => zoom(0.6); zOut.onclick = () => zoom(1.6); zReset.onclick = () => setWindow(full[0], full[1]);
-  const load = guard(async () => {
-    S.days = parseInt(sel.value); S.showPanel = cb.checked; d = await api('timeline?days=' + (S.days || 30));
-    const sessions = d.sessions.filter((/** @type {any} */ x) => S.showPanel || (!x.panel && !(x.end - x.start < 30 && !x.agents)));
-    let t0 = d.t0;
-    if (!S.days) { const all = [...sessions.map((/** @type {any} */ x) => x.start), ...d.runs.map((/** @type {any} */ x) => x.start), ...d.commits.map((/** @type {any} */ x) => x.t), ...d.checks.map((/** @type {any} */ x) => x.t)]; const mn = all.length ? Math.min(...all) : d.t1 - 6 * 3600; t0 = Math.max(d.t0, Math.min(mn - (d.t1 - mn) * 0.04, d.t1 - 3 * 3600)); }
-    full = [t0, d.t1]; win = [t0, d.t1]; draw();
-  });
-  sel.onchange = load; cb.onchange = load; rf.onclick = load; await load();
+  function reset() {
+    events = timelineEvents(data, panelCheck.checked); const earliest = events.length ? Math.min(...events.map(e => e.start)) : data.t1 - 3 * 3600, start = Number(period.value) ? data.t0 : Math.max(data.t0, earliest - 120);
+    full = [start, Math.max(data.t1, start + MIN_SPAN)]; win = [...full]; if (!events.some(e => e.id === selected)) selected = events.at(-1)?.id || '';
+    miniMarks.replaceChildren(); const total = full[1] - full[0]; events.filter(e => e.end > e.start).forEach((e, i) => { const mark = h('i', 'chronos-mini-event ' + (e.kind === 'agent' ? 'agent' : '')); mark.style.left = Math.max(0, (e.start - full[0]) / total * 100) + '%'; mark.style.width = Math.max(.1, (e.end - Math.max(e.start, full[0])) / total * 100) + '%'; mark.style.top = (e.kind === 'session' ? 9 : 23 + i % 2 * 7) + 'px'; miniMarks.append(mark); }); draw();
+  }
+  async function load() { const current = ++version; refresh.disabled = true; status.textContent = 'Carregando histórico…';
+    try { const result = await api('timeline?days=' + (Number(period.value) || 30)); if (!alive || !root.isConnected || current !== version) return; data = result; S.days = Number(period.value); S.showPanel = panelCheck.checked; reset(); status.textContent = events.length + ' evento(s) disponíveis · sem atualização automática.'; }
+    catch (e) { if (alive && current === version && !isAbort(e)) { status.textContent = 'Não foi possível atualizar o histórico. Use Atualizar para tentar novamente.'; if (!data) stage.replaceChildren(h('p', 'ov-empty', 'Histórico indisponível.')); } }
+    finally { if (alive && current === version) refresh.disabled = false; }
+  }
+  previous.onclick = () => { const shift = span() * .4; setWindow(win[0] - shift, win[1] - shift); }; next.onclick = () => { const shift = span() * .4; setWindow(win[0] + shift, win[1] + shift); }; out.onclick = () => zoom(1.6); inside.onclick = () => zoom(.6); fit.onclick = () => setWindow(full[0], full[1]); view.onclick = () => { mode = mode === 'chart' ? 'list' : 'chart'; draw(); }; filter.onchange = draw; period.onchange = load; panelCheck.onchange = () => { S.showPanel = panelCheck.checked; if (data) reset(); };
+  mini.onpointerdown = e => { if (!data || e.button !== 0) return; const box = mini.getBoundingClientRect(); drag = { x: e.clientX, start: win[0], size: span(), width: box.width }; mini.setPointerCapture(e.pointerId); const at = full[0] + (e.clientX - box.left) / box.width * (full[1] - full[0]); if (at < win[0] || at > win[1]) { setWindow(at - drag.size / 2, at + drag.size / 2); drag.start = win[0]; } };
+  mini.onpointermove = e => { if (!drag) return; const start = drag.start + (e.clientX - drag.x) / drag.width * (full[1] - full[0]); setWindow(start, start + drag.size); }; mini.onpointerup = mini.onpointercancel = () => { drag = null; }; mini.onkeydown = e => { if (!data) return; if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const shift = span() * .15 * (e.key === 'ArrowLeft' ? -1 : 1); setWindow(win[0] + shift, win[1] + shift); } };
+  let pan = null;
+  stage.onpointerdown = e => { if (!data || e.button !== 0 || !(e.target instanceof Element) || e.target.closest('button') || !e.target.closest('.chronos-chart')) return; const chart = stage.querySelector('.chronos-chart'); if (!chart) return; pan = { x: e.clientX, start: win[0], end: win[1], perPixel: span() / chart.getBoundingClientRect().width }; stage.setPointerCapture(e.pointerId); };
+  stage.onpointermove = e => { if (!pan) return; const shift = (pan.x - e.clientX) * pan.perPixel; setWindow(pan.start + shift, pan.end + shift); };
+  stage.onpointerup = stage.onpointercancel = () => { pan = null; };
+  const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(draw); }); observer?.observe(main);
+  S.timers.push({ remove() { alive = false; version++; observer?.disconnect(); cancelAnimationFrame(frame); drag = null; } }); await load();
 }

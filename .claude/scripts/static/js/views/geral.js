@@ -1,4 +1,4 @@
-// @ts-check
+﻿// @ts-check
 import { api } from '../api.js';
 import { $, h, svgEl } from '../lib/dom.js';
 import { ago } from '../lib/format.js';
@@ -7,7 +7,7 @@ import { S, agentCounts } from '../store.js';
 import { refreshStatus } from '../status.js';
 import { badge } from '../ui/badge.js';
 import { button } from '../ui/button.js';
-import { section, stats } from '../ui/section.js';
+import { section } from '../ui/section.js';
 import { toast } from '../ui/toast.js';
 import { loadRuns } from './conversa.js';
 
@@ -59,89 +59,64 @@ function item(onOpen) {
 }
 
 export async function renderGeral() {
-  const main = $('#main'); main.className = ''; main.replaceChildren();
-  const wrap = h('div'); main.append(wrap);
-  await loadRuns(); try { await refreshStatus(); } catch (e) { /* o Socket.IO atualiza em seguida */ }
-  const [tasks, dec, health, graph, over] = (await Promise.allSettled([api('tasks'), api('decisoes'), api('health'), api('graph?limit=1'), api('gh/overview')])).map(settled);
+  const main = $('#main'); main.className = 'overview-page'; main.replaceChildren();
+  const wrap = h('div', 'overview'); main.append(wrap);
+  const data = await Promise.allSettled([loadRuns(), refreshStatus(), api('tasks'), api('decisoes'), api('health'), api('graph?limit=1'), api('gh/overview')]);
+  if (!wrap.isConnected) return;
+  const tasks = settled(data[2]), dec = settled(data[3]), health = settled(data[4]), graph = settled(data[5]), over = settled(data[6]);
   const gh = over && !over.unavailable ? over : null;
-  const tarefas = /** @type {any[]} */ (tasks ? tasks.tasks : []), pend = /** @type {any[]} */ (dec ? dec.pendentes : []);
-  const ids = new Set(pend.map(d => d.id)), ativas = tarefas.filter(t => !atendida(t));
-  const feitas = tarefas.filter(t => t.status === 'feita').length, pronta = prontas(tarefas, ids);
-  const faseAtual = FASES.find(f => ativas.some(t => t.fase === f)) || '';
-  const sp = spend7();
-
-  // ----- linha de abertura: data, status e as ações -----
-  const top = h('div', 'ov-top'), when = h('span', 'when', new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })), live = h('span', 'when');
-  const mais = h('select'); mais.setAttribute('aria-label', 'Outras ações'); mais.append(new Option('Mais ações…', ''));
-  /** @type {[string, () => void][]} */
-  const acoes = [['Executar uma receita de agentes', () => go('orquestrar')], ['Rodar a verificação do projeto', () => go('verificar')], ['Explorar os arquivos', () => go('arquivos')]];
-  acoes.forEach(([t], i) => mais.append(new Option(t, String(i))));
-  mais.onchange = () => { const i = mais.value; mais.value = ''; if (i) acoes[Number(i)][1](); };
-  const g = h('span', 'grow'); top.append(when, live, g, button('Nova conversa', { variant: 'primary', icon: 'chat', onClick: () => { S.sel = null; go('conversa'); } }), mais); wrap.append(top);
-
-  // ----- números de destaque (no máximo 4) -----
-  const numeros = h('div'), pintaNumeros = () => {
-    const c = agentCounts(), lim = S.spend ? S.spend.limite : 5, hoje = S.spend ? S.spend.hoje : 0;
-    numeros.replaceChildren(stats([
-      { label: 'agentes rodando', value: c.total, sub: `${c.panel} no painel · ${c.live} na sessão interativa` },
-      { label: `tarefas feitas${faseAtual ? ' · fase ' + faseAtual : ''}`, value: `${feitas}/${tarefas.length - tarefas.filter(t => t.status === 'arquivada').length}`, sub: `${pronta.length} prontas para começar` },
-      { label: 'decisões pendentes', value: pend.length, sub: dec && dec.tarefas_bloqueadas.length ? `bloqueiam ${dec.tarefas_bloqueadas.length} tarefas` : '' },
-      { label: 'gasto em 7 dias (US$)', value: sp.total.toFixed(2).replace('.', ','), sub: `hoje US$ ${hoje.toFixed(2)} de ${lim.toFixed(2)}` },
-    ]));
-    live.textContent = document.body.dataset.rt === 'on' ? '· ao vivo' : '· reconectando…';
-  };
-  pintaNumeros(); wrap.append(numeros);
-  const onStatus = () => pintaNumeros(); document.addEventListener('painel:status', onStatus); S.timers.push({ remove: () => document.removeEventListener('painel:status', onStatus) });
-
-  // ----- Agora -----
-  const fazendo = tarefas.filter(t => t.status === 'fazendo'), prox = pronta.slice(0, 3);
-  if (fazendo.length || prox.length || pend.length) {
-    const s = section('Agora', { actions: [button('Ver tarefas', { variant: 'ghost', small: true, onClick: () => go('tarefas') })] });
-    /** @param {string} t @param {any[]} l */
-    const bloco = (t, l) => { if (!l.length) return; s.body.append(h('div', 'ov-sub', t)); l.forEach(x => { const r = item(() => go('tarefas', '', 'q=' + x.id)); r.append(h('span', 'id', x.id), h('span', 't', x.titulo), badge(x.prioridade)); s.body.append(r); }); };
-    bloco('Em andamento', fazendo); bloco('Próximas', prox);
-    if (pend.length) {
-      s.body.append(h('div', 'ov-sub', `Decisões pendentes (${pend.length})`));
-      pend.slice(0, 3).forEach(d => { const r = item(() => go('decisoes')); r.append(h('span', 'id', d.id), h('span', 't', d.titulo), d.bloqueia.length ? badge(`bloqueia ${d.bloqueia.length}`, 'warn') : h('span')); s.body.append(r); });
-      if (dec && dec.tarefas_bloqueadas.length) s.body.append(h('p', 'small muted', `${pend.length} decisões pendentes bloqueiam ${dec.tarefas_bloqueadas.length} tarefas.`));
-    }
-    s.body.classList.add('list'); wrap.append(s.el);
+  const tarefas = tasks ? tasks.tasks : [], pend = dec ? dec.pendentes : [];
+  const ids = new Set(pend.map(d => d.id)), pronta = dec ? prontas(tarefas, ids) : [], fazendo = tarefas.filter(t => t.status === 'fazendo');
+  const fase = FASES.find(f => tarefas.some(t => !atendida(t) && t.fase === f));
+  const action = (label, target, fn) => button(label, { small: true, onClick: fn || (() => go(target)) });
+  const empty = (box, text) => box.append(h('p', 'ov-empty', text));
+  const unavailable = (box, text) => { const n = h('div', 'ov-unavailable'); n.append(h('p', '', text), action('Tentar novamente', 'visao-geral')); box.append(n); };
+  const intro = h('div', 'ov-intro'), title = h('div'); title.append(h('span', 'ov-kicker', 'Workspace / desenvolvimento'), h('h2', '', 'garcom-NFC'), h('p', '', 'Visão geral do desenvolvimento'));
+  const actions = h('div', 'ov-actions'); actions.append(action('Verificar projeto', 'verificar'), button('Nova conversa', { variant: 'primary', onClick: () => { S.sel = null; S.selTeam = null; go('conversa'); } })); intro.append(title, actions); wrap.append(intro);
+  const summary = h('div', 'ov-summary'); wrap.append(summary);
+  const layout = h('div', 'ov-layout'), work = h('div'), side = h('div', 'ov-side'); layout.append(work, side); wrap.append(layout);
+  const trabalho = section('Trabalho', { actions: [action('Todas as tarefas', 'tarefas')] }); work.append(trabalho.el);
+  if (!dec) unavailable(trabalho.body, 'Decisões indisponíveis. Os bloqueios das tarefas não puderam ser confirmados.');
+  pend.slice(0, 3).forEach(d => { const block = h('div', 'ov-blocker'); const blocked = d.bloqueia || []; block.append(h('span', 'ov-label', 'Decisão pendente · ' + d.id), h('h3', '', d.titulo), h('p', '', blocked.length ? `Bloqueia ${blocked.length} tarefa(s): ${blocked.join(', ')}.` : 'Aguardando definição.'), action('Abrir decisão', 'decisoes')); trabalho.body.append(block); });
+  if (dec && dec.tarefas_bloqueadas.length) trabalho.body.append(h('p', 'ov-note', `${pend.length} decisão(ões) · ${dec.tarefas_bloqueadas.length} tarefa(s) bloqueada(s).`));
+  const taskList = (label, list) => { if (!list.length) return; trabalho.body.append(h('h3', 'ov-subtitle', label)); list.forEach(t => { const b = action('', '', () => go('tarefas', '', 'q=' + encodeURIComponent(t.id))); b.className = 'ov-task'; b.append(h('span', 'ov-id', t.id), h('span', 'ov-task-title', t.titulo), badge(t.prioridade)); trabalho.body.append(b); }); };
+  if (!tasks) unavailable(trabalho.body, 'Tarefas indisponíveis.');
+  else { taskList('Em andamento', fazendo); taskList('Prontas para começar · ' + pronta.length, pronta.slice(0, 3)); if (!fazendo.length && !pronta.length) empty(trabalho.body, dec ? 'Nenhuma tarefa em andamento ou pronta para começar.' : 'Aguardando confirmação dos bloqueios.'); }
+  const projeto = section('Código e entrega', { actions: [action('GitHub', 'github')] }); work.append(projeto.el);
+  const commit = graph && graph.commits && graph.commits[0];
+  if (!graph) unavailable(projeto.body, 'Histórico de commits indisponível.');
+  else if (commit) { const r = h('div', 'ov-entry'), t = h('div', 'ov-entry-text'); t.append(h('span', 'ov-label', 'Último commit'), h('h3', '', commit.subject), h('p', 'ov-note', `${commit.short} · ${commit.author} · ${ago(commit.ts)} atrás`)); r.append(t); const ci = gh && ciBadge((gh.runs_by_sha || {})[commit.sha] || gh.latest_run); if (ci) r.append(ci); r.append(action('Ver commit', '', () => { S.commitSel = commit.sha; go('commits'); })); projeto.body.append(r); }
+  else empty(projeto.body, 'Nenhum commit encontrado.');
+  if (!gh) empty(projeto.body, 'GitHub não configurado ou indisponível.');
+  else { const prs = gh.open_prs || []; if (!prs.length) empty(projeto.body, 'Nenhum pull request aberto.'); prs.slice(0, 5).forEach(p => { const r = h('div', 'ov-entry'), t = h('div', 'ov-entry-text'); t.append(h('span', 'ov-label', 'Pull request aberto'), h('h3', '', '#' + p.number + ' · ' + p.title)); r.append(t); const ci = ciBadge({ status: p.checks === 'pending' ? 'in_progress' : 'completed', conclusion: p.checks === 'success' ? 'success' : p.checks === 'failure' ? 'failure' : null }); if (ci) r.append(ci); r.append(action('Revisar', 'github')); projeto.body.append(r); }); }
+  const files = section('Arquivos que pedem atenção', { actions: [action('Análise completa', 'saude-do-codigo')] }); work.append(files.el);
+  if (!health) unavailable(files.body, 'Análise indisponível. Isso não significa ausência de problemas.');
+  else { const priorities = health.priorities || []; if (!priorities.length) empty(files.body, 'Nenhum arquivo pede atenção nos dados disponíveis.'); priorities.slice(0, 4).forEach(p => { const r = h('div', 'ov-entry'), t = h('div', 'ov-entry-text'); t.append(h('h3', 'ov-path', p.path), h('p', '', Array.isArray(p.advice) ? p.advice.join(' ') : String(p.advice || 'Veja as métricas na análise completa.'))); r.append(t, badge(p.level, p.level === 'alto' ? 'err' : p.level === 'ok' ? 'ok' : 'warn'), action('Abrir arquivo', '', () => go('arquivos', '', 'path=' + encPath('back-end/' + p.path)))); files.body.append(r); }); }
+  const conversations = section('Conversas recentes', { actions: [action('Todas', 'conversa')] }); side.append(conversations.el);
+  const spending = section('Gastos do painel'); side.append(spending.el);
+  function paint() {
+    if (!wrap.isConnected) return;
+    const counts = agentCounts(); summary.replaceChildren();
+    summary.append(h('span', '', S.statusAt ? `${counts.total} agentes · ${counts.panel} painel / ${counts.live} sessão` : 'Agentes indisponíveis'), h('span', '', tasks ? `Tarefas ${tarefas.filter(t => t.status === 'feita').length} / ${tarefas.filter(t => t.status !== 'arquivada').length}${fase ? ' · ' + fase : ''}` : 'Tarefas indisponíveis'), h('span', '', dec ? `${pend.length} decisão(ões) pendente(s)` : 'Decisões indisponíveis'));
+    conversations.body.replaceChildren();
+    const recent = S.runs.filter(r => !r.pipeline).slice(0, 5);
+    if (!recent.length) empty(conversations.body, data[0].status === 'rejected' ? 'Conversas indisponíveis.' : 'Nenhuma conversa iniciada pelo painel.');
+    recent.forEach(r => { const b = action('', '', () => { S.sel = r.id; S.selTeam = null; go('conversa'); }); b.className = 'ov-conversation'; const top = h('span', 'ov-entry'); top.append(h('strong', '', r.title || '(sem título)'), badge(r.status, r.status === 'erro' ? 'err' : r.status === 'rodando' ? 'accent' : 'neutral')); b.append(top, h('span', 'ov-note', `${r.agent} · US$ ${Number(r.cost || 0).toFixed(3)}`)); conversations.body.append(b); });
+    const links = h('div', 'ov-actions'); links.append(action('Sessão interativa', 'ao-vivo'), action('Receitas', 'orquestrar')); conversations.body.append(links);
+    if (spending.body.querySelector('form')) return;
+    spending.body.replaceChildren();
+    if (!S.spend) { unavailable(spending.body, 'Gastos indisponíveis.'); return; }
+    const today = Number(S.spend.hoje), limit = Number(S.spend.limite), sp = spend7();
+    const amounts = h('div', 'ov-entry'), a = h('div'), b = h('div'); a.append(h('span', 'ov-label', 'Hoje'), h('div', 'ov-money', 'US$ ' + today.toFixed(2))); b.append(h('span', 'ov-label', 'Limite diário'), h('div', '', 'US$ ' + limit.toFixed(2))); amounts.append(a, b); spending.body.append(amounts);
+    const track = h('div', 'progress'), fill = h('i'); fill.style.width = Math.min(100, limit > 0 ? today / limit * 100 : 0) + '%'; track.append(fill); spending.body.append(track);
+    const controls = h('div', 'ov-entry'); controls.append(h('span', 'ov-note', limit > 0 ? Math.round(today / limit * 100) + '% utilizado' : 'Limite indisponível'), action('Ajustar limite', '', () => editLimit(limit))); spending.body.append(controls, h('h3', 'ov-subtitle', 'Últimos 7 dias · US$ ' + sp.total.toFixed(2)), linha(sp), h('p', 'ov-note', 'Somente conversas iniciadas pelo painel. A sessão interativa não está incluída.'), action('Analisar custos por sessão', 'analise'));
   }
-
-  // ----- Projeto -----
-  const ultimo = graph && graph.commits && graph.commits[0], prs = gh ? /** @type {any[]} */ (gh.open_prs || []) : [];
-  const prio = health && health.priorities ? /** @type {any[]} */ (health.priorities) : [];
-  if (ultimo || prs.length || prio.length) {
-    const s = section('Projeto');
-    if (ultimo) {
-      s.body.append(h('div', 'ov-sub', 'Último commit'));
-      const r = item(() => { S.commitSel = ultimo.sha; go('commits'); }), run = gh && (gh.runs_by_sha && gh.runs_by_sha[ultimo.sha] ? gh.runs_by_sha[ultimo.sha] : gh.latest_run);
-      r.append(h('span', 'id', ultimo.short), h('span', 't', ultimo.subject), ciBadge(run) || h('span', 'tiny faint', gh ? '' : 'GitHub não configurado'), h('span', 'tiny faint', `${ultimo.author} · ${ago(ultimo.ts)} atrás`)); s.body.append(r);
-    }
-    if (prs.length) {
-      s.body.append(h('div', 'ov-sub', `Pull requests abertos (${prs.length})`));
-      prs.slice(0, 5).forEach(p => { const r = item(() => go('github')); r.append(h('span', 'id', '#' + p.number), h('span', 't', p.title), ciBadge({ status: p.checks === 'pending' ? 'in_progress' : 'completed', conclusion: p.checks === 'success' ? 'success' : p.checks === 'failure' ? 'failure' : null }) || h('span')); s.body.append(r); });
-    }
-    if (prio.length) {
-      s.body.append(h('div', 'ov-sub', 'Arquivos que pedem atenção'));
-      prio.slice(0, 4).forEach(p => { const r = item(() => go('arquivos', '', 'path=' + encPath('back-end/' + p.path))); r.append(h('span', 't mono', p.path.split('/').pop()), badge(p.level, p.level === 'alto' ? 'err' : p.level === 'ok' ? 'ok' : 'warn'), h('span', 'tiny faint ellipsis', p.advice ? String(p.advice).slice(0, 60) : '')); s.body.append(r); });
-    }
-    s.body.classList.add('list'); wrap.append(s.el);
+  function editLimit(current) {
+    const form = h('form', 'ov-budget-form'), label = h('label', '', 'Limite diário (US$)'), input = h('input'); input.type = 'number'; input.min = '0.01'; input.step = '0.01'; input.required = true; input.value = String(current); label.append(input);
+    const save = button('Salvar limite'), cancel = button('Cancelar', { onClick: () => { form.remove(); paint(); } }), error = h('p', 'err-t'); error.setAttribute('role', 'alert'); const controls = h('div', 'ov-actions'); controls.append(save, cancel); form.append(label, controls, error); spending.body.replaceChildren(form);
+    const submit = async e => { e.preventDefault(); if (!form.reportValidity()) return; save.disabled = true; cancel.disabled = true; try { const value = input.valueAsNumber; await api('settings', 'PUT', { limite_dia: value }); if (S.spend) S.spend.limite = value; form.remove(); paint(); toast('Limite atualizado'); } catch (e) { error.textContent = e instanceof Error ? e.message : String(e); } finally { save.disabled = false; cancel.disabled = false; } }; form.onsubmit = submit; save.onclick = submit; input.focus();
   }
-
-  // ----- Gasto -----
-  const gs = section('Gasto', { meta: `limite diário US$ ${(S.spend ? S.spend.limite : 5).toFixed(2)}`, actions: [button('Ajustar limite', { variant: 'ghost', small: true, onClick: async () => {
-    const v = prompt('Limite diário do painel (US$):', String(S.spend ? S.spend.limite : 5)); if (!v) return;
-    try { await api('settings', 'PUT', { limite_dia: parseFloat(v) }); toast('limite atualizado'); renderGeral(); } catch (e) { toast(e instanceof Error ? e.message : String(e), true); }
-  } })] });
-  const lim = S.spend ? S.spend.limite : 5, hoje = S.spend ? S.spend.hoje : 0, bar = h('div', 'progress'), fill = h('i'); fill.style.width = Math.min(100, hoje / lim * 100) + '%'; bar.append(fill);
-  gs.body.append(h('div', 'small', `Hoje US$ ${hoje.toFixed(2)} de US$ ${lim.toFixed(2)}`), bar, linha(sp), h('div', 'tiny faint', 'Últimos 7 dias, só das conversas iniciadas pelo painel.')); wrap.append(gs.el);
-
-  // ----- conversas recentes (só se houver) -----
-  const rl = S.runs.filter(r => !r.pipeline).slice(0, 5);
-  if (rl.length) {
-    const s = section('Conversas recentes', { actions: [button('Abrir Conversa', { variant: 'ghost', small: true, onClick: () => go('conversa') })] });
-    rl.forEach(r => { const row = item(() => { S.sel = r.id; go('conversa'); }); row.append(h('span', 't', r.title || '(sem título)'), h('span', 'tiny faint', `${r.agent} · US$ ${r.cost.toFixed(3)}`), badge(r.status, r.status === 'rodando' ? 'accent' : r.status === 'erro' ? 'err' : 'neutral')); s.body.append(row); });
-    s.body.classList.add('list'); wrap.append(s.el);
-  }
+  paint(); document.addEventListener('painel:status', paint); S.timers.push({ remove: () => document.removeEventListener('painel:status', paint) });
+  const foot = h('div', 'ov-actions ov-footer'); foot.append(action('Executar receita', 'orquestrar'), action('Explorar arquivos', 'arquivos')); wrap.append(foot);
+  if (matchMedia('(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference)').matches) wrap.addEventListener('pointermove', e => { const panel = e.target instanceof Element ? e.target.closest('.section') : null; if (!(panel instanceof HTMLElement)) return; const box = panel.getBoundingClientRect(); panel.style.setProperty('--ov-x', ((e.clientX - box.left) / box.width * 100).toFixed(1) + '%'); panel.style.setProperty('--ov-y', ((e.clientY - box.top) / box.height * 100).toFixed(1) + '%'); });
 }
