@@ -1,0 +1,19 @@
+{
+  "_leia": "Só documentação: o ai_mode.py usa estes dados. Scripts são adicionados apenas se ainda não existirem; o 'test' substitui apenas o texto padrão do npm.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:db:up": "docker compose --profile test up -d --wait db-test",
+    "test:db:down": "docker compose --profile test rm -sf db-test",
+    "lint": "biome lint src tests prisma/seed.ts",
+    "format": "biome format --write src tests prisma/seed.ts",
+    "format:check": "biome format src tests prisma/seed.ts",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "devDependencies": [
+    "vitest",
+    "supertest",
+    "@types/supertest",
+    "@biomejs/biome"
+  ]
+}

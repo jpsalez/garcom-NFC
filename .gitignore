@@ -1,2 +1,20 @@
-.claude/
 .vscode/
+
+# .claude: versionamos o ferramental (agentes, skills, scripts, painel, conhecimento) e deixamos de fora o que é local ou pesado
+.claude/*
+!.claude/CLAUDE.md
+!.claude/settings.json
+!.claude/hooks.template.json
+!.claude/prompts.md
+!.claude/agents/
+!.claude/skills/
+!.claude/scripts/
+!.claude/knowledge/
+!.claude/ai-mode/
+.claude/ai-mode/state/
+!.claude/painel/
+.claude/painel/*
+!.claude/painel/dicionario.json
+!.claude/painel/recipes.json
+!.claude/painel/AUDITORIA.md
+**/__pycache__/

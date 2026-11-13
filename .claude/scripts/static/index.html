@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel garcom-NFC</title>
+<meta name="panel-token" content="__TOKEN__">
+<meta name="build" content="__BUILD__">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%239cc455'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/css/tokens.css">
+<link rel="stylesheet" href="/static/css/base.css">
+<link rel="stylesheet" href="/static/css/ui.css">
+<link rel="stylesheet" href="/static/css/code.css">
+<link rel="stylesheet" href="/static/css/git.css">
+<link rel="stylesheet" href="/static/css/github.css">
+<link rel="stylesheet" href="/static/css/insights.css">
+<link rel="stylesheet" href="/static/css/shell.css">
+<link rel="stylesheet" href="/static/css/tarefas.css">
+<link rel="stylesheet" href="/static/css/observar.css">
+</head><body>
+<nav aria-label="Principal">
+  <div class="logo"><i id="logoi"></i><span>Painel</span></div>
+  <div id="menu"></div>
+  <div class="sp"></div>
+  <button class="navtoggle" id="navtoggle" type="button" aria-label="Recolher o menu" aria-pressed="false"></button>
+  <div class="foot" id="foot">garcom-NFC</div>
+</nav>
+<div class="shell">
+  <header class="top">
+    <div class="titles"><h1 id="title">Visão geral</h1><div class="sub" id="sub"></div></div>
+    <div class="chips"><span id="chips" class="row" role="status" aria-live="polite"></span><button class="btn ghost icon" id="theme" type="button" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro"></button></div>
+  </header>
+  <main id="main" tabindex="-1" aria-live="polite"></main>
+</div>
+<script type="module" src="/static/js/main.js"></script>
+</body></html>

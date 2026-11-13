@@ -1,0 +1,49 @@
+/* Saúde: resumo, prioridades, mapa de hotspots, complexidade, dependências e acoplamento. */
+.lv { display: inline-flex; align-items: center; height: 20px; padding: 0 var(--s2); border-radius: var(--r1); font-size: var(--fs-12); font-weight: var(--fw-medium); white-space: nowrap; }
+.lv.ok { background: var(--ok-soft); color: var(--ok); } .lv.atencao { background: var(--warn-soft); color: var(--warn); } .lv.alto { background: var(--err-soft); color: var(--err); }
+.band { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-3); } .band i { display: block; }
+.band .ok { background: var(--ok); } .band .warn { background: var(--warn); } .band .bad { background: var(--err); }
+.ins-sec { margin-bottom: var(--s6); } .ins-sec .head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s1); } .ins-sec .head h3 { flex: 1; }
+.short { border-left: 2px solid var(--warn); padding: var(--s1) var(--s3); margin: var(--s2) 0; }
+.prio { padding: var(--s4) 0; border-top: 1px solid var(--border); } .prio:first-child { border-top: 0; }
+.prio ul { margin: var(--s2) 0 0; padding-left: var(--s4); color: var(--text-2); } .prio li { margin: var(--s1) 0; }
+.def { display: grid; grid-template-columns: 200px 1fr; gap: var(--s1) var(--s5); padding: var(--s3) 0; border-bottom: 1px solid var(--border); } .def b { font-weight: var(--fw-medium); }
+.def .lm { grid-column: 2; font: var(--fs-12) var(--mono); color: var(--text-3); }
+.dots { display: flex; gap: 3px; flex-wrap: wrap; } .dots i { width: 9px; height: 9px; border-radius: 50%; display: block; background: var(--ok); } .dots i.no { background: var(--err); }
+.ccbar { position: relative; height: 8px; background: var(--surface-3); border-radius: 4px; } .ccbar i { display: block; height: 100%; border-radius: 4px; background: var(--ok); }
+.ccbar i.w { background: var(--warn); } .ccbar i.b { background: var(--err); } .ccbar u { position: absolute; top: -3px; bottom: -3px; border-left: 1px dashed var(--text-3); }
+.bars { display: flex; flex-direction: column; gap: var(--s1); } .barrow { display: grid; grid-template-columns: 150px 1fr 120px; gap: var(--s3); align-items: center; font-size: var(--fs-13); }
+.barrow .lb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .barrow .tr { height: 8px; background: var(--surface-3); border-radius: 4px; overflow: hidden; } .barrow .br { height: 100%; background: var(--viz-3); }
+/* treemap */
+.tm { display: block; width: 100%; height: auto; max-height: 70vh; margin-top: var(--s3); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); }
+.tm text { font: 10px var(--mono); fill: var(--text-1); pointer-events: none; }
+.tm-dir rect { fill: none; stroke: var(--border-strong); stroke-width: 1; } .tm-dir text { fill: var(--text-2); font-weight: var(--fw-semibold); }
+.tm-leaf { cursor: pointer; outline: none; } .tm-leaf rect { stroke: var(--bg); stroke-width: 1; }
+.tm-leaf.hot text { fill: #fff; paint-order: stroke; stroke: rgba(0, 0, 0, .45); stroke-width: 2px; }
+.tm-leaf:hover rect { stroke: var(--text-1); } .tm-leaf:focus-visible rect { stroke: var(--focus); stroke-width: 2.5; }
+.tm-leaf.lv-atencao rect { stroke: var(--warn); stroke-width: 1.5; } .tm-leaf.lv-alto rect { stroke: var(--err); stroke-width: 2; }
+.tm-legend { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; margin-top: var(--s2); font-size: var(--fs-12); color: var(--text-2); }
+.tm-grad { display: inline-block; width: 140px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--surface-3), var(--warn), var(--err)); }
+/* complexidade */
+.trend-svg { display: block; width: 100%; height: auto; margin-top: var(--s2); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); }
+.tr-ax { stroke: var(--border-strong); } .tr-th { stroke-dasharray: 4 4; stroke-width: 1; } .tr-th.th10 { stroke: var(--warn); } .tr-th.th20 { stroke: var(--err); }
+.tr-lb { font: 10px var(--mono); fill: var(--text-3); }
+.tr-line { cursor: pointer; transition: opacity var(--dur); } .tr-pt { cursor: pointer; stroke: var(--surface); stroke-width: 1.5; transition: opacity var(--dur); } .tr-pt:hover, .tr-pt:focus-visible { r: 6; outline: none; stroke: var(--text-1); }
+.tr-leg { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px var(--s3); margin-top: var(--s3); }
+.tr-item { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: var(--s2); padding: var(--s1) var(--s2); border-radius: var(--r1); font-size: var(--fs-12); }
+.tr-item:hover, .tr-item:focus-visible { background: var(--hover); } .tr-item:focus-visible { outline: 2px solid var(--focus); }
+.tr-item i { width: 10px; height: 10px; border-radius: 50%; flex: none; } .tr-item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); }
+/* dependências */
+.deps { display: grid; grid-template-columns: minmax(300px, 460px) minmax(0, 1fr); gap: var(--s5); align-items: start; margin-top: var(--s2); } @media (max-width: 900px) { .deps { grid-template-columns: 1fr; } }
+.deps-svg { width: 100%; height: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); }
+.dp-edge { stroke: var(--text-3); opacity: .7; } .dp-edge.cyc { stroke: var(--err); opacity: .85; } .dp-edge:hover { opacity: 1; stroke-width: 3.5; }
+.dp-node { cursor: pointer; outline: none; } .dp-node circle { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.dp-node.cyc circle { fill: var(--err-soft); stroke: var(--err); } .dp-node.high circle { stroke: var(--warn); stroke-width: 3.5; }
+.dp-node text { font: 10px var(--mono); fill: var(--text-1); pointer-events: none; } .dp-node:hover circle, .dp-node:focus-visible circle, .dp-node.sel circle { stroke: var(--text-1); }
+.deps-col { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; } .deps-info { display: flex; flex-direction: column; gap: var(--s2); align-items: flex-start; }
+.ok-line { color: var(--ok); } .deps-side h4 { margin: 0 0 var(--s1); font-size: var(--fs-16); } .deps-side .ctx-link { display: flex; gap: var(--s2); }
+/* acoplamento */
+.coup .cbar { display: inline-block; vertical-align: middle; width: 70px; height: 6px; border-radius: 3px; background: var(--surface-3); margin-right: var(--s2); overflow: hidden; }
+.coup .cbar i { display: block; height: 100%; background: var(--viz-3); } .coup td .ctx-link { display: block; padding: 2px var(--s2); }
+/* abas com margem negativa geravam barra de rolagem vertical (ui.css) */
+.tabs { overflow-y: hidden; }

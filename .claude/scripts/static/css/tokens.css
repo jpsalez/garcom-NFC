@@ -1,0 +1,56 @@
+/* Tokens do painel: a ÚNICA fonte de espaço, tipo, forma, movimento e cor. Nenhum outro CSS define cor ou medida solta. */
+:root {
+  /* espaço (4 · 8 · 12 · 16 · 24 · 32 · 48) */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+  /* tipo: uma família sans; mono só para código, sha, caminho e números de tabela */
+  --font: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-16: 16px; --fs-20: 20px; --fs-24: 24px;
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600;
+  /* forma, movimento, largura */
+  --r1: 4px; --r2: 6px; --r3: 10px;
+  --dur: 150ms; --ease: cubic-bezier(.2, 0, 0, 1);
+  --page: 1200px; --nav-w: 216px; --nav-w-min: 56px; --row-h: 38px;
+  /* cor, tema escuro (padrão) */
+  color-scheme: dark;
+  --bg: #0f1216; --surface: #151a20; --surface-2: #1b2128; --surface-3: #232b34;
+  --border: #262e38; --border-strong: #38424f;
+  --text-1: #e7eaee; --text-2: #9ba5b2; --text-3: #6e7988;
+  --accent: #9cc455; --accent-hover: #aed169; --accent-contrast: #10150a;
+  --ok: #47b583; --warn: #d9a441; --err: #e8665e; --info: #6aa9e0;
+  --overlay: rgba(0, 0, 0, .55); --shadow-pop: 0 8px 24px rgba(0, 0, 0, .35);
+  /* dados (grafo, treemap, gráficos): paleta discreta, sem neon */
+  --viz-1: #9cc455; --viz-2: #6aa9e0; --viz-3: #d9a441; --viz-4: #a98be0; --viz-5: #e07fa6; --viz-6: #47b583; --viz-7: #e8956a; --viz-8: #6f8fe8;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f6f3; --surface: #ffffff; --surface-2: #f0f0ec; --surface-3: #e8e8e3;
+  --border: #e1e1db; --border-strong: #c9c9c1;
+  --text-1: #1c2128; --text-2: #565f6b; --text-3: #838c98;
+  --accent: #4e7d1f; --accent-hover: #3f6718; --accent-contrast: #ffffff;
+  --ok: #1d8656; --warn: #a56a00; --err: #bf3a30; --info: #2b6fb0;
+  --overlay: rgba(20, 24, 30, .35); --shadow-pop: 0 8px 24px rgba(30, 34, 40, .16);
+  --viz-1: #4e7d1f; --viz-2: #2b6fb0; --viz-3: #a56a00; --viz-4: #7450b8; --viz-5: #b8456f; --viz-6: #1d8656; --viz-7: #b8602f; --viz-8: #4560c4;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f6f6f3; --surface: #ffffff; --surface-2: #f0f0ec; --surface-3: #e8e8e3;
+    --border: #e1e1db; --border-strong: #c9c9c1;
+    --text-1: #1c2128; --text-2: #565f6b; --text-3: #838c98;
+    --accent: #4e7d1f; --accent-hover: #3f6718; --accent-contrast: #ffffff;
+    --ok: #1d8656; --warn: #a56a00; --err: #bf3a30; --info: #2b6fb0;
+    --overlay: rgba(20, 24, 30, .35); --shadow-pop: 0 8px 24px rgba(30, 34, 40, .16);
+    --viz-1: #4e7d1f; --viz-2: #2b6fb0; --viz-3: #a56a00; --viz-4: #7450b8; --viz-5: #b8456f; --viz-6: #1d8656; --viz-7: #b8602f; --viz-8: #4560c4;
+  }
+}
+/* fundos suaves dos status: derivados, nunca valores soltos */
+:root, :root[data-theme] {
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --ok-soft: color-mix(in srgb, var(--ok) 14%, transparent);
+  --warn-soft: color-mix(in srgb, var(--warn) 16%, transparent);
+  --err-soft: color-mix(in srgb, var(--err) 14%, transparent);
+  --info-soft: color-mix(in srgb, var(--info) 14%, transparent);
+  --hover: color-mix(in srgb, var(--text-1) 6%, transparent);
+  --focus: var(--accent);
+}

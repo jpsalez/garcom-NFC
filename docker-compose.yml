@@ -1,7 +1,7 @@
 # Único compose do projeto: PostgreSQL + API + front-end (desenvolvimento) e, opcionalmente, o banco dos testes.
 # Sem Dockerfile: usa a imagem oficial do Node. Rode na RAIZ do projeto (esta pasta).
 #
-#   docker compose up                   # banco + API (http://localhost:4000, docs em /docs) + front (http://localhost:3000)
+#   docker compose up                   # banco + API (http://localhost:4000, docs em /docs) + front (http://localhost:3000) + painel (http://localhost:8765)
 #   docker compose up -d                # em segundo plano;  docker compose logs -f api web
 #   docker compose down                 # para (mantém o banco);  down -v apaga banco e node_modules dos contêineres
 #   (em back-end/) npm run test:db:up   # sobe SÓ o banco de testes (porta 5433); npm test; npm run test:db:down
@@ -76,6 +76,30 @@ services:
       timeout: 5s
       retries: 5
       start_period: 300s # primeiro boot: npm ci + prisma generate + migrations
+
+  # Painel de controle do projeto (agentes, git, arquivos, tarefas, decisões). Só a sua máquina enxerga: porta publicada em 127.0.0.1.
+  # Dentro do contêiner o painel não acha o `claude` nem a sua sessão ao vivo; o resto (git, arquivos, tarefas, decisões) funciona.
+  painel:
+    image: python:3.13-alpine
+    working_dir: /workspace
+    restart: unless-stopped
+    environment:
+      # o git recusa repositórios de outro dono dentro do contêiner; o painel só lê
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: "*"
+      PYTHONDONTWRITEBYTECODE: "1"
+    ports:
+      - "127.0.0.1:${PAINEL_PORT:-8765}:8765"
+    volumes:
+      - .:/workspace # o painel grava em .claude/painel (tarefas, decisões, histórico)
+    command: sh -c "apk add --no-cache git >/dev/null && exec python3 .claude/scripts/painel.py --host 0.0.0.0 --port 8765 --public-port $${PAINEL_PORT:-8765}"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/', timeout=3).status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Banco DESCARTÁVEL dos testes (dados em memória). Só sobe com o perfil "test":
   # `npm run test:db:up`. Nunca é tocado por `docker compose up`.

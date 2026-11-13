@@ -1,0 +1,88 @@
+/* Casca e telas leves: paleta/ajuda, Visão geral, Decisões, Dicionário. A linha do tempo (bloco no fim) migra para observar.css. */
+input, select, textarea, button { font-variant-numeric: tabular-nums; }
+
+/* ---- diálogos (paleta e ajuda) ---- */
+.nm-back { position: fixed; inset: 0; z-index: 100; background: var(--overlay); display: grid; place-items: start center; padding: 12vh var(--s4) var(--s4); }
+.nm-box { width: min(640px, 100%); max-height: 70vh; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r3); box-shadow: var(--shadow-pop); overflow: hidden; }
+.nm-pal > input { all: unset; box-sizing: border-box; width: 100%; padding: var(--s4); font-size: var(--fs-16); border-bottom: 1px solid var(--border); color: var(--text-1); }
+.nm-pal > input:focus-visible { box-shadow: inset 0 -2px 0 var(--accent); }
+.nm-list { overflow: auto; padding: var(--s2); flex: 1; min-height: 80px; }
+.nm-g { font-size: var(--fs-12); font-weight: var(--fw-medium); color: var(--text-3); padding: var(--s3) var(--s3) var(--s1); }
+.nm-item { display: flex; align-items: baseline; gap: var(--s3); padding: var(--s2) var(--s3); border-radius: var(--r2); cursor: pointer; }
+.nm-item.on { background: var(--accent-soft); }
+.nm-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--fw-medium); }
+.nm-h { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font: var(--fs-12) var(--mono); text-align: right; }
+.nm-empty { padding: var(--s5); text-align: center; color: var(--text-2); }
+.nm-foot { display: flex; gap: var(--s2); align-items: center; padding: var(--s2) var(--s4); border-top: 1px solid var(--border); font-size: var(--fs-12); color: var(--text-2); }
+.nm-head { display: flex; align-items: center; justify-content: space-between; padding: var(--s3) var(--s4); border-bottom: 1px solid var(--border); }
+.nm-body { overflow: auto; padding: var(--s2) var(--s4) var(--s4); }
+.nm-sec h4 { margin: var(--s4) 0 var(--s2); font-size: var(--fs-12); font-weight: var(--fw-medium); color: var(--text-3); }
+.nm-row { display: flex; align-items: center; gap: var(--s4); padding: var(--s1) 0; font-size: var(--fs-13); }
+.nm-keys { flex: none; min-width: 92px; display: inline-flex; gap: var(--s1); }
+.nm-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: var(--s5); }
+@media (max-width: 640px) { .nm-grid { grid-template-columns: 1fr; } }
+
+/* ---- Visão geral ---- */
+.ov-top { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s5); }
+.ov-top .when { color: var(--text-2); font-size: var(--fs-13); }
+.ov-top select { width: auto; }
+.ov-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--s6); }
+.list > .ov-sub { padding-inline: var(--s3); }
+.ov-sub { font-size: var(--fs-12); font-weight: var(--fw-medium); color: var(--text-3); margin: var(--s4) 0 var(--s1); }
+.ov-sub:first-child { margin-top: 0; }
+.list > .item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list > .item .id { flex: none; font: var(--fs-12) var(--mono); color: var(--text-3); min-width: 54px; }
+.spend-line { display: block; width: 100%; height: 36px; margin: var(--s3) 0 var(--s2); }
+.spend-line polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.spend-line circle { fill: var(--accent); }
+
+/* ---- Decisões ---- */
+.dec { border-bottom: 1px solid var(--border); padding: var(--s3) 0; }
+.dec-head { display: flex; align-items: flex-start; gap: var(--s3); }
+.dec-head input[type=checkbox] { margin-top: 3px; }
+.dec-title { flex: 1; min-width: 0; }
+.dec-title b { font-weight: var(--fw-medium); }
+.dec .id { font: var(--fs-12) var(--mono); color: var(--text-3); margin-right: var(--s2); }
+.dec details { margin-top: var(--s2); margin-left: 27px; }
+.dec summary { cursor: pointer; font-size: var(--fs-13); color: var(--text-2); }
+.dec ul { margin: var(--s2) 0 0; padding-left: var(--s4); color: var(--text-2); font-size: var(--fs-13); }
+.dec .meta { margin: var(--s1) 0 0 27px; font-size: var(--fs-13); color: var(--text-2); }
+.note { margin: var(--s2) 0 0 27px; padding: var(--s1) var(--s3); border-left: 2px solid var(--accent); background: var(--accent-soft); font-size: var(--fs-13); border-radius: 0 var(--r2) var(--r2) 0; }
+.confirm { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; margin: var(--s2) 0 0 27px; }
+.confirm input[type=text] { width: min(360px, 100%); }
+.editor { min-height: 56vh; font-family: var(--mono); font-size: var(--fs-13); }
+
+/* ---- Dicionário: linhas em ordem alfabética + índice A–Z ---- */
+.dtools { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.dtools input[type=text] { width: min(320px, 100%); }
+.dindex { position: sticky; top: calc(-1 * var(--s5)); z-index: 5; display: flex; flex-wrap: wrap; gap: var(--s1); padding: var(--s3) 0; margin: var(--s3) 0; background: var(--bg); border-bottom: 1px solid var(--border); }
+.dl-btn { all: unset; box-sizing: border-box; cursor: pointer; min-width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--r1); font: var(--fw-medium) var(--fs-12) var(--mono); color: var(--text-1); }
+.dl-btn:hover:not(:disabled) { background: var(--accent); color: var(--accent-contrast); }
+.dl-btn:disabled { color: var(--text-3); opacity: .5; cursor: default; }
+.dl-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.dletter { font-size: var(--fs-20); font-weight: var(--fw-semibold); color: var(--accent); padding: var(--s4) 0 var(--s1); border-bottom: 1px solid var(--border); scroll-margin-top: 64px; }
+.dterm { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: var(--s1) var(--s5); padding: var(--s3) 0; border-bottom: 1px solid var(--border); }
+.dterm h4 { font-weight: var(--fw-medium); }
+.dterm .cat { display: block; font-size: var(--fs-12); font-weight: var(--fw-regular); color: var(--text-3); }
+.dterm p { margin: 0 0 var(--s1); }
+.dterm .see { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2); align-items: center; font-size: var(--fs-13); color: var(--text-2); margin-top: var(--s1); }
+.dterm.flash { animation: dflash 1.6s var(--ease); }
+@keyframes dflash { 0%, 40% { background: var(--accent-soft); } 100% { background: transparent; } }
+@media (max-width: 640px) { .dterm { grid-template-columns: 1fr; } }
+
+/* ---- Linha do tempo (bloco herdado; migra para observar.css) ---- */
+.tl-zoom { display: inline-flex; align-items: center; gap: var(--s2); margin-left: auto; }
+.tl { cursor: grab; outline: none; }
+.tl:focus-visible { box-shadow: 0 0 0 2px var(--accent); border-radius: var(--r2); }
+.panning .tl { cursor: grabbing; user-select: none; }
+.tlclip { position: absolute; inset: 0; overflow: hidden; }
+.tbar { min-width: 72px; }
+.tbar:focus-visible, .tdot:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 4; }
+
+/* ajustes: o .sub do cabeçalho não herda a linha do bloco de subagente; espaços nas linhas da Visão geral */
+header.top .sub { border: 0; padding: 0; }
+.ov-sub .id { margin-right: var(--s2); }
+.ov-sub .t { margin-right: var(--s2); }
+.ov-sub .when, .ov-sub .tiny { margin-left: var(--s2); }
+.item.clickable { display: flex; align-items: baseline; gap: var(--s3); padding-block: var(--s1); }
+.item.clickable .t { min-width: 0; }

@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""gh de mentira para os testes do painel (sem rede, sem conta).
+
+PAINEL_FAKE_GH_MODE: ok (padrão) | unauth (todo comando falha pedindo `gh auth login`)
+PAINEL_FAKE_GH_LOG:  se definido, cada chamada é anexada a esse arquivo (para contar chamadas)
+Os shas e branches das execuções/PRs vêm do repositório do diretório atual, para casar com a tela Commits.
+"""
+import json
+import os
+import subprocess
+import sys
+
+argv = sys.argv[1:]
+mode = os.environ.get("PAINEL_FAKE_GH_MODE", "ok")
+if os.environ.get("PAINEL_FAKE_GH_LOG"):
+    with open(os.environ["PAINEL_FAKE_GH_LOG"], "a") as f:
+        f.write(" ".join(argv) + "\n")
+
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.exit(0)
+
+
+def fail(msg, code=1):
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def git(*a):
+    return subprocess.run(["git", *a], capture_output=True, text=True).stdout.split()
+
+
+UNAUTH = "To get started with GitHub CLI, please run:  gh auth login\nYou are not logged into any GitHub hosts."
+if argv[:1] == ["--version"]:
+    print("gh version 2.0.0-fake")
+    sys.exit(0)
+if mode == "unauth":
+    fail(UNAUTH, 1 if argv[:2] == ["auth", "status"] else 4)
+if argv[:2] == ["auth", "status"]:
+    print("github.com\n  ✓ Logged in to github.com account fulano (keyring)\n  - Active account: true")
+    sys.exit(0)
+
+shas = (git("log", "--format=%H", "-n", "8") or ["0" * 40])
+branches = [b for b in git("for-each-ref", "--format=%(refname:short)", "refs/heads") if b] or ["main"]
+feat = [b for b in branches if b != "main"] or branches
+check = lambda n, c: {"__typename": "CheckRun", "name": n, "status": "COMPLETED", "conclusion": c, "detailsUrl": "https://github.com/jpsalez/garcom-NFC/actions/runs/1"}
+PRS = [
+    {"number": 12, "title": "feat: tela de login", "state": "OPEN", "isDraft": False, "author": {"login": "luan"}, "headRefName": feat[0], "baseRefName": "main",
+     "labels": [{"name": "frontend"}, {"name": "feature"}], "reviewDecision": "APPROVED", "statusCheckRollup": [check("build", "SUCCESS"), check("lint", "SUCCESS")],
+     "updatedAt": "2026-11-12T20:00:00Z", "url": "https://github.com/jpsalez/garcom-NFC/pull/12"},
+    {"number": 11, "title": "wip: cadastro de mesas", "state": "OPEN", "isDraft": True, "author": {"login": "jpsalez"}, "headRefName": feat[-1] + "-wip", "baseRefName": "main",
+     "labels": [], "reviewDecision": "", "statusCheckRollup": [check("build", "FAILURE"), check("lint", "SUCCESS")],
+     "updatedAt": "2026-11-11T20:00:00Z", "url": "https://github.com/jpsalez/garcom-NFC/pull/11"},
+    {"number": 9, "title": "fix: porta da API", "state": "MERGED", "isDraft": False, "author": {"login": "jpsalez"}, "headRefName": "fix/porta", "baseRefName": "main",
+     "labels": [{"name": "bug"}], "reviewDecision": "CHANGES_REQUESTED", "statusCheckRollup": [{"__typename": "StatusContext", "context": "ci/x", "state": "PENDING"}],
+     "updatedAt": "2026-11-10T20:00:00Z", "url": "https://github.com/jpsalez/garcom-NFC/pull/9"},
+]
+RUNS = [
+    {"databaseId": 1001, "workflowName": "CI", "status": "completed", "conclusion": "success", "headBranch": "main", "headSha": shas[0], "displayTitle": "fix : portas", "createdAt": "2026-11-12T22:30:00Z", "startedAt": "2026-11-12T22:30:05Z", "updatedAt": "2026-11-12T22:32:35Z", "url": "https://github.com/jpsalez/garcom-NFC/actions/runs/1001"},
+    {"databaseId": 1002, "workflowName": "CI", "status": "completed", "conclusion": "failure", "headBranch": feat[0], "headSha": shas[min(1, len(shas) - 1)], "displayTitle": "feat : swagger", "createdAt": "2026-11-12T21:00:00Z", "startedAt": "2026-11-12T21:00:03Z", "updatedAt": "2026-11-12T21:01:10Z", "url": "https://github.com/jpsalez/garcom-NFC/actions/runs/1002"},
+    {"databaseId": 1003, "workflowName": "CI", "status": "in_progress", "conclusion": "", "headBranch": "main", "headSha": shas[min(2, len(shas) - 1)], "displayTitle": "refactor : monorepo", "createdAt": "2026-11-12T20:00:00Z", "startedAt": "2026-11-12T20:00:02Z", "updatedAt": "2026-11-12T20:00:30Z", "url": "https://github.com/jpsalez/garcom-NFC/actions/runs/1003"},
+    {"databaseId": 1004, "workflowName": "Deploy", "status": "completed", "conclusion": "cancelled", "headBranch": "main", "headSha": shas[min(3, len(shas) - 1)], "displayTitle": "deploy manual", "createdAt": "2026-11-11T10:00:00Z", "startedAt": "2026-11-11T10:00:01Z", "updatedAt": "2026-11-11T10:00:20Z", "url": "https://github.com/jpsalez/garcom-NFC/actions/runs/1004"},
+]
+ISSUES = [
+    {"number": 4, "title": "Decidir quem abre o atendimento (DEC-01)", "body": "Bloqueia o módulo de sessões. Ver também RF01.", "labels": [{"name": "decisão"}], "assignees": [{"login": "jpsalez"}], "author": {"login": "jpsalez"}, "updatedAt": "2026-11-12T10:00:00Z", "url": "https://github.com/jpsalez/garcom-NFC/issues/4"},
+    {"number": 3, "title": "Erro 500 ao criar mesa", "body": "Sem id de tarefa aqui.", "labels": [], "assignees": [], "author": {"login": "luan"}, "updatedAt": "2026-11-09T10:00:00Z", "url": "https://github.com/jpsalez/garcom-NFC/issues/3"},
+]
+DIFF = """diff --git a/back-end/src/main.ts b/back-end/src/main.ts
+index 111..222 100644
+--- a/back-end/src/main.ts
++++ b/back-end/src/main.ts
+@@ -1,3 +1,3 @@
+ import express from "express";
+-const port = 3000;
++const port = 4000;
+ app.listen(port);
+"""
+
+
+def flag(name):
+    return argv[argv.index(name) + 1] if name in argv else None
+
+
+cmd = argv[:2]
+if cmd == ["pr", "list"]:
+    st = flag("--state") or "open"
+    out([p for p in PRS if st == "all" or p["state"].lower() == st])
+if cmd == ["pr", "view"]:
+    p = next((x for x in PRS if str(x["number"]) == argv[2]), None)
+    if not p:
+        fail("GraphQL: Could not resolve to a PullRequest with the number of " + argv[2])
+    out({**p, "body": "Descrição do PR.\n\n- item um\n- item dois", "reviews": [{"author": {"login": "jpsalez"}, "state": "APPROVED", "body": "ok", "submittedAt": "2026-11-12T20:10:00Z"}],
+         "commits": [{"oid": shas[0], "messageHeadline": "feat : algo", "authors": [{"login": "luan", "name": "Luan"}], "committedDate": "2026-11-12T19:00:00Z"}]})
+if cmd == ["pr", "diff"]:
+    print(DIFF)
+    sys.exit(0)
+if cmd == ["run", "list"]:
+    out(RUNS)
+if cmd == ["run", "view"]:
+    r = next((x for x in RUNS if str(x["databaseId"]) == argv[2]), None)
+    if not r:
+        fail("HTTP 404: Not Found")
+    if "--log-failed" in argv:
+        print("test\tRun tests\t2026-11-12T21:01:09.1234567Z FAIL tests/auth.test.ts\ntest\tRun tests\t2026-11-12T21:01:09.2Z Error: expected 200 got 500")
+        sys.exit(0)
+    bad = r["conclusion"] == "failure"
+    out({"status": r["status"], "conclusion": r["conclusion"], "workflowName": r["workflowName"], "headBranch": r["headBranch"], "headSha": r["headSha"], "displayTitle": r["displayTitle"], "url": r["url"],
+         "jobs": [{"name": "build", "status": "completed", "conclusion": "success", "steps": [{"name": "Checkout", "status": "completed", "conclusion": "success"}, {"name": "Install", "status": "completed", "conclusion": "success"}]},
+                  {"name": "test", "status": "completed", "conclusion": "failure" if bad else "success", "steps": [{"name": "Install", "status": "completed", "conclusion": "success"}, {"name": "Run tests", "status": "completed", "conclusion": "failure" if bad else "success"}]}]})
+if cmd == ["issue", "list"]:
+    out(ISSUES)
+fail("fake gh: comando não suportado: " + " ".join(argv))

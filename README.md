@@ -20,6 +20,7 @@ Não precisa criar `.env`. No primeiro boot a API instala dependências e aplica
 | Front-end | http://localhost:3000 |
 | API | http://localhost:4000 |
 | Documentação da API (Swagger) | http://localhost:4000/docs |
+| Painel de controle (git, tarefas, decisões, arquivos) | http://localhost:8765 |
 | PostgreSQL (só nesta máquina) | localhost:5432 |
 
 Criar o primeiro restaurante: `POST /auth/register` (pelo Swagger). Dados de exemplo: `docker compose exec api npm run db:seed`.
