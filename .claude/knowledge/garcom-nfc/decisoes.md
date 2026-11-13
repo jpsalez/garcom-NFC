@@ -7,71 +7,29 @@ Backlog: tela Tarefas do painel (`.claude/painel/tasks.json`). Aqui ficam só as
 ## Pendentes
 Formato: `- [ ] DEC-NN · título`; as linhas indentadas são detalhes. A tela Decisões e a tela Tarefas leem este bloco.
 
-- [ ] DEC-01 · Quem abre o atendimento da mesa
-  - Opções e contexto: Opções: garçom no balcão / primeiro scan do QR (token) / primeiro chamado. Define o fluxo público inteiro.
-  - Nota sua: o garçom no balcão abre a mesa como fecha ela também.
-  - Atenção: a nota acima parece uma decisão. Confirme marcando a caixa para destravar as tarefas.
-  - Fase: MVP-2 · Prioridade: P0 · Refs: RF04, RN
-  - Bloqueia: SES-01, SES-02b
-- [ ] DEC-02 · Duração do atendimento: 3 h ou 4 h
-  - Opções e contexto: v0.3 diz 4 h (configurável por TABLE_SESSION_TTL); módulos/guia usam 3 h.
-  - Fase: MVP-3 · Prioridade: P1 · Refs: RF12
-  - Bloqueia: SES-02b
 - [ ] DEC-03 · Chamados repetidos
   - Opções e contexto: Um card por chamado (RN08) / agrupar / bloquear por tipo (409, índice parcial calls_one_open_per_type).
+  - Sugestão (13/11, aguardando confirmação): um chamado aberto por tipo por sessão; repetir o toque devolve o chamado que já está aberto (200), sem card novo e sem erro para o cliente.
   - Fase: MVP-2 · Prioridade: P0 · Refs: RN08, RN12
   - Bloqueia: CAL-01, DB-03
-- [ ] DEC-05 · Domínio e formato da URL pública
-  - Opções e contexto: Gravar NFC é irreversível: definir domínio e formato (ex.: /m/<code>) antes de gravar qualquer tag.
-  - Fase: MVP-1 · Prioridade: P1 · Refs: RF13
-  - Bloqueia: FE-03b, NFC-02, OPS-03, TAB-04
-- [ ] DEC-06 · Registrar qual garçom finalizou o chamado
-  - Opções e contexto: Balcão compartilhado (acesso único) ou login individual. Afeta done_by e o painel do balcão.
-  - Fase: MVP-2 · Prioridade: P1 · Refs: 9.4.3
-  - Bloqueia: CAL-04
-- [ ] DEC-07 · Após encerrar, um novo scan abre atendimento na hora?
-  - Opções e contexto: Ligado a DEC-01. Define o comportamento da tela da mesa depois do encerramento.
-  - Fase: MVP-3 · Prioridade: P1 · Refs: 9.4.3
-- [ ] DEC-08 · O cliente vê o chamado como finalizado ou só a confirmação de envio?
-  - Opções e contexto: Define eventos para o aparelho do cliente (RF07) e se o cliente precisa de canal em tempo real.
-  - Fase: MVP-2 · Prioridade: P2 · Refs: RF07
-  - Bloqueia: CAL-06
-- [ ] DEC-09 · "Manter aberto": só no balcão ou também pelo cliente
-  - Opções e contexto: Afeta rotas públicas e o abuso (sessão eterna).
-  - Fase: MVP-3 · Prioridade: P2 · Refs: RF11
-  - Bloqueia: SES-06
-- [ ] DEC-10 · Alerta sonoro no balcão e nome/cobrança do produto
-  - Opções e contexto: Pontos a validar da v0.3. Nome definitivo do produto e modelo de planos.
-  - Fase: Pós-MVP · Prioridade: P3 · Refs: 9.4.3
-  - Bloqueia: FE-05c
-- [ ] DEC-11 · Prefixo /api/v1 e porta 4000 da v0.3
-  - Opções e contexto: Código usa porta 3000 e sem prefixo. Decidir antes do front consumir a API.
-  - A porta já foi resolvida (back-end 4000, front-end 3000). Resta só o prefixo /api/v1.
-  - Fase: MVP-1 · Prioridade: P2 · Refs: cap-09
-  - Bloqueia: INF-08
-- [ ] DEC-12 · Código de erro estável (error.code) no formato de erro
-  - Opções e contexto: Hoje a resposta é { error, message, details }. O front pode precisar de códigos.
-  - Fase: MVP-2 · Prioridade: P3
-- [ ] DEC-13 · Criar usuário em restaurante desativado: pode?
-  - Opções e contexto: Hoje o service permite. Apontado pelo revisor; é regra de produto.
-  - Fase: Agora · Prioridade: P3
 
 (A lista anterior, sem ids, está em `../_arquivo/decisoes-lista-antiga.md`.)
 
 ## Resolvidas que estavam na lista de tarefas
+- [x] DEC-01 · Quem abre o atendimento da mesa — o primeiro scan do QR abre; o garçom (OWNER/STAFF) também pode abrir e encerrar pelo balcão (13/11/2026).
+- [x] DEC-02 · Duração do atendimento — 4 h (`TABLE_SESSION_TTL`); antes de expirar, o balcão recebe um aviso para estender o atendimento (13/11/2026).
+- [x] DEC-05 · Domínio e formato da URL pública — o domínio vem do `.env` (`PUBLIC_APP_URL`) e o sistema gera a URL `<PUBLIC_APP_URL>/m/<public_code>`; nunca digitada à mão (13/11/2026).
+- [x] DEC-13 · Criar usuário em restaurante desativado — não pode (13/11/2026).
+- [x] DEC-10 · Alerta sonoro no balcão — sim; o back-end só emite o evento de chamado novo e quem toca o som é o front-end. Nome e cobrança do produto ficam para depois do MVP (13/11/2026).
+- [x] DEC-06 · Registrar qual garçom finalizou — login individual: cada STAFF entra com o próprio usuário e `done_by` recebe o id do token (13/11/2026, recomendação aceita por delegação).
+- [x] DEC-07 · Novo scan após encerrar — abre um atendimento novo na hora, coerente com DEC-01; o abuso é contido por rate limit e limite de chamados (13/11/2026, por delegação).
+- [x] DEC-08 · O que o cliente vê — só a confirmação de envio no MVP; o cliente não usa tempo real (13/11/2026, por delegação).
+- [x] DEC-09 · "Manter aberto" — só no balcão; é a mesma ação de estender da DEC-02 (13/11/2026, por delegação).
+- [x] DEC-11 · Prefixo da API — adotar `/api/v1` agora, antes de o front consumir a API (13/11/2026, por delegação).
+- [x] DEC-12 · Código de erro estável — adotar `code` no formato de erro (`{ error, code, message, details }`), começando pelos erros novos (13/11/2026, por delegação).
 - [x] DEC-04 · Tamanho do public_code: 8 ou 12 — 12 caracteres (12/11/2026).
 - [x] DEC-14 · Fluxo do register (A x B) — B escolhido: register cria OWNER + restaurante em transação.
 - [x] DEC-15 · Primeiro SUPER_ADMIN, remover STAFF e MANAGER x job_title — Seed por variáveis de ambiente; excluir (rota DELETE) além de desativar; MANAGER é categoria do STAFF.
-
-## Sugestões para destravar o modo IA (NÃO decididas: confirme ou altere)
-| Decisão | Sugestão | Por quê |
-|---|---|---|
-| Quem abre o atendimento | Primeiro scan do QR (token por aparelho), como na v0.3 | Cliente não depende do garçom; o garçom ainda pode encerrar |
-| Duração | 4 h, lida de `TABLE_SESSION_TTL` | v0.3 e configurável |
-| Chamados repetidos | Um card por chamado (RN08) com limite por sessão | Mais simples; evita decidir o agrupamento agora |
-| `users.restaurant_id` | Obrigatório; `register` cria restaurante e admin na mesma transação | Fecha o furo de tenant no cadastro |
-| `public_code` | 12 caracteres aleatórios | Menos colisão e adivinhação |
-| Código de erro estável | Adiar para depois do MVP | Não bloqueia nada |
 
 ## Decididas
 - **Módulo tables (12/11/2026) [Especificado, NÃO implementado]**: (1) `public_code` com 12 caracteres aleatórios (alfabeto sem caracteres ambíguos, gerado com `crypto.randomInt`; o cliente nunca escolhe o código); (2) nomes de mesa repetidos no mesmo restaurante são permitidos (sem `@@unique([restaurant_id, label])`); (3) permissões: OWNER cria, lista e edita mesas; STAFF só lista; SUPER_ADMIN não usa as rotas `/tables` (não tem restaurante). Escopo inicial: criar, listar e editar (nome, ativa/desativa); excluir mesa fica para TAB-06.
