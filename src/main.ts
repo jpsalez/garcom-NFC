@@ -2,13 +2,16 @@
 import "reflect-metadata";
 // Carrega o .env (JWT_SECRET etc.) antes de qualquer módulo que leia process.env
 import "dotenv/config";
+import swaggerUi from "swagger-ui-express";
 import { app } from "./server.ts";
+import { openApiSpec } from "./docs/openapi.ts";
 import { SetupRoutes } from "./routes.ts";
 import { registerDependencies } from "./shared/container/container.ts";
 import { errorHandler } from "./shared/middlewares/error.middleware.ts";
 
 function bootstrap() {
   registerDependencies();
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
   app.use(SetupRoutes());
   // Sempre por último: captura erros de todas as rotas acima
   app.use(errorHandler);
