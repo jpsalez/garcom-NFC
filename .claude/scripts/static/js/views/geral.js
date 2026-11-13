@@ -105,7 +105,7 @@ export async function renderGeral() {
       pend.slice(0, 3).forEach(d => { const r = item(() => go('decisoes')); r.append(h('span', 'id', d.id), h('span', 't', d.titulo), d.bloqueia.length ? badge(`bloqueia ${d.bloqueia.length}`, 'warn') : h('span')); s.body.append(r); });
       if (dec && dec.tarefas_bloqueadas.length) s.body.append(h('p', 'small muted', `${pend.length} decisões pendentes bloqueiam ${dec.tarefas_bloqueadas.length} tarefas.`));
     }
-    wrap.append(s.el);
+    s.body.classList.add('list'); wrap.append(s.el);
   }
 
   // ----- Projeto -----
@@ -126,7 +126,7 @@ export async function renderGeral() {
       s.body.append(h('div', 'ov-sub', 'Arquivos que pedem atenção'));
       prio.slice(0, 4).forEach(p => { const r = item(() => go('arquivos', '', 'path=' + encPath('back-end/' + p.path))); r.append(h('span', 't mono', p.path.split('/').pop()), badge(p.level, p.level === 'alto' ? 'err' : p.level === 'ok' ? 'ok' : 'warn'), h('span', 'tiny faint ellipsis', p.advice ? String(p.advice).slice(0, 60) : '')); s.body.append(r); });
     }
-    wrap.append(s.el);
+    s.body.classList.add('list'); wrap.append(s.el);
   }
 
   // ----- Gasto -----
@@ -142,6 +142,6 @@ export async function renderGeral() {
   if (rl.length) {
     const s = section('Conversas recentes', { actions: [button('Abrir Conversa', { variant: 'ghost', small: true, onClick: () => go('conversa') })] });
     rl.forEach(r => { const row = item(() => { S.sel = r.id; go('conversa'); }); row.append(h('span', 't', r.title || '(sem título)'), h('span', 'tiny faint', `${r.agent} · US$ ${r.cost.toFixed(3)}`), badge(r.status, r.status === 'rodando' ? 'accent' : r.status === 'erro' ? 'err' : 'neutral')); s.body.append(row); });
-    wrap.append(s.el);
+    s.body.classList.add('list'); wrap.append(s.el);
   }
 }

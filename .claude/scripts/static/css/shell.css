@@ -27,10 +27,11 @@ input, select, textarea, button { font-variant-numeric: tabular-nums; }
 .ov-top .when { color: var(--text-2); font-size: var(--fs-13); }
 .ov-top select { width: auto; }
 .ov-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--s6); }
+.list > .ov-sub { padding-inline: var(--s3); }
 .ov-sub { font-size: var(--fs-12); font-weight: var(--fw-medium); color: var(--text-3); margin: var(--s4) 0 var(--s1); }
 .ov-sub:first-child { margin-top: 0; }
-.item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.item .id { flex: none; font: var(--fs-12) var(--mono); color: var(--text-3); min-width: 54px; }
+.list > .item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list > .item .id { flex: none; font: var(--fs-12) var(--mono); color: var(--text-3); min-width: 54px; }
 .spend-line { display: block; width: 100%; height: 36px; margin: var(--s3) 0 var(--s2); }
 .spend-line polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .spend-line circle { fill: var(--accent); }

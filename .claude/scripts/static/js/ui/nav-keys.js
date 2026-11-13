@@ -4,7 +4,7 @@ import { go, ROUTES } from '../router.js';
 import { modalOpen } from './nav-modal.js';
 
 /** Tabela única de atalhos: a ajuda (?) e os próprios atalhos leem daqui. `g` + letra troca de tela. */
-export const GOTO = /** @type {const} */ ({
+const GOTO = /** @type {const} */ ({
   v: 'visao-geral', c: 'conversa', o: 'orquestrar', i: 'ao-vivo', n: 'analise', l: 'linha-do-tempo', t: 'tarefas',
   m: 'commits', h: 'github', s: 'saude-do-codigo', a: 'arquivos', r: 'verificar', d: 'decisoes', k: 'dicionario',
 });

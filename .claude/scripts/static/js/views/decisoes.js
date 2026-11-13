@@ -24,8 +24,10 @@ function linha(d, resolvida, recarregar) {
   const t = h('div', 'dec-title'); t.append(h('span', 'id', d.id), h('b', '', d.titulo));
   if (d.bloqueia.length) t.append(document.createTextNode(' '), badge(`bloqueia ${d.bloqueia.length} tarefa${d.bloqueia.length === 1 ? '' : 's'}`, 'warn', d.bloqueia.join(', ')));
   head.append(cb, t); box.append(head);
-  if (d.nota) { const n = h('div', resolvida ? 'meta' : 'note'); n.textContent = (resolvida ? 'Decidida: ' : 'Nota sua: ') + d.nota; box.append(n); }
-  if (d.detalhes.length) { const det = h('details'), ul = h('ul'); det.append(h('summary', '', 'Detalhes')); d.detalhes.forEach(x => ul.append(h('li', '', x))); det.append(ul); box.append(det); }
+  const notaSua = d.detalhes.find(x => x.startsWith('Nota sua:')), detalhes = d.detalhes.filter(x => x !== notaSua);  // a nota fica em destaque, fora do recolhível
+  const nota = resolvida ? d.nota && 'Decidida: ' + d.nota : d.nota ? 'Nota sua: ' + d.nota : notaSua;
+  if (nota) { const n = h('div', resolvida ? 'meta' : 'note'); n.textContent = nota; box.append(n); }
+  if (detalhes.length) { const det = h('details'), ul = h('ul'); det.append(h('summary', '', 'Detalhes')); detalhes.forEach(x => ul.append(h('li', '', x))); det.append(ul); box.append(det); }
   if (d.bloqueia.length) { const m = h('div', 'meta'); m.append(document.createTextNode('Tarefas bloqueadas: '));
     d.bloqueia.forEach((id, i) => { if (i) m.append(document.createTextNode(', ')); const a = h('a', 'mono', id); a.href = '#tarefas?q=' + id; a.onclick = e => { e.preventDefault(); go('tarefas', '', 'q=' + id); }; m.append(a); }); box.append(m); }
 

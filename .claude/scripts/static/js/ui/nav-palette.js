@@ -63,7 +63,7 @@ export function showPalette() {
   input.setAttribute('role', 'combobox'); input.setAttribute('aria-expanded', 'true'); input.setAttribute('aria-controls', 'pal-list'); input.setAttribute('aria-autocomplete', 'list'); input.setAttribute('aria-label', 'Buscar na paleta');
   const list = h('div', 'nm-list'); list.id = 'pal-list'; list.setAttribute('role', 'listbox');
   const live = h('div', 'sr-only'); live.setAttribute('aria-live', 'polite');
-  const foot = h('div', 'nm-foot hint'); foot.append(h('kbd', '', '↑'), h('kbd', '', '↓'), document.createTextNode(' navegar  '), h('kbd', '', 'Enter'), document.createTextNode(' abrir  '), h('kbd', '', 'Esc'), document.createTextNode(' fechar'));
+  const foot = h('div', 'nm-foot'); foot.append(h('kbd', '', '↑'), h('kbd', '', '↓'), document.createTextNode(' navegar  '), h('kbd', '', 'Enter'), document.createTextNode(' abrir  '), h('kbd', '', 'Esc'), document.createTextNode(' fechar'));
   box.append(input, list, live, foot);
   /** @type {Item[]} */ let shown = []; let cur = 0, seq = 0;
 
@@ -76,7 +76,7 @@ export function showPalette() {
       r.onmousemove = () => { if (cur !== i) { cur = i; paint(); } }; r.onclick = () => run(it); list.append(r);
     });
     input.setAttribute('aria-activedescendant', shown.length ? 'pal-' + cur : '');
-    if (!shown.length) list.append(h('div', 'nm-empty hint', 'Nada encontrado'));
+    if (!shown.length) list.append(h('div', 'nm-empty', 'Nada encontrado'));
     list.querySelector('.nm-item.on')?.scrollIntoView({ block: 'nearest' });
     live.textContent = shown.length + ' resultado(s)';
   }
