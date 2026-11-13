@@ -69,6 +69,16 @@ CSP = ("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline';
        "font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
+def build_id():
+    """Carimbo da versão que está no ar (mostrado no rodapé do menu): commit atual + hora do arquivo estático mais novo."""
+    try:
+        sha = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5).stdout.strip()
+        novo = max(f.stat().st_mtime for f in STATIC.rglob("*") if f.is_file())
+        return f"{sha or 'sem-git'} · {datetime.fromtimestamp(novo).strftime('%d/%m %H:%M')}"
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return "?"
+
+
 def now():
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
@@ -859,7 +869,7 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if method == "GET" and u.path in ("/", "/index.html"):
-            self.reply((STATIC / "index.html").read_bytes().replace(b"__TOKEN__", TOKEN.encode()), 200, "text/html; charset=utf-8")
+            self.reply((STATIC / "index.html").read_bytes().replace(b"__TOKEN__", TOKEN.encode()).replace(b"__BUILD__", build_id().encode()), 200, "text/html; charset=utf-8")
             return
         if method == "GET" and u.path.startswith("/static/"):
             self.static(u.path[len("/static/"):])

@@ -13,6 +13,7 @@ import { button } from './ui/button.js';
 
 window.onerror = (m, s, l) => { document.body.dataset.err = m + ' @' + l; };
 $('#logoi').append(ico('spark'));
+{ const b = document.querySelector('meta[name="build"]')?.getAttribute('content'); const f = $('#foot'); if (f && b) { f.textContent = 'versão ' + b; f.title = 'Versão do painel em execução (commit · hora do arquivo mais novo). Se não bater com a que você espera, recarregue com Ctrl+Shift+R.'; } }
 buildNav($('#menu')); watchLabels($('#main')); renderChips();
 addEventListener('popstate', openFromHash);
 
