@@ -7,15 +7,12 @@ Backlog: tela Tarefas do painel (`.claude/painel/tasks.json`). Aqui ficam só as
 ## Pendentes
 Formato: `- [ ] DEC-NN · título`; as linhas indentadas são detalhes. A tela Decisões e a tela Tarefas leem este bloco.
 
-- [ ] DEC-03 · Chamados repetidos
-  - Opções e contexto: Um card por chamado (RN08) / agrupar / bloquear por tipo (409, índice parcial calls_one_open_per_type).
-  - Sugestão (13/11, aguardando confirmação): um chamado aberto por tipo por sessão; repetir o toque devolve o chamado que já está aberto (200), sem card novo e sem erro para o cliente.
-  - Fase: MVP-2 · Prioridade: P0 · Refs: RN08, RN12
-  - Bloqueia: CAL-01, DB-03
+Nenhuma no momento.
 
 (A lista anterior, sem ids, está em `../_arquivo/decisoes-lista-antiga.md`.)
 
 ## Resolvidas que estavam na lista de tarefas
+- [x] DEC-03 · Chamados repetidos — um chamado aberto por tipo (garçom/conta) por sessão; tocar de novo devolve o chamado já aberto (200), sem card novo. O balcão mostra há quanto tempo o chamado está aberto, contado de `created_at`, que não é reiniciado pelo toque repetido (13/11/2026).
 - [x] DEC-01 · Quem abre o atendimento da mesa — o primeiro scan do QR abre; o garçom (OWNER/STAFF) também pode abrir e encerrar pelo balcão (13/11/2026).
 - [x] DEC-02 · Duração do atendimento — 4 h (`TABLE_SESSION_TTL`); antes de expirar, o balcão recebe um aviso para estender o atendimento (13/11/2026).
 - [x] DEC-05 · Domínio e formato da URL pública — o domínio vem do `.env` (`PUBLIC_APP_URL`) e o sistema gera a URL `<PUBLIC_APP_URL>/m/<public_code>`; nunca digitada à mão (13/11/2026).
