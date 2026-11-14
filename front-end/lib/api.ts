@@ -21,9 +21,11 @@ type Options = {
   // JWT do balcão (Authorization) ou token do aparelho da mesa (X-Table-Token)
   token?: string;
   deviceToken?: string;
+  // Resposta que não é JSON (ex.: SVG do QR Code)
+  text?: boolean;
 };
 
-export async function api<T>(path: string, { method = "GET", body, token, deviceToken }: Options = {}): Promise<T> {
+export async function api<T>(path: string, { method = "GET", body, token, deviceToken, text }: Options = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -36,6 +38,7 @@ export async function api<T>(path: string, { method = "GET", body, token, device
   });
 
   if (response.status === 204) return undefined as T;
+  if (text && response.ok) return (await response.text()) as T;
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {

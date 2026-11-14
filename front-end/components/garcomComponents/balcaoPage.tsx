@@ -1,6 +1,6 @@
 'use client'
 import { useState } from "react"
-import { ApiError } from "@/lib/api"
+import { useAct } from "@/lib/useAct"
 import { useBalcao } from "@/lib/useBalcao"
 import { useSession } from "@/lib/session"
 import { finishCall } from "@/services/calls"
@@ -13,19 +13,8 @@ import TicketWaiterList from "./ticketWaiterList"
 export default function BalcaoPage() {
     const token = useSession()?.token ?? ''
     const [soundOn, setSoundOn] = useState(true)
-    const [error, setError] = useState('')
     const { calls, sessions, doneToday, live, stale, now, reload } = useBalcao(token, soundOn)
-
-    // Toda ação recarrega no fim: se outro garçom agiu antes (409/404), a tela volta a refletir o servidor
-    async function act(action: () => Promise<unknown>) {
-        setError('')
-        try {
-            await action()
-        } catch (err) {
-            setError(err instanceof ApiError ? err.message : 'Não foi possível concluir a ação.')
-        }
-        void reload()
-    }
+    const { error, act } = useAct(reload)
 
     return(
         <div className="w-full flex flex-col">

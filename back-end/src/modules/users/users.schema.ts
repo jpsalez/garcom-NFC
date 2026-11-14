@@ -22,7 +22,7 @@ export const createRestaurantUserSchema = z
 export type createRestaurantUserInput = z.infer<typeof createRestaurantUserSchema>;
 
 export const updateUserSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().min(1).max(100).optional(),
   category: category.nullable().optional(),
   active: z.boolean().optional(),
 });

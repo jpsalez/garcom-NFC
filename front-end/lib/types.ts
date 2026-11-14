@@ -17,3 +17,21 @@ export type ActiveSession = {
   table: { id: string; label: string };
   expires_at: string;
 };
+
+export type Table = {
+  id: string;
+  label: string;
+  public_code: string;
+  public_url: string;
+  active: boolean;
+};
+
+export type StaffCategory = "WAITER" | "MANAGER" | "CLEANING" | "KITCHEN" | "OTHER";
+
+export type StaffUser = {
+  id: string;
+  name: string;
+  email: string;
+  category: StaffCategory | null;
+  active: boolean;
+};
