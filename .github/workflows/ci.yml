@@ -1,4 +1,6 @@
+
 name: CI
+
 on:
   push:
   pull_request:
@@ -6,6 +8,10 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: postgresql://garcom:garcom@localhost:5433/garcom_test?schema=public
+
     services:
       postgres:
         image: postgres:16-alpine
@@ -13,21 +19,24 @@ jobs:
           POSTGRES_USER: garcom
           POSTGRES_PASSWORD: garcom
           POSTGRES_DB: garcom_test
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         ports: ["5433:5432"]
         options: >-
           --health-cmd "pg_isready -U garcom -d garcom_test"
           --health-interval 2s --health-timeout 3s --health-retries 20
+
     defaults:
       run:
         working-directory: back-end
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
           cache: npm
           cache-dependency-path: back-end/package-lock.json
+
       - run: npm ci
       - run: npx prisma generate
       - run: npm run typecheck
