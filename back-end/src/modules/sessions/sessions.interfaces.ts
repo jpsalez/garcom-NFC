@@ -1,4 +1,5 @@
 import type { table_sessions } from "../../../generated/prisma/client.ts";
+import type { tableStatus } from "../../../generated/prisma/client.ts";
 import type { TableSessionListItem } from "./sessions.repository.interface.ts";
 
 export type ScanResult = {
@@ -13,5 +14,5 @@ export interface ISessionsService {
   open(restaurantId: string, tableId: string): Promise<table_sessions>;
   close(restaurantId: string, id: string, userId: string): Promise<table_sessions>;
   extend(restaurantId: string, id: string): Promise<table_sessions>;
-  listActive(restaurantId: string): Promise<TableSessionListItem[]>;
+  list(restaurantId: string, status: tableStatus): Promise<TableSessionListItem[]>;
 }

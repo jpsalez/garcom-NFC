@@ -1,5 +1,5 @@
 import { inject, injectable } from "tsyringe";
-import type { reason, table_sessions } from "../../../generated/prisma/client.ts";
+import type { reason, table_sessions, tableStatus } from "../../../generated/prisma/client.ts";
 import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
 import { runInTransaction } from "../../shared/providers/prisma.ts";
 import { generateSessionToken } from "../../shared/utils/token.ts";
@@ -60,8 +60,8 @@ export class SessionsService implements ISessionsService {
     return this.sessionRepository.update(restaurantId, id, { expires_at: new Date(base + sessionTtlMs()) });
   }
 
-  listActive(restaurantId: string) {
-    return this.sessionRepository.findMany(restaurantId, { status: "ACTIVE" });
+  list(restaurantId: string, status: tableStatus) {
+    return this.sessionRepository.findMany(restaurantId, { status });
   }
 
   private create(restaurantId: string, tableId: string) {

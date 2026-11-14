@@ -190,7 +190,20 @@ describe("POST /sessions/:id/extend", () => {
 });
 
 describe("GET /sessions", () => {
-  it("lista só os atendimentos ativos do próprio restaurante", async () => {
+  it("?status=CLOSED lista os encerrados; status inválido dá 400", async () => {
+    const a = await ownerOf("a");
+    const b = await ownerOf("b");
+    await createSession(a.user.restaurant_id!, (await createTable(a.user.restaurant_id!, "A-1")).id);
+    await createSession(a.user.restaurant_id!, (await createTable(a.user.restaurant_id!, "A-2")).id, "CLOSED");
+    await createSession(b.user.restaurant_id!, (await createTable(b.user.restaurant_id!)).id, "CLOSED");
+
+    const res = await api().get("/api/v1/sessions?status=CLOSED").set(auth(a.token));
+
+    expect(res.body.map((s: { table: { label: string } }) => s.table.label)).toEqual(["A-2"]);
+    expect((await api().get("/api/v1/sessions?status=QUALQUER").set(auth(a.token))).status).toBe(400);
+  });
+
+  it("sem filtro, lista só os ativos do próprio restaurante", async () => {
     const a = await ownerOf("a");
     const b = await ownerOf("b");
     const mesaA = await createTable(a.user.restaurant_id!, "A-1");

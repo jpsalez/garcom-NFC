@@ -1,10 +1,11 @@
 import express from "express";
 import type { Router, Request, Response } from "express";
 import { container } from "./shared/container/container.ts";
-import { validateSchema, validateUuidParams } from "./shared/middlewares/validator.middleware.ts";
+import { validateQuery, validateSchema, validateUuidParams } from "./shared/middlewares/validator.middleware.ts";
 import { AuthController } from "./modules/auth/auth.controller.ts";
 import { AdministrationController } from "./modules/administration/administration.controller.ts";
 import { createRestaurantSchema, setActiveSchema } from "./modules/administration/administration.schema.ts";
+import { listSessionsQuery } from "./modules/sessions/sessions.schemas.ts";
 import { SessionsController } from "./modules/sessions/sessions.controller.ts";
 import { TablesController } from "./modules/tables/tables.controller.ts";
 import { createTableSchema, updateTableSchema } from "./modules/tables/tables.schemas.ts";
@@ -60,7 +61,7 @@ export function SetupRoutes(){
 
     // Atendimentos: o cliente abre pelo scan (público); o balcão abre, encerra e estende
     router.post('/public/tables/:code/scan', scanLimiter, sessionsController.scan);
-    router.get('/sessions', ...staffOrOwner, sessionsController.list);
+    router.get('/sessions', ...staffOrOwner, validateQuery(listSessionsQuery), sessionsController.list);
     router.post('/tables/:id/session', ...staffOrOwner, validateUuidParams('id'), sessionsController.open);
     router.post('/sessions/:id/close', ...staffOrOwner, validateUuidParams('id'), sessionsController.close);
     router.post('/sessions/:id/extend', ...staffOrOwner, validateUuidParams('id'), sessionsController.extend);

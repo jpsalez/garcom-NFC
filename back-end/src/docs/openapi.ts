@@ -104,7 +104,7 @@ export const openApiSpec = {
       post: operation({ tag: "Atendimentos", summary: "Cliente escaneia o QR: abre ou reaproveita o atendimento e recebe o token do aparelho", success: 201, auth: false, params: ["code"] }),
     },
     "/sessions": {
-      get: operation({ tag: "Atendimentos", summary: "Lista atendimentos ativos (OWNER ou STAFF)" }),
+      get: operation({ tag: "Atendimentos", summary: "Lista atendimentos; ?status=ACTIVE (padrão) ou CLOSED (OWNER ou STAFF)" }),
     },
     "/tables/{id}/session": {
       post: operation({ tag: "Atendimentos", summary: "Abre o atendimento pelo balcão; 409 se já houver um ativo (OWNER ou STAFF)", success: 201, params: ["id"] }),

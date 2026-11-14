@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { inject, injectable } from "tsyringe";
 import { tenantOf, userOf } from "../../shared/middlewares/auth.middleware.ts";
 import type { ISessionsService } from "./sessions.interfaces.ts";
+import { listSessionsQuery } from "./sessions.schemas.ts";
 
 // Balcão: restaurante e usuário vêm do token. Só o scan é público (o tenant vem da mesa).
 @injectable()
@@ -29,6 +30,7 @@ export class SessionsController {
   };
 
   list = async (req: Request, res: Response) => {
-    return res.status(200).json(await this.sessionsService.listActive(tenantOf(req)));
+    const { status } = listSessionsQuery.parse(req.query);
+    return res.status(200).json(await this.sessionsService.list(tenantOf(req), status));
   };
 }

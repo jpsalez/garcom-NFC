@@ -21,6 +21,17 @@ export function validateSchema(schema: ZodType) {
   };
 }
 
+// Query string: só valida (no Express 5 req.query é somente leitura); o default do schema o controller aplica com parse
+export function validateQuery(schema: ZodType) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const result = schema.safeParse(req.query);
+    if (!result.success) {
+      throw new ValidationError(result.error.issues.map((issue) => ({ field: issue.path.join("."), message: issue.message })));
+    }
+    next();
+  };
+}
+
 // Parâmetros de URL que precisam ser UUID: evita erro do banco por id malformado
 export function validateUuidParams(...names: string[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
