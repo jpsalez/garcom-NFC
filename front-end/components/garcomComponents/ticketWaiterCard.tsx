@@ -1,51 +1,51 @@
 'use client'
 import { useState } from "react"
+import { formatDuration } from "@/lib/format"
+import type { Call } from "@/lib/types"
 
-export default function TicketWaiterCard({table} : {table: number}) {
+const TYPE_TEXT = { WAITER: 'Solicitando Atendimento', BILL: 'Solicitando a Conta' }
+
+// now é o relógio já corrigido pelo do servidor; o tempo conta de created_at, que repetir o toque não reinicia (DEC-03)
+export default function TicketWaiterCard({call, now, onFinish} : {call: Call, now: number, onFinish: () => void}) {
 
     const [confirmation, setConfirmation] = useState(false)
-    
-    async function handleConfirmation() {
-        if (!confirmation) {
-            setConfirmation(true)
-        } else {
-            setConfirmation(false)
-        }
-    }
+    const [busy, setBusy] = useState(false)
     
     return(
         <>
             <div 
             role="button"
             tabIndex={0}
-            onClick={handleConfirmation}
+            aria-label={`${call.table.label}: ${TYPE_TEXT[call.type]}. Finalizar chamado`}
+            onClick={() => setConfirmation(true)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setConfirmation(true) } }}
             className="
             relative
             w-full h-full max-h-50 border p-5 rounded-lg shadow-lg cursor-pointer overflow-hidden
             transition-all duration-300
             hover:scale-105 hover:shadow-xl
             ">
-                <div className={`
+                <div inert={!confirmation} className={`
                 absolute inset-0 bg-black/50 text-white
                 grid grid-rows-3 items-center justify-items-center
                 transition-all duration-500
                 ${confirmation ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
                 `}>
                     <p>Finalizar Chamado?</p>
-                    <button>Sim</button>
-                    <button>Não</button>
+                    <button disabled={busy} onClick={(e) => { e.stopPropagation(); setBusy(true); onFinish() }}>Sim</button>
+                    <button onClick={(e) => { e.stopPropagation(); setConfirmation(false) }}>Não</button>
                 </div>
                 
-                <div className={`
+                <div inert={confirmation} className={`
                 grid grid-rows-2 items-center justify-items-center
                 transition-all duration-500
                 ${confirmation ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}
                 `}>
                     <div className="flex flex-col items-center justify-center">
-                        <p className="font-bold">Mesa</p>
-                        <p className="text-2xl font-bold">{table}</p>
+                        <p className="text-2xl font-bold">{call.table.label}</p>
+                        <p className="text-sm tabular-nums">{formatDuration(now - Date.parse(call.created_at))}</p>
                     </div>
-                    <p className="text-center">Solicitando Atendimento</p>
+                    <p className="text-center">{TYPE_TEXT[call.type]}</p>
                 </div>
             </div>
         </>

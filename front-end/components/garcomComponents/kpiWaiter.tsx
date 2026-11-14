@@ -1,9 +1,9 @@
 import { NumberTicker } from "../ui/number-ticker"
 
-export default function KpiWaiter() {
+type Kpis = { pending: number, activeTables: number, bills: number, doneToday: number }
 
-    const mock = 10
-    
+export default function KpiWaiter({ pending, activeTables, bills, doneToday }: Kpis) {
+
     return(
         <>
             <div
@@ -22,22 +22,22 @@ export default function KpiWaiter() {
             "
             >
                 <div>
-                    <NumberTicker value={mock} delay={0}/>
+                    <NumberTicker value={pending} delay={0}/>
                     <p>Chamados Pendentes</p>
                 </div>
 
                 <div>
-                    <NumberTicker value={mock} delay={0}/>
+                    <NumberTicker value={activeTables} delay={0}/>
                     <p>Mesas Ativas</p>
                 </div>
 
                 <div>
-                    <NumberTicker value={mock} delay={0}/>
+                    <NumberTicker value={bills} delay={0}/>
                     <p>Pedidos de Contas</p>
                 </div>
 
                 <div>
-                    <NumberTicker value={mock} delay={0}/>
+                    <NumberTicker value={doneToday} delay={0}/>
                     <p>Atendimentos Concluídos</p>
                 </div>
             </div>

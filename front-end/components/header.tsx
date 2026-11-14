@@ -33,11 +33,11 @@ export default function Header() {
                     {session && (
                         <button
                         onClick={() => { clearSession(); router.push('/login') }}
-                        className="text-sm underline cursor-pointer"
+                        className="w-auto p-0 text-sm underline cursor-pointer"
                         >Sair</button>
                     )}
                     <FaRegUser onClick={() => router.push('/login')} 
-                    className="cursor-pointer 
+                    className="cursor-pointer shrink-0
                     transition-all duration-300
                     hover:scale-125 active:scale-130
                     "

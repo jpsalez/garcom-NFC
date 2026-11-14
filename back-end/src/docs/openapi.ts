@@ -120,7 +120,7 @@ export const openApiSpec = {
       post: operation({ tag: "Chamados", summary: "Cliente chama o garçom ou pede a conta (cabeçalho X-Table-Token); 201 novo, 200 se já havia um aberto do tipo", success: 201, body: createCallSchema, auth: false }),
     },
     "/calls": {
-      get: operation({ tag: "Chamados", summary: "Lista chamados e serverTime; ?status=OPEN (padrão), DONE ou CANCELLED (OWNER ou STAFF)" }),
+      get: operation({ tag: "Chamados", summary: "Lista chamados e serverTime; ?status=OPEN (padrão), DONE ou CANCELLED e ?since=data (OWNER ou STAFF)" }),
     },
     "/calls/{id}/done": {
       patch: operation({ tag: "Chamados", summary: "Finaliza o chamado; 409 CALL_NOT_OPEN se não estiver mais aberto (OWNER ou STAFF)", params: ["id"] }),

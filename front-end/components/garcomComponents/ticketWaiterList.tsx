@@ -1,13 +1,13 @@
+import type { Call } from "@/lib/types"
 import TicketWaiterCard from "./ticketWaiterCard"
 
-export default function TicketWaiterList() {
+export default function TicketWaiterList({calls, now, onFinish}: {calls: Call[], now: number, onFinish: (id: string) => void}) {
 
-    const tickets = [1, 2, 3, 16, 29, 34]
-    
     return(
         <>
         <div className="w-full p-5 space-y-5">
             <h2 className="text-xl">Chamados Pendentes</h2>
+            {calls.length === 0 && <p className="text-gray-500">Nenhum chamado no momento.</p>}
             <div
             className="
             w-full gap-10
@@ -15,8 +15,8 @@ export default function TicketWaiterList() {
             "
             >
             
-                {tickets.map( (t) => (
-                    <TicketWaiterCard key={t} table={t}/>
+                {calls.map( (call) => (
+                    <TicketWaiterCard key={call.id} call={call} now={now} onFinish={() => onFinish(call.id)}/>
                 ))}
             </div>
         </div>

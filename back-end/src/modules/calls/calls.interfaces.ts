@@ -16,6 +16,6 @@ export type CallView = {
 export interface ICallsService {
   // created=false quando já havia um chamado aberto do mesmo tipo (DEC-03)
   create(device: Device, type: type_call): Promise<{ call: CallView; created: boolean }>;
-  list(restaurantId: string, status: call_state): Promise<{ serverTime: Date; calls: CallView[] }>;
+  list(restaurantId: string, status: call_state, since?: Date): Promise<{ serverTime: Date; calls: CallView[] }>;
   done(restaurantId: string, id: string, userId: string): Promise<calls>;
 }

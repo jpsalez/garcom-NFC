@@ -156,6 +156,23 @@ describe("GET /calls", () => {
   });
 });
 
+describe("GET /calls?since=", () => {
+  it("filtra pelos chamados criados a partir da data; data inválida dá 400", async () => {
+    const { token, user } = await ownerOf("a");
+    const { deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const call = await callAs(deviceToken);
+    await api().patch(`/api/v1/calls/${call.body.id}/done`).set(auth(token));
+    const day = 24 * 60 * 60 * 1000;
+
+    const recent = await api().get(`/api/v1/calls?status=DONE&since=${new Date(Date.now() - day).toISOString()}`).set(auth(token));
+    const future = await api().get(`/api/v1/calls?status=DONE&since=${new Date(Date.now() + day).toISOString()}`).set(auth(token));
+
+    expect(recent.body.calls).toHaveLength(1);
+    expect(future.body.calls).toHaveLength(0);
+    expect((await api().get("/api/v1/calls?since=ontem").set(auth(token))).status).toBe(400);
+  });
+});
+
 describe("PATCH /calls/:id/done", () => {
   it("STAFF finaliza e done_by recebe o id dele (DEC-06)", async () => {
     const { token, user } = await ownerOf("a");

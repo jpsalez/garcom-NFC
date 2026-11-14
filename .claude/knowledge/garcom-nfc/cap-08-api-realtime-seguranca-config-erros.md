@@ -39,7 +39,7 @@ Desativar uma mesa com atendimento ativo deve falhar com 409 ("Feche a mesa ante
 ### 8.2.4 Balcão (JWT, papel STAFF)  
 | Método e caminho | Finalidade | Estado |
 |---|---|---|  ``
-| GET /calls?status=OPEN | Cards em ordem de chegada | Implementado 14/11: status OPEN (padrão), DONE ou CANCELLED; OWNER/STAFF; resposta {serverTime, calls[]} com table.label | ````
+| GET /calls?status=OPEN | Cards em ordem de chegada | Implementado 14/11: status OPEN (padrão), DONE ou CANCELLED e `?since=<data>` (só os criados a partir dela; 400 se inválida); OWNER/STAFF; resposta {serverTime, calls[]} com table.label | ````
 | PATCH /calls/:id/done | Finalizar chamado (módulos: /attend) | Implementado 14/11: OWNER/STAFF; done_by = usuário logado; 404; 409 CALL_NOT_OPEN | ``
 | GET /sessions?status=ACTIVE | Mesas em atendimento, com aparelhos | Implementado em 14/11 | ``````
 | PATCH /sessions/:id | Corpo com keepOpen verdadeiro ou falso (módulos: /keep-open) | Plan. | ``````

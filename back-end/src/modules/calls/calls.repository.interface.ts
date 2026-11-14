@@ -17,7 +17,7 @@ export interface ICallRepository {
   create(data: CreateCallData): Promise<calls>;
   findById(restaurantId: string, id: string): Promise<calls | null>;
   findOpen(restaurantId: string, sessionId: string, type: type_call): Promise<calls | null>;
-  findMany(restaurantId: string, filter?: { status?: call_state }): Promise<CallWithTable[]>;
+  findMany(restaurantId: string, filter?: { status?: call_state; since?: Date }): Promise<CallWithTable[]>;
   markDone(restaurantId: string, id: string, doneBy: string): Promise<Prisma.BatchPayload>;
   cancelOpenBySession(sessionId: string): Promise<Prisma.BatchPayload>;
 }

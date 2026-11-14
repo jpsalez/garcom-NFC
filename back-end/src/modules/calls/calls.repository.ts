@@ -26,9 +26,9 @@ export class CallRepository implements ICallRepository {
   }
 
   // Cards do balcão, por ordem de chegada
-  findMany(restaurantId: string, filter: { status?: call_state } = {}) {
+  findMany(restaurantId: string, filter: { status?: call_state; since?: Date } = {}) {
     return this.db.calls.findMany({
-      where: { restaurant_id: restaurantId, status: filter.status },
+      where: { restaurant_id: restaurantId, status: filter.status, created_at: { gte: filter.since } },
       orderBy: { created_at: "asc" },
       include: {
         table_session: { select: { id: true, table: { select: { id: true, label: true } } } },
