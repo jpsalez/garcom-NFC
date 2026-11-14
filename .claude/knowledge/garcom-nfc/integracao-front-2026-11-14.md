@@ -22,6 +22,12 @@ Feita em modo autônomo (usuário ausente), em branches `ia/integracao-*` a part
 - Token recusado pelo socket ("Não autorizado") ou 401 da API: a sessão é limpa e a tela volta ao login.
 - Os botões do projeto têm `w-full` global (`globals.css`): botões pequenos precisam de `w-auto p-0`.
 
+## Tela da mesa do cliente (`/m/[code]`)
+- É a URL do QR Code e do NFC (`<PUBLIC_APP_URL>/m/<código>`, DEC-05). A rota antiga `/mesa` (mock) foi removida. `app/m/[code]/loading.tsx` existe por causa do `cacheComponents` (a rota é dinâmica); o build de produção (`npm run build`) passa e a rota sai como Partial Prerender.
+- Ao abrir: usa o token do aparelho guardado em `psiu.device.<código>` (vale até o `expires_at` do atendimento) ou chama `POST /public/tables/:code/scan`, que abre o atendimento (ou entra no que existe) e devolve o token só deste celular. `services/tables.ts` junta scans simultâneos num só, porque cada scan cria um token novo no servidor (o StrictMode do dev roda o efeito duas vezes).
+- "Chamar Garçom" e "Solicitar a Conta" (com confirmação) chamam `POST /public/calls` com `X-Table-Token`. 201 (criou) e 200 (já havia um aberto do tipo, DEC-03) são tratados como sucesso. 401 (atendimento encerrado ou token vencido) limpa o aparelho, faz um novo scan e tenta de novo uma única vez. 429 mostra a mensagem da API. O cliente não usa tempo real nem vê quando o garçom atende (DEC-08): depois de 30 s o botão volta e tocar de novo é seguro, porque o servidor devolve o chamado aberto em vez de criar outro.
+- Mesa inexistente, inativa ou de restaurante desativado: "Mesa não encontrada ou indisponível. Fale com o garçom." (o back-end responde 404 igual nos três casos).
+
 ## Decisões tomadas sem o usuário (REVISAR)
 - Token do balcão no `localStorage` (não cookie httpOnly): mais simples e sem proxy no Next; o risco é XSS, e o JWT expira (padrão 1 dia). Alternativa futura: cookie httpOnly com rota de login no próprio Next.
 - "Atendimentos Concluídos" = chamados criados hoje e já finalizados (`since` filtra por `created_at`; foi preciso acrescentar `?since=` ao `GET /calls`).
@@ -32,5 +38,5 @@ Feita em modo autônomo (usuário ausente), em branches `ia/integracao-*` a part
 | --- | --- | --- |
 | 1. Base: cliente da API, login real, guarda de rotas, logout, seed com códigos válidos | `ia/integracao-base` | feito (na `dev`) |
 | 2. Balcão: chamados e atendimentos reais, Socket.IO, finalizar, estender, encerrar, aviso de 15 min | `ia/integracao-balcao` | feito (na `dev`) |
-| 3. Mesa do cliente: `/m/[code]` com scan, token do aparelho e chamados | `ia/integracao-mesa` | a fazer |
+| 3. Mesa do cliente: `/m/[code]` com scan, token do aparelho e chamados | `ia/integracao-mesa` | feito (na `dev`) |
 | 4. Gestão do OWNER: mesas com QR Code e equipe | `ia/integracao-gestao` | a fazer |
