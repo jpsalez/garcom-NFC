@@ -26,7 +26,7 @@ Legenda de estado: **Impl.** = implementado; **Plan.** = planejado (não impleme
 
 ### 8.2.3 Admin (JWT; papéis SUPER_ADMIN e OWNER) [Implementado, 12/11/2026]
 SUPER_ADMIN: POST/GET /admin/restaurants; PATCH /admin/restaurants/:restaurantId (active); GET/POST /admin/restaurants/:restaurantId/users; PATCH/DELETE /admin/restaurants/:restaurantId/users/:id. OWNER: GET/POST /staff; PATCH/DELETE /staff/:id (só STAFF; restaurantId do token). Último OWNER ativo protegido (409). Login: 10/15 min por IP+e-mail (429).
-Rotas de mesas abaixo seguem [Planejado], para OWNER (e STAFF onde couber).  
+Rotas de mesas [Implementado em 14/11/2026]: GET /tables (STAFF ou OWNER); POST /tables, PATCH /tables/:id, GET /tables/:id/qrcode (SVG; reativa mesa inativa) e DELETE /tables/:id (204; 404 de outro restaurante; 409 se já teve sessão), todas só OWNER. list/create/update devolvem `public_url`. As linhas da tabela abaixo marcadas "Plan." sobre /tables estão superadas; /deactivate, /activate e /regenerate-code continuam [Planejado].  
 | Método e caminho | Finalidade | Estado |
 |---|---|---|  ````
 | GET, POST /tables | Listar e criar mesas (gera public_code) | Plan. (service é esqueleto; controller e schemas vazios) | ````````
@@ -109,7 +109,7 @@ Classe base `AppError` (mensagem, status, detalhes opcionais) e subclasses: `Bad
 | 403 | ForbiddenError | Papel sem permissão; usuário sem restaurante vinculado | Classe impl.; uso plan. | ``
 | 404 | TABLE_NOT_FOUND | Mesa inexistente ou inativa | Plan. | ``
 | 404 | NotFoundError | Recurso ausente ou de outro tenant; Prisma P2025 | Impl. (tratador) | ``
-| 409 | ConflictError | E-mail já cadastrado; unicidade violada (P2002); chamado já finalizado; sessão já fechada; mesa com atendimento ativo ao desativar | Parcial | ``
+| 409 | ConflictError | E-mail já cadastrado; unicidade violada (P2002); violação de chave estrangeira (P2003, error.middleware, 14/11); mesa com sessão ao excluir; chamado já finalizado; sessão já fechada; mesa com atendimento ativo ao desativar | Parcial | ``
 | 429 | TOO_MANY_CALLS | Limite de chamados por token/mesa; limitação de taxa nas rotas públicas | Plan. (proposto) | ``
 | 500 | InternalServerError | Erro não previsto; é registrado em log e a resposta não vaza detalhes | Impl. |   
 
@@ -123,7 +123,7 @@ Classe base `AppError` (mensagem, status, detalhes opcionais) e subclasses: `Bad
 | AUTH_CACHE_TTL_SECONDS | api | TTL do cache de autenticação; padrão 30 | Usada | ``
 | SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD | seed | Dados do primeiro SUPER_ADMIN (senha 12+ caracteres) | Usada (prisma/seed-super-admin.ts) | ``
 | TABLE_SESSION_TTL | api | Validade do atendimento em segundos (14400, 4 h) | Não usada | ````
-| PUBLIC_WEB_URL | api | Base da URL do QR Code (/m/código); o guia a chama PUBLIC_APP_URL (DV-43) | Não usada | ``
+| PUBLIC_APP_URL (era PUBLIC_WEB_URL) | api | Base da URL pública da mesa e do QR Code (/m/código); obrigatória na subida (main.ts); padrão `http://localhost:3000` no .env.example e no compose (DV-43 resolvida) | Usada (14/11/2026) | ``
 | NEXT_PUBLIC_API_URL | web | URL da API vista pelo navegador (http://localhost:4000) | Sem front | ``
 | API_INTERNAL_URL | web | URL da API para renderização no servidor (http://api:4000) | Sem front | ``````
 | DB_USER, DB_PASSWORD | db | Credenciais do PostgreSQL; banco fixo garcom | Sem compose |   

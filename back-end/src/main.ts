@@ -10,6 +10,8 @@ import { registerDependencies } from "./shared/container/container.ts";
 import { errorHandler } from "./shared/middlewares/error.middleware.ts";
 
 function bootstrap() {
+  // Sem o domínio os QR Codes sairiam apontando para o lugar errado
+  if (!process.env.PUBLIC_APP_URL) throw new Error("PUBLIC_APP_URL não definido no .env");
   registerDependencies();
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
   app.use(SetupRoutes());

@@ -99,7 +99,7 @@ export const openApiSpec = {
       delete: operation({ tag: "Mesas", summary: "Exclui mesa sem atendimentos; com histórico dá 409 (OWNER)", success: 204, params: ["id"] }),
     },
     "/tables/{id}/qrcode": {
-      get: operation({ tag: "Mesas", summary: "QR Code da mesa em SVG (OWNER)", params: ["id"] }),
+      get: operation({ tag: "Mesas", summary: "QR Code da mesa em SVG; reativa a mesa se estiver inativa (OWNER)", params: ["id"] }),
     },
   },
 };

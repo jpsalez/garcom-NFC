@@ -7,7 +7,10 @@ Leia ao retomar. O código manda sobre a documentação.
 - Decisões: todas tomadas em 13–14/11 (ver `decisoes.md`, seção "Resolvidas"). Nenhuma pendente.
 - Status geral do projeto: doc "garcom-NFC — Estado do projeto e próximos passos" (claude.ai).
 
-## Próxima tarefa: fechar o módulo de mesas (modo IA, pedido pelo usuário)
+## Concluído: módulo de mesas (branch `ia/mesas-url-qrcode-excluir`)
+Modo IA ligado, suíte vitest com 19 testes, `public_url` em list/create/update, GET /tables/:id/qrcode, DELETE /tables/:id, `PUBLIC_APP_URL` obrigatória, P2003 como 409. Próximo: DEC-13, depois `/api/v1` + `code` nos erros, depois sessions (lista "Depois disso" abaixo).
+
+## Plano que foi executado (histórico): fechar o módulo de mesas
 O usuário pediu **modo IA**, mantendo o padrão enxuto do código existente: pouco código, fácil de entender e manter.
 Pré-condição que faltava na sessão anterior: o ambiente não baixava os binários do Prisma. A sessão nova roda no ambiente Default, com `binaries.prisma.sh` liberado.
 

@@ -16,7 +16,9 @@ _Figura: **Figura 6.2** – Métodos dos repositories de sessões, tokens e cham
 
 ## 6.2 Módulo `tables` 
 
-**Estado.** Arquivos existentes: `tables.repository.interface.ts` e `tables.repository.ts` (completos); `tables.service.ts` (esqueleto); `tables.controller.ts` e `tables.schemas.ts` (arquivos vazios). O esqueleto do service é uma classe com nome iniciado em minúscula (`tablesService`), sem decorator de injeção e com um único método `create` vazio; portanto não é resolvido pelo contêiner nem está registrado. O nome do arquivo de schemas está no plural, enquanto as notas citam o singular (`tables.schema.ts`). (DV-45.) 
+**[Atualizado 14/11/2026, branch `ia/mesas-url-qrcode-excluir`] [Implementado]:** o módulo `tables` está concluído: service, controller e schemas reais, repository com `hasSessions(restaurantId, id)`, `shared/utils/public-url.ts` (`tablePublicUrl(code)` = `<PUBLIC_APP_URL>/m/<public_code>`, DEC-05). Rotas: GET /tables (STAFF ou OWNER), POST e PATCH /tables/:id (OWNER), GET /tables/:id/qrcode (OWNER, `image/svg+xml`, reativa mesa inativa), DELETE /tables/:id (OWNER, 204; 404 se de outro restaurante; 409 se já teve sessão). list/create/update devolvem `public_url`. O texto abaixo sobre "esqueleto" é histórico e está superado.
+
+**Estado (histórico, antes de 14/11).** Arquivos existentes: `tables.repository.interface.ts` e `tables.repository.ts` (completos); `tables.service.ts` (esqueleto); `tables.controller.ts` e `tables.schemas.ts` (arquivos vazios). O esqueleto do service é uma classe com nome iniciado em minúscula (`tablesService`), sem decorator de injeção e com um único método `create` vazio; portanto não é resolvido pelo contêiner nem está registrado. O nome do arquivo de schemas está no plural, enquanto as notas citam o singular (`tables.schema.ts`). (DV-45.) 
 
 **Tipos.** `CreateTableData` (identificador do restaurante, rótulo e código público) e `TableWithRestaurant` (mesa com os campos `id`, `name` e `slug` do restaurante). 
 

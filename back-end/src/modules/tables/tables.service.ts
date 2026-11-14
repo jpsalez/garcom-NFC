@@ -39,6 +39,8 @@ export class TablesService implements ITablesService {
 
   async qrCode(restaurantId: string, id: string) {
     const table = await this.getOwned(restaurantId, id);
+    // Gerar o QR Code põe a mesa em uso: reativa se estiver inativa
+    if (!table.active) await this.tableRepository.update(restaurantId, id, { active: true });
     return QRCode.toString(tablePublicUrl(table.public_code), { type: "svg" });
   }
 

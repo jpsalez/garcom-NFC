@@ -52,12 +52,23 @@ describe("GET /tables/:id/qrcode", () => {
     expect(res.body.toString()).toContain("<svg");
   });
 
-  it("mesa de outro restaurante dá 404", async () => {
+  it("mesa inativa fica ativa ao gerar o QR Code", async () => {
+    const { token, user } = await ownerOf("a");
+    const table = await createTable(user.restaurant_id!);
+    await prisma.tables.update({ where: { id: table.id }, data: { active: false } });
+
+    expect((await api().get(`/tables/${table.id}/qrcode`).set(auth(token))).status).toBe(200);
+    expect((await prisma.tables.findUniqueOrThrow({ where: { id: table.id } })).active).toBe(true);
+  });
+
+  it("mesa de outro restaurante dá 404 e não é ativada", async () => {
     const a = await ownerOf("a");
     const b = await ownerOf("b");
     const mesaDeB = await createTable(b.user.restaurant_id!);
+    await prisma.tables.update({ where: { id: mesaDeB.id }, data: { active: false } });
 
     expect((await api().get(`/tables/${mesaDeB.id}/qrcode`).set(auth(a.token))).status).toBe(404);
+    expect((await prisma.tables.findUniqueOrThrow({ where: { id: mesaDeB.id } })).active).toBe(false);
   });
 
   it("STAFF dá 403", async () => {
