@@ -12,9 +12,9 @@ Nenhuma no momento.
 (A lista anterior, sem ids, está em `../_arquivo/decisoes-lista-antiga.md`.)
 
 ## Resolvidas que estavam na lista de tarefas
-- [x] DEC-03 · Chamados repetidos — um chamado aberto por tipo (garçom/conta) por sessão; tocar de novo devolve o chamado já aberto (200), sem card novo. O balcão mostra há quanto tempo o chamado está aberto, contado de `created_at`, que não é reiniciado pelo toque repetido (13/11/2026).
+- [x] DEC-03 · Chamados repetidos — um chamado aberto por tipo (garçom/conta) por sessão; tocar de novo devolve o chamado já aberto (200), sem card novo. O balcão mostra há quanto tempo o chamado está aberto, contado de `created_at`, que não é reiniciado pelo toque repetido. O cronômetro roda no front; a API só envia `created_at` e `serverTime` (para corrigir o relógio do balcão) e o Socket.IO só avisa chamado novo/finalizado. Contador de toques repetidos fica para depois do MVP (14/11/2026).
 - [x] DEC-01 · Quem abre o atendimento da mesa — o primeiro scan do QR abre; o garçom (OWNER/STAFF) também pode abrir e encerrar pelo balcão (13/11/2026).
-- [x] DEC-02 · Duração do atendimento — 4 h (`TABLE_SESSION_TTL`); antes de expirar, o balcão recebe um aviso para estender o atendimento (13/11/2026).
+- [x] DEC-02 · Duração do atendimento — 4 h (`TABLE_SESSION_TTL`); 15 min antes de expirar, o balcão recebe um aviso; estender acrescenta mais 4 h (14/11/2026).
 - [x] DEC-05 · Domínio e formato da URL pública — o domínio vem do `.env` (`PUBLIC_APP_URL`) e o sistema gera a URL `<PUBLIC_APP_URL>/m/<public_code>`; nunca digitada à mão (13/11/2026).
 - [x] DEC-13 · Criar usuário em restaurante desativado — não pode (13/11/2026).
 - [x] DEC-10 · Alerta sonoro no balcão — sim; o back-end só emite o evento de chamado novo e quem toca o som é o front-end. Nome e cobrança do produto ficam para depois do MVP (13/11/2026).
