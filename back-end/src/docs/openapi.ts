@@ -76,7 +76,7 @@ export const openApiSpec = {
     },
     [restaurantUsers]: {
       get: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Lista usuários do restaurante", params: ["restaurantId"] }),
-      post: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Cria usuário (OWNER ou STAFF)", success: 201, body: createRestaurantUserSchema, params: ["restaurantId"] }),
+      post: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Cria usuário (OWNER ou STAFF); 409 se o restaurante estiver desativado", success: 201, body: createRestaurantUserSchema, params: ["restaurantId"] }),
     },
     [`${restaurantUsers}/{id}`]: {
       patch: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Atualiza usuário", body: updateUserSchema, params: ["restaurantId", "id"] }),
