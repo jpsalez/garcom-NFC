@@ -26,3 +26,7 @@ const byIpAndEmail = (req: Request) => {
 
 export const loginLimiter = limiter(15, 10, "Muitas tentativas de login. Tente novamente em alguns minutos.", byIpAndEmail);
 export const registerLimiter = limiter(60, 5, "Muitos cadastros deste endereço. Tente novamente mais tarde.", byIp);
+
+// IP + mesa: vários aparelhos na mesma rede do restaurante podem escanear mesas diferentes
+const byIpAndCode = (req: Request) => `${byIp(req)}|${String(req.params.code).slice(0, 32)}`;
+export const scanLimiter = limiter(15, 30, "Muitos acessos a esta mesa. Tente novamente em alguns minutos.", byIpAndCode);

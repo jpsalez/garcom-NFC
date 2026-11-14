@@ -30,10 +30,11 @@ export type TableSessionListItem = Prisma.table_sessionsGetPayload<{
 export interface ITableSessionRepository {
   create(data: CreateTableSessionData): Promise<table_sessions>;
   findById(restaurantId: string, id: string): Promise<table_sessions | null>;
-  findActiveByTable(tableId: string): Promise<table_sessions | null>;
+  findActiveByTable(restaurantId: string, tableId: string): Promise<table_sessions | null>;
   findMany(restaurantId: string, filter?: { status?: tableStatus }): Promise<TableSessionListItem[]>;
   findExpired(now: Date): Promise<table_sessions[]>;
   update(restaurantId: string, id: string, data: UpdateTableSessionData): Promise<table_sessions>;
+  closeIfActive(restaurantId: string, id: string, data: UpdateTableSessionData): Promise<Prisma.BatchPayload>;
   delete(restaurantId: string, id: string): Promise<table_sessions>;
 }
 

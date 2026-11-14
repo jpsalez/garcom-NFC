@@ -13,13 +13,13 @@ export function createTable(restaurantId: string, label = "Mesa 1") {
   });
 }
 
-export function createSession(restaurantId: string, tableId: string, status: "ACTIVE" | "CLOSED" = "ACTIVE") {
+export function createSession(restaurantId: string, tableId: string, status: "ACTIVE" | "CLOSED" = "ACTIVE", expiresAt = new Date(Date.now() + 4 * 60 * 60 * 1000)) {
   return prisma.table_sessions.create({
     data: {
       restaurant_id: restaurantId,
       table_id: tableId,
       status,
-      expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000),
+      expires_at: expiresAt,
     },
   });
 }

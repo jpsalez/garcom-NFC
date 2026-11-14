@@ -17,7 +17,8 @@ const uuidParam = (name: string) => ({
   name,
   in: "path",
   required: true,
-  schema: { type: "string", format: "uuid" },
+  // "code" é o public_code da mesa (12 caracteres); os demais parâmetros são ids
+  schema: name === "code" ? { type: "string" } : { type: "string", format: "uuid" },
 });
 
 // Corpo vem do próprio schema Zod: a documentação não sai de sincronia com a validação
@@ -98,6 +99,21 @@ export const openApiSpec = {
     "/tables/{id}": {
       patch: operation({ tag: "Mesas", summary: "Atualiza mesa (OWNER)", body: updateTableSchema, params: ["id"] }),
       delete: operation({ tag: "Mesas", summary: "Exclui mesa sem atendimentos; com histórico dá 409 (OWNER)", success: 204, params: ["id"] }),
+    },
+    "/public/tables/{code}/scan": {
+      post: operation({ tag: "Atendimentos", summary: "Cliente escaneia o QR: abre ou reaproveita o atendimento e recebe o token do aparelho", success: 201, auth: false, params: ["code"] }),
+    },
+    "/sessions": {
+      get: operation({ tag: "Atendimentos", summary: "Lista atendimentos ativos (OWNER ou STAFF)" }),
+    },
+    "/tables/{id}/session": {
+      post: operation({ tag: "Atendimentos", summary: "Abre o atendimento pelo balcão; 409 se já houver um ativo (OWNER ou STAFF)", success: 201, params: ["id"] }),
+    },
+    "/sessions/{id}/close": {
+      post: operation({ tag: "Atendimentos", summary: "Encerra: revoga tokens e cancela chamados abertos (OWNER ou STAFF)", params: ["id"] }),
+    },
+    "/sessions/{id}/extend": {
+      post: operation({ tag: "Atendimentos", summary: "Estende o atendimento em mais 4 h (OWNER ou STAFF)", params: ["id"] }),
     },
     "/tables/{id}/qrcode": {
       get: operation({ tag: "Mesas", summary: "QR Code da mesa em SVG; reativa a mesa se estiver inativa (OWNER)", params: ["id"] }),

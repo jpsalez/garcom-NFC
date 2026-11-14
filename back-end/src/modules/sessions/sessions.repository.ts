@@ -25,9 +25,9 @@ export class TableSessionRepository implements ITableSessionRepository {
     return this.db.table_sessions.findUnique({ where: { id, restaurant_id: restaurantId } });
   }
 
-  findActiveByTable(tableId: string) {
+  findActiveByTable(restaurantId: string, tableId: string) {
     return this.db.table_sessions.findFirst({
-      where: { table_id: tableId, status: tableStatus.ACTIVE },
+      where: { restaurant_id: restaurantId, table_id: tableId, status: tableStatus.ACTIVE },
     });
   }
 
@@ -50,6 +50,14 @@ export class TableSessionRepository implements ITableSessionRepository {
 
   update(restaurantId: string, id: string, data: UpdateTableSessionData) {
     return this.db.table_sessions.update({ where: { id, restaurant_id: restaurantId }, data });
+  }
+
+  // Só atualiza se ainda estiver ACTIVE: dois encerramentos simultâneos não se sobrescrevem ({ count: 0 } = perdeu)
+  closeIfActive(restaurantId: string, id: string, data: UpdateTableSessionData) {
+    return this.db.table_sessions.updateMany({
+      where: { id, restaurant_id: restaurantId, status: tableStatus.ACTIVE },
+      data: { ...data, status: tableStatus.CLOSED },
+    });
   }
 
   delete(restaurantId: string, id: string) {

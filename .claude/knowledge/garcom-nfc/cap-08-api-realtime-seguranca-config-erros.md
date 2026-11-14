@@ -45,7 +45,9 @@ Desativar uma mesa com atendimento ativo deve falhar com 409 ("Feche a mesa ante
 | PATCH /sessions/:id | Corpo com keepOpen verdadeiro ou falso (módulos: /keep-open) | Plan. | ``````
 | POST /sessions/:id/close | Encerrar; 200 com status, revokedTokens e cancelledCalls | Plan. |   
 
-O documento de módulos prevê ainda `GET /sessions` e `POST /tables/:id/sessions` (garçom abre a mesa), que não pertencem ao desenho da v0.3 (DV-37). Rotas da v0.2 (setores, equipe, cardápio, comandas, KDS, avaliações, relatórios, `/auth/me`) não fazem parte do MVP e são futuras. 
+Sessões [Implementado em 14/11/2026; as linhas "Plan." acima sobre /sessions e o scan estão superadas; todas sob /api/v1]: `POST /public/tables/:code/scan` (público; 30/15 min por IP+mesa; abre ou reaproveita o atendimento; devolve `{token, expires_at, table, restaurant}`; mesa/restaurante inativo = 404; substitui o `/token` planejado); `GET /sessions` (ativos); `POST /tables/:id/session` (balcão; 409 SESSION_ALREADY_ACTIVE); `POST /sessions/:id/close` (409 SESSION_CLOSED se já encerrado); `POST /sessions/:id/extend` (+`TABLE_SESSION_TTL`, padrão 4 h). `PATCH /sessions/:id` (keepOpen) segue [Planejado]; `POST /public/calls` e o middleware do token de mesa dependem do módulo calls.
+
+O documento de módulos previa `GET /sessions` e `POST /tables/:id/sessions` (garçom abre a mesa), fora do desenho da v0.3 (DV-37); agora implementados (DEC-01). Rotas da v0.2 (setores, equipe, cardápio, comandas, KDS, avaliações, relatórios, `/auth/me`) não fazem parte do MVP e são futuras. 
 
 ## 8.3 Eventos Socket.IO 
 

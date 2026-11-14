@@ -1,28 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { api } from "./helpers/app.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
+import { auth, ownerOf, staffToken } from "./helpers/auth.ts";
 import { createSession, createTable } from "./helpers/factories.ts";
 
 beforeEach(resetDb);
 afterAll(() => prisma.$disconnect());
-
-const password = "senha-forte-123";
-
-// Registra um restaurante com OWNER e devolve o token dele
-async function ownerOf(name: string) {
-  const email = `${name}@teste.com`;
-  await api().post("/api/v1/auth/register").send({ name, email, password, restaurantName: name });
-  const login = await api().post("/api/v1/auth/login").send({ email, password });
-  return { token: login.body.token as string, user: await prisma.users.findUniqueOrThrow({ where: { email } }) };
-}
-
-async function staffToken(ownerToken: string) {
-  const email = "garcom@teste.com";
-  await api().post("/api/v1/staff").set("Authorization", `Bearer ${ownerToken}`).send({ name: "Gar", email, password });
-  return (await api().post("/api/v1/auth/login").send({ email, password })).body.token as string;
-}
-
-const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 describe("public_url", () => {
   it("create, list e update usam o domínio do .env", async () => {

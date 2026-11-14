@@ -7,7 +7,7 @@ export type CreateTableData = {
 };
 
 export type TableWithRestaurant = Prisma.tablesGetPayload<{
-  include: { restaurant: { select: { id: true; name: true; slug: true } } };
+  include: { restaurant: { select: { id: true; name: true; slug: true; active: true } } };
 }>;
 
 export interface ITableRepository {

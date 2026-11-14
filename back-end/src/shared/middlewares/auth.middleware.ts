@@ -57,6 +57,12 @@ export function ensureRole(...roles: role[]) {
   };
 }
 
+// Id do usuário logado (ex.: closed_by, done_by); usar depois do ensureAuthenticated
+export function userOf(req: Request): string {
+  if (!req.user) throw new UnauthorizedError("Não autenticado");
+  return req.user.id;
+}
+
 // Rotas de restaurante: o restaurantId vem do token, nunca do cliente. Devolve-o já validado.
 export function tenantOf(req: Request): string {
   const restaurantId = req.user?.restaurantId;

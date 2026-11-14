@@ -8,7 +8,7 @@ Leia ao retomar. O código manda sobre a documentação.
 - Status geral do projeto: doc "garcom-NFC — Estado do projeto e próximos passos" (claude.ai).
 
 ## Concluído: módulo de mesas (branch `ia/mesas-url-qrcode-excluir`)
-Modo IA ligado, suíte vitest com 19 testes, `public_url` em list/create/update, GET /tables/:id/qrcode, DELETE /tables/:id, `PUBLIC_APP_URL` obrigatória, P2003 como 409. DEC-13 feita (409 ao criar usuário em restaurante desativado). `/api/v1` + `code` nos erros feitos. Próximo: sessions (lista "Depois disso" abaixo).
+Modo IA ligado, suíte vitest com 19 testes, `public_url` em list/create/update, GET /tables/:id/qrcode, DELETE /tables/:id, `PUBLIC_APP_URL` obrigatória, P2003 como 409. DEC-13 feita (409 ao criar usuário em restaurante desativado). `/api/v1` + `code` nos erros feitos. Sessions feito (14/11): scan POST, abrir/listar/fechar/estender, expiração preguiçosa, testes em `tests/sessions.test.ts`. Próximo: módulo calls, depois Socket.IO (job de expiração e aviso de 15 min entram aí).
 
 ## Plano que foi executado (histórico): fechar o módulo de mesas
 O usuário pediu **modo IA**, mantendo o padrão enxuto do código existente: pouco código, fácil de entender e manter.
@@ -37,7 +37,7 @@ Regras:
 Testes primeiro (`tests/tables.test.ts`): criar devolve `public_url` com o domínio do `.env`; QR devolve `image/svg+xml`; QR de outro restaurante dá 404; STAFF no QR dá 403; excluir sem histórico dá 204; com sessão dá 409; de outro restaurante dá 404.
 
 ## Depois disso (ordem sugerida)
-1. Sessões de mesa: abrir pelo scan e pelo balcão, encerrar, estender (+4 h, aviso 15 min antes), token por aparelho.
+1. (FEITO em 14/11) Sessões de mesa: abrir pelo scan e pelo balcão, encerrar, estender (+4 h, aviso 15 min antes), token por aparelho.
 2. Chamados (DEC-03: um aberto por tipo por sessão; repetir devolve o mesmo; `created_at` não é reiniciado) e Socket.IO.
 
 ## Git

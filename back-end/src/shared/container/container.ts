@@ -22,6 +22,8 @@ import type {
   ITableSessionRepository,
 } from "../../modules/sessions/sessions.repository.interface.ts";
 import { SessionTokenRepository, TableSessionRepository } from "../../modules/sessions/sessions.repository.ts";
+import type { ISessionsService } from "../../modules/sessions/sessions.interfaces.ts";
+import { SessionsService } from "../../modules/sessions/sessions.service.ts";
 import type { ICallRepository } from "../../modules/calls/calls.repository.interface.ts";
 import { CallRepository } from "../../modules/calls/calls.repository.ts";
 
@@ -46,6 +48,7 @@ export function registerDependencies() {
   container.registerSingleton<IUsersService>("UsersService", UsersService);
   container.registerSingleton<IAdministrationService>("AdministrationService", AdministrationService);
   container.registerSingleton<ITablesService>("TablesService", TablesService);
+  container.registerSingleton<ISessionsService>("SessionsService", SessionsService);
 }
 
 export { container };

@@ -5,11 +5,12 @@ import { validateSchema, validateUuidParams } from "./shared/middlewares/validat
 import { AuthController } from "./modules/auth/auth.controller.ts";
 import { AdministrationController } from "./modules/administration/administration.controller.ts";
 import { createRestaurantSchema, setActiveSchema } from "./modules/administration/administration.schema.ts";
+import { SessionsController } from "./modules/sessions/sessions.controller.ts";
 import { TablesController } from "./modules/tables/tables.controller.ts";
 import { createTableSchema, updateTableSchema } from "./modules/tables/tables.schemas.ts";
 import { StaffController } from "./modules/users/staff.controller.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "./modules/users/users.schema.ts";
-import { loginLimiter, registerLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
+import { loginLimiter, registerLimiter, scanLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
 import { ensureAuthenticated, ensureRole } from "./shared/middlewares/auth.middleware.ts";
 import { role } from "../generated/prisma/enums.ts";
 import { createUserSchema, loginUserSchema } from "./modules/auth/auth.schema.ts";
@@ -21,6 +22,7 @@ export function SetupRoutes(){
     const administrationController = container.resolve(AdministrationController);
     const staffController = container.resolve(StaffController);
     const tablesController = container.resolve(TablesController);
+    const sessionsController = container.resolve(SessionsController);
 
     router.get('/health', (req: Request, res: Response) => {
         res.send({ message: 'API Healthy' })
@@ -55,6 +57,13 @@ export function SetupRoutes(){
     router.patch('/tables/:id', ...owner, validateUuidParams('id'), validateSchema(updateTableSchema), tablesController.update);
     router.get('/tables/:id/qrcode', ...owner, validateUuidParams('id'), tablesController.qrCode);
     router.delete('/tables/:id', ...owner, validateUuidParams('id'), tablesController.remove);
+
+    // Atendimentos: o cliente abre pelo scan (público); o balcão abre, encerra e estende
+    router.post('/public/tables/:code/scan', scanLimiter, sessionsController.scan);
+    router.get('/sessions', ...staffOrOwner, sessionsController.list);
+    router.post('/tables/:id/session', ...staffOrOwner, validateUuidParams('id'), sessionsController.open);
+    router.post('/sessions/:id/close', ...staffOrOwner, validateUuidParams('id'), sessionsController.close);
+    router.post('/sessions/:id/extend', ...staffOrOwner, validateUuidParams('id'), sessionsController.extend);
 
     return router;
 }

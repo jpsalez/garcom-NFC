@@ -38,7 +38,9 @@ _Figura: **Figura 6.2** – Métodos dos repositories de sessões, tokens e cham
 
 ## 6.3 Módulo de sessões (pasta `sessions`) 
 
-**Estado.** Apenas `sessions.repository.interface.ts` e `sessions.repository.ts`, que contêm dois repositories: `TableSessionRepository` (tabela `table_sessions`, o atendimento da mesa) e `SessionTokenRepository` (tabela `session_tokens`, um token por aparelho). A pasta se chamava `seassions` (erro de digitação) e foi renomeada para `sessions` em 12/11/2026, com os imports do contêiner atualizados (DV-45). Nesta seção, "sessão" é o mesmo conceito que a v0.3 chama de "atendimento". 
+**Estado [Implementado em 14/11/2026]:** o módulo agora tem `sessions.service.ts`, `sessions.controller.ts`, `sessions.interfaces.ts` e rotas (ver cap. 8.2; sem schema Zod: não há corpo, só ids e o código da mesa na URL); testes em `back-end/tests/sessions.test.ts`. Expiração preguiçosa: sessão vencida é encerrada com `closed_reason` TIMEOUT no próximo scan/abertura; não há job (job e aviso de 15 min ficam para o Socket.IO). Token por aparelho: só o hash SHA-256 vai ao banco. Scans simultâneos: o índice `table_sessions_one_active` decide. Fechar (transação, `closeIfActive` só atualiza se ainda ACTIVE: dois encerramentos simultâneos dão 200 e 409): CLOSED, STAFF, `closed_by` do token, revoga tokens e cancela chamados. O texto abaixo descreve a camada de dados original.
+
+**Estado original (só dados).** Apenas `sessions.repository.interface.ts` e `sessions.repository.ts`, que contêm dois repositories: `TableSessionRepository` (tabela `table_sessions`, o atendimento da mesa) e `SessionTokenRepository` (tabela `session_tokens`, um token por aparelho). A pasta se chamava `seassions` (erro de digitação) e foi renomeada para `sessions` em 12/11/2026, com os imports do contêiner atualizados (DV-45). Nesta seção, "sessão" é o mesmo conceito que a v0.3 chama de "atendimento". 
 
 ### 6.3.1 Tipos 
  
