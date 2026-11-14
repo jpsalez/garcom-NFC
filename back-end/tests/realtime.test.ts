@@ -4,6 +4,7 @@ import { io as connect, type Socket } from "socket.io-client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/server.ts";
 import { authenticateToken } from "../src/shared/middlewares/auth.middleware.ts";
+import type { ISessionsService } from "../src/modules/sessions/sessions.interfaces.ts";
 import { container } from "../src/shared/container/container.ts";
 import type { SocketNotifier } from "../src/shared/realtime/socket-notifier.ts";
 import { api } from "./helpers/app.ts";
@@ -155,5 +156,17 @@ describe("eventos do balcão", () => {
 
     expect(await extended).toMatchObject({ id: session.id });
     expect(await closed).toEqual({ id: session.id, reason: "STAFF" });
+  });
+
+  it("session:closed com TIMEOUT quando o atendimento vence", async () => {
+    const a = await ownerOf("a");
+    const counter = await connectAs(a.token);
+    const { table } = await tableWithDevice(a.user.restaurant_id!);
+    await prisma.table_sessions.updateMany({ where: { table_id: table.id }, data: { expires_at: new Date(Date.now() - 1000) } });
+    const closed = next(counter, "session:closed");
+
+    await container.resolve<ISessionsService>("SessionsService").expireDue();
+
+    expect(await closed).toMatchObject({ reason: "TIMEOUT" });
   });
 });

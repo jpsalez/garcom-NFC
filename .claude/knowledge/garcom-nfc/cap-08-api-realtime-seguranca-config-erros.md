@@ -65,7 +65,7 @@ O documento de módulos previa `GET /sessions` e `POST /tables/:id/sessions` (ga
 - Emissão apenas após o commit, só para a sala do restaurante (isolamento por tenant).
 - Não existe `call:cancelled`: `session:closed` manda o balcão remover todos os cards da sessão (por isso CallView ganhou `session_id`). Nomes com dois pontos por decisão do usuário (DV-38 resolvida; substituem os com ponto da v0.3).
 - O cliente (mesa) não usa tempo real (DEC-08); sem sala `session:<id>`.
-- Aviso de 15 min (DEC-02): calculado no front a partir de `expires_at`; o back-end não emite aviso. O job de expiração (a cada 60 s) é a etapa B, ainda [Planejado]: só encerra com TIMEOUT e emite `session:closed`.
+- Aviso de 15 min (DEC-02): calculado no front a partir de `expires_at`; o back-end não emite aviso. O job de expiração (a cada 60 s, etapa B) está [Implementado 14/11/2026]: encerra com TIMEOUT e emite `session:closed {id, reason:'TIMEOUT'}`; o balcão recebe `expires_at` no GET /sessions e em `session:opened`/`session:extended`.
 - Limitações aceitas: o socket aberto continua depois de o usuário ser desativado até reconectar (JWT só checado na conexão); instância única (várias exigiriam adapter Redis); eventos podem se perder em queda, então o balcão recarrega `GET /calls` e `GET /sessions` ao reconectar.
 - Eventos da v0.2 (`order.created`, `tab.updated`, `call.accepted` etc.) não fazem parte do MVP. Futuro: módulo "integrations".
 

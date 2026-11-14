@@ -200,7 +200,9 @@ _Figura: **Figura 7.6** – Tratamento de erros: do middleware de validação ao
 | Registro não encontrado numa atualização/remoção | 404 (Prisma P2025) | Tratador global | [Implementado] | ``
 | Erro inesperado | 500 InternalServerError, "Erro interno do servidor", sem vazar detalhes | Tratador global | [Implementado] | 
 | Perda de conexão do balcão | Reconexão automática e recarga dos cards abertos | Cliente Socket.IO e REST | [Planejado] | 
-| Job de expiração falha | Erro registrado em log; a expiração preguiçosa continua protegendo | Job | [Planejado] |   
+| Job de expiração falha | Erro registrado com console.error; a varredura seguinte continua e a expiração preguiçosa protege | Job | [Implementado 14/11/2026] |
+
+[Implementado 14/11/2026] Job de expiração: `back-end/src/shared/jobs/session-expiry.job.ts` (setInterval de 60 s no processo, iniciado em `main.ts` após o listen, timer com unref) chama `SessionsService.expireDue()`: `findExpired` (ativos, keep_open falso, `expires_at` <= agora, todos os restaurantes, índice parcial `table_sessions_one_active`; 0,04 ms com 200 mil encerrados) e encerra um por vez com `closed_reason` TIMEOUT e `closed_by` nulo, na mesma transação do encerramento manual (revoga tokens, cancela chamados abertos); emite `session:closed {id, reason:'TIMEOUT'}` após o commit e devolve a contagem. Testes: `back-end/tests/session-expiry.test.ts`. Instância única.   
 
 A tabela completa de códigos e o formato do corpo de erro estão na seção 8.5. Falhas de emissão de evento ocorrem depois do commit e não desfazem o chamado: o estado inicial recarregado por REST corrige a tela. 
 

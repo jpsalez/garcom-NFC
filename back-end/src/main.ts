@@ -4,6 +4,8 @@ import "reflect-metadata";
 import "dotenv/config";
 import { createServer } from "node:http";
 import swaggerUi from "swagger-ui-express";
+import type { ISessionsService } from "./modules/sessions/sessions.interfaces.ts";
+import { startSessionExpiryJob } from "./shared/jobs/session-expiry.job.ts";
 import { allowedOrigins, app } from "./server.ts";
 import { authenticateToken } from "./shared/middlewares/auth.middleware.ts";
 import { openApiSpec } from "./docs/openapi.ts";
@@ -27,5 +29,6 @@ function bootstrap() {
   const httpServer = createServer(app);
   container.resolve<SocketNotifier>("Notifier").attach(httpServer, authenticateToken, allowedOrigins);
   httpServer.listen(port, () => console.log(`rodando na ${port}`));
+  startSessionExpiryJob(container.resolve<ISessionsService>("SessionsService"));
 }
 bootstrap();

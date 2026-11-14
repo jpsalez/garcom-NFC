@@ -14,5 +14,7 @@ export interface ISessionsService {
   open(restaurantId: string, tableId: string): Promise<table_sessions>;
   close(restaurantId: string, id: string, userId: string): Promise<table_sessions>;
   extend(restaurantId: string, id: string): Promise<table_sessions>;
+  // Job: encerra os vencidos de todos os restaurantes; devolve quantos encerrou
+  expireDue(): Promise<number>;
   list(restaurantId: string, status: tableStatus): Promise<TableSessionListItem[]>;
 }

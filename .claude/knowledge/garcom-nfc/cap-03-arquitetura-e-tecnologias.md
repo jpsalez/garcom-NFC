@@ -34,7 +34,7 @@ _Figura: **Figura 3.2** – Arquitetura efetivamente implementada: apenas a API 
 | Middleware de autenticação | JWT e token da mesa | Só JWT (ensureAuthenticated), sem uso em rotas | Parcial | 
 | Middleware de tenant e de papéis | Previsto | Inexistente | Não implementado | ````````
 | Socket.IO e salas | Eventos call.created, call.done, session.updated, session.closed | Sem dependência nem código | Não implementado | ``
-| Job de expiração (4 h) | A cada minuto | Só a consulta findExpired no repository | Não implementado | ``
+| Job de expiração (4 h) | A cada minuto | `shared/jobs/session-expiry.job.ts` chama `SessionsService.expireDue()` (14/11/2026) | Implementado | ``
 | Docker Compose e Dockerfiles | Três containers, healthcheck no banco | Inexistentes; nem .env.example | Não implementado | ``
 | CORS | Variável CORS_ORIGIN | Sem biblioteca nem configuração | Não implementado | 
 | Testes automatizados | Recomendados no guia de estudos | Nenhum (script de teste é placeholder) | Não implementado |   
@@ -48,7 +48,7 @@ _Figura: **Figura 3.2** – Arquitetura efetivamente implementada: apenas a API 
 - **Socket.IO na API** (Proposto): cards aparecem e somem na hora, reconexão pronta e um único serviço para uma equipe de duas pessoas. 
 - **Token por aparelho** (Definido): permite revogar todos de uma vez ao encerrar; guardado apenas como hash. 
 - **Tenant por coluna** (Proposto): `restaurant_id` nas tabelas operacionais, mais simples que schema por cliente. 
-- **Job de expiração** (Proposto): rotina a cada minuto que encerra atendimentos vencidos sem a marca de manter aberto. 
+- **Job de expiração** (Implementado em 14/11/2026): rotina a cada minuto que encerra atendimentos vencidos sem a marca de manter aberto. 
 - **Redis adapter** (Futuro): só necessário com mais de uma instância da API.  
 As decisões de PostgreSQL e Prisma estão confirmadas na prática pelo código; Socket.IO continua apenas especificado. O próprio documento mantém o rótulo "Proposto" em decisões já adotadas em todo o restante do texto (ver Apêndice A). 
 
@@ -154,7 +154,7 @@ Há exceções deliberadas, todas documentadas no código ou nos guias:
 - `RestaurantRepository` (em `modules/restaurants`) filtra só por identificador, pois a entidade já é o próprio tenant. 
 - `findByEmail` (login) não filtra por tenant, porque o e-mail é único globalmente no schema e ainda não há tenant conhecido nesse momento. 
 - `findByPublicCode` (rota pública da plaquinha) descobre o restaurante a partir da mesa, devolvendo também o restaurante (identificador, nome e slug). 
-- `findExpired` (futuro job de expiração) varre sessões de todos os restaurantes. 
+- `findExpired` (usado pelo job de expiração) varre sessões de todos os restaurantes. 
 - `session_tokens` não possui `restaurant_id`: `findManyBySession` checa o tenant pela sessão-pai; já `findById`, `update` e `delete` de token operam apenas por identificador, sem checar tenant.  
 
 ### 3.5.3 O que falta para o isolamento completo 

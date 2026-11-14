@@ -40,7 +40,7 @@ Testes primeiro (`tests/tables.test.ts`): criar devolve `public_url` com o domí
 1. (FEITO em 14/11) Sessões de mesa: abrir pelo scan e pelo balcão, encerrar, estender (+4 h, aviso 15 min antes), token por aparelho.
 2. (FEITO em 14/11) Chamados (DEC-03: um aberto por tipo por sessão; repetir devolve o mesmo; `created_at` não é reiniciado).
 3. (FEITO em 14/11) Socket.IO etapa A: `shared/realtime`, eventos `call:*`/`session:*` na sala `restaurant:<id>`, `tests/realtime.test.ts`.
-4. Próximo: etapa B (job de expiração a cada 60 s, só TIMEOUT + `session:closed`), `trust proxy`, paginação do histórico.
+4. Etapa B feita (14/11/2026): job de expiração de 60 s (`session-expiry.job.ts`, TIMEOUT + `session:closed`). Próximos: `trust proxy`, paginação do histórico de sessions, front.
 
 ## Git
 Branch `docs/decisoes-2026-11-13`: registro das decisões e este arquivo. Ainda não mesclada na `main`.

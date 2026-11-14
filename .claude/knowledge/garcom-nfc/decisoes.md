@@ -30,7 +30,7 @@ Nenhuma no momento.
 
 ## Implementadas (14/11/2026)
 - **Scan é POST, não GET [Implementado]**: `POST /api/v1/public/tables/:code/scan` tem efeito colateral (abre atendimento e emite token), então não pode ser GET (prefetch/crawlers abririam sessões). Detalhes em DEC-01/DEC-07.
-- **Expiração preguiçosa por ora [Implementado]**: sessão vencida é encerrada com `closed_reason` TIMEOUT no próximo scan ou abertura pelo balcão; não há job. Job e aviso de 15 min (DEC-02) ficam para o Socket.IO.
+- **Expiração em duas camadas [Implementado, 14/11/2026]**: (1) job simples de 60 s no próprio processo (`back-end/src/shared/jobs/session-expiry.job.ts`, chama `SessionsService.expireDue()`; encerra com TIMEOUT e emite `session:closed`); (2) expiração no momento do uso (scan/abertura) como segunda camada. O aviso de 15 min (DEC-02) fica no front: o balcão calcula a partir de `expires_at`; o back-end não emite aviso. Limitação: instância única (várias exigiriam lock no job).
 
 ## Módulo calls (14/11/2026) [Implementado]
 - **Cabeçalho do token do cliente**: `X-Table-Token` (resolve DV-21 no código).

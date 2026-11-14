@@ -67,6 +67,21 @@ export class SessionsService implements ISessionsService {
     return extended;
   }
 
+  async expireDue() {
+    const due = await this.sessionRepository.findExpired(new Date());
+    // Um por vez: muitos vencidos juntos (ex.: API ficou fora do ar) não disputam o pool de conexões.
+    // Falha em um atendimento não trava os demais (só o id e a mensagem vão para o log).
+    let closed = 0;
+    for (const session of due) {
+      try {
+        if (await this.finish(session.restaurant_id, session.id, "TIMEOUT")) closed++;
+      } catch (err) {
+        console.error(`Falha ao encerrar o atendimento ${session.id}:`, err instanceof Error ? err.message : err);
+      }
+    }
+    return closed;
+  }
+
   list(restaurantId: string, status: tableStatus) {
     return this.sessionRepository.findMany(restaurantId, { status });
   }
