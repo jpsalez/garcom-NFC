@@ -37,7 +37,7 @@ export async function authenticateToken(token: string) {
     const version = cache.currentVersion();
     const userRepository = container.resolve<IUserRepository>("UserRepository");
     const user = await userRepository.findForAuth(payload.sub);
-    if (!user || !user.active || user.restaurant?.active === false) {
+    if (!user?.active || user.restaurant?.active === false) {
       throw new UnauthorizedError("Token inválido ou expirado");
     }
     entry = { id: user.id, restaurantId: user.restaurant_id, role: user.role };

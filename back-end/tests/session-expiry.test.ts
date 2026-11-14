@@ -20,8 +20,8 @@ const past = () => new Date(Date.now() - 1000);
 
 describe("expireDue", () => {
   it("encerra o vencido por TIMEOUT, sem closed_by, revogando tokens e cancelando chamados", async () => {
-    const { user } = await ownerOf("a");
-    const table = await createTable(user.restaurant_id!);
+    const { restaurantId } = await ownerOf("a");
+    const table = await createTable(restaurantId);
     const scan = await api().post(`/api/v1/public/tables/${table.public_code}/scan`);
     await api().post("/api/v1/public/calls").set("X-Table-Token", scan.body.token).send({ type: "WAITER" });
     await prisma.table_sessions.updateMany({ where: { table_id: table.id }, data: { expires_at: past() } });
@@ -35,8 +35,7 @@ describe("expireDue", () => {
   });
 
   it("não mexe em atendimento no prazo, com keep_open ou já encerrado", async () => {
-    const { user } = await ownerOf("a");
-    const restaurantId = user.restaurant_id!;
+    const { restaurantId } = await ownerOf("a");
     const inTime = await createSession(restaurantId, (await createTable(restaurantId, "A")).id);
     const kept = await createSession(restaurantId, (await createTable(restaurantId, "B")).id, "ACTIVE", past());
     await prisma.table_sessions.update({ where: { id: kept.id }, data: { keep_open: true } });
@@ -50,8 +49,7 @@ describe("expireDue", () => {
   });
 
   it("falha em um atendimento não impede o encerramento dos outros", async () => {
-    const { user } = await ownerOf("a");
-    const restaurantId = user.restaurant_id!;
+    const { restaurantId } = await ownerOf("a");
     await createSession(restaurantId, (await createTable(restaurantId, "A")).id, "ACTIVE", past());
     await createSession(restaurantId, (await createTable(restaurantId, "B")).id, "ACTIVE", past());
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -70,8 +68,8 @@ describe("expireDue", () => {
   it("encerra vários restaurantes de uma vez", async () => {
     const a = await ownerOf("a");
     const b = await ownerOf("b");
-    await createSession(a.user.restaurant_id!, (await createTable(a.user.restaurant_id!)).id, "ACTIVE", past());
-    await createSession(b.user.restaurant_id!, (await createTable(b.user.restaurant_id!)).id, "ACTIVE", past());
+    await createSession(a.restaurantId, (await createTable(a.restaurantId)).id, "ACTIVE", past());
+    await createSession(b.restaurantId, (await createTable(b.restaurantId)).id, "ACTIVE", past());
 
     expect(await expireDue()).toBe(2);
     expect(await prisma.table_sessions.count({ where: { status: "ACTIVE" } })).toBe(0);

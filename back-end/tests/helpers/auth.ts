@@ -8,7 +8,9 @@ export async function ownerOf(name: string) {
   const email = `${name}@teste.com`;
   await api().post("/api/v1/auth/register").send({ name, email, password, restaurantName: name });
   const login = await api().post("/api/v1/auth/login").send({ email, password });
-  return { token: login.body.token as string, user: await prisma.users.findUniqueOrThrow({ where: { email } }) };
+  const user = await prisma.users.findUniqueOrThrow({ where: { email } });
+  if (!user.restaurant_id) throw new Error("OWNER cadastrado sem restaurante");
+  return { token: login.body.token as string, user, restaurantId: user.restaurant_id };
 }
 
 export async function staffToken(ownerToken: string) {

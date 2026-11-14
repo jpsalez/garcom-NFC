@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { api } from "./helpers/app.ts";
 import { auth, ownerOf, staffToken } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
-import { CallsService } from "../src/modules/calls/calls.service.ts";
+import type { CallsService } from "../src/modules/calls/calls.service.ts";
 import { container } from "../src/shared/container/container.ts";
 import { createTable } from "./helpers/factories.ts";
 
@@ -21,8 +21,8 @@ const callAs = (deviceToken: string, type = "WAITER") =>
 
 describe("POST /public/calls", () => {
   it("primeiro chamado: 201 com tipo, status OPEN e rótulo da mesa", async () => {
-    const { user } = await ownerOf("a");
-    const { deviceToken } = await tableWithDevice(user.restaurant_id!, "Mesa 12");
+    const { restaurantId } = await ownerOf("a");
+    const { deviceToken } = await tableWithDevice(restaurantId, "Mesa 12");
 
     const res = await callAs(deviceToken);
 
@@ -31,8 +31,8 @@ describe("POST /public/calls", () => {
   });
 
   it("repetir o mesmo tipo devolve o mesmo chamado (200) sem reiniciar o created_at", async () => {
-    const { user } = await ownerOf("a");
-    const { deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { restaurantId } = await ownerOf("a");
+    const { deviceToken } = await tableWithDevice(restaurantId);
 
     const first = await callAs(deviceToken);
     const again = await callAs(deviceToken);
@@ -44,8 +44,8 @@ describe("POST /public/calls", () => {
   });
 
   it("garçom e conta coexistem; outro aparelho da mesma mesa também repete o chamado aberto", async () => {
-    const { user } = await ownerOf("a");
-    const { table, deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { restaurantId } = await ownerOf("a");
+    const { table, deviceToken } = await tableWithDevice(restaurantId);
     const other = (await api().post(`/api/v1/public/tables/${table.public_code}/scan`)).body.token;
 
     const waiter = await callAs(deviceToken, "WAITER");
@@ -58,8 +58,8 @@ describe("POST /public/calls", () => {
   });
 
   it("toques simultâneos geram um chamado só", async () => {
-    const { user } = await ownerOf("a");
-    const { deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { restaurantId } = await ownerOf("a");
+    const { deviceToken } = await tableWithDevice(restaurantId);
 
     const results = await Promise.all([1, 2, 3, 4].map(() => callAs(deviceToken)));
 
@@ -68,8 +68,8 @@ describe("POST /public/calls", () => {
   });
 
   it("depois de finalizado, um novo toque cria outro chamado", async () => {
-    const { token, user } = await ownerOf("a");
-    const { deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const { deviceToken } = await tableWithDevice(restaurantId);
     const first = await callAs(deviceToken);
     await api().patch(`/api/v1/calls/${first.body.id}/done`).set(auth(token));
 
@@ -80,15 +80,15 @@ describe("POST /public/calls", () => {
   });
 
   it("corpo inválido dá 400", async () => {
-    const { user } = await ownerOf("a");
-    const { deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { restaurantId } = await ownerOf("a");
+    const { deviceToken } = await tableWithDevice(restaurantId);
 
     expect((await callAs(deviceToken, "OUTRO")).status).toBe(400);
   });
 
   it("sem token, token desconhecido, revogado ou de atendimento vencido: 401", async () => {
-    const { token, user } = await ownerOf("a");
-    const { table, deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const { table, deviceToken } = await tableWithDevice(restaurantId);
 
     expect((await api().post("/api/v1/public/calls").send({ type: "WAITER" })).status).toBe(401);
     expect((await callAs("token-que-nao-existe")).status).toBe(401);
@@ -108,8 +108,8 @@ describe("POST /public/calls", () => {
     // Só aqui o limite fica ligado (em testes ele é desligado)
     process.env.RATE_LIMIT_TEST = "on";
     try {
-      const { user } = await ownerOf("a");
-      const { deviceToken } = await tableWithDevice(user.restaurant_id!);
+      const { restaurantId } = await ownerOf("a");
+      const { deviceToken } = await tableWithDevice(restaurantId);
 
       const statuses = [];
       for (let i = 0; i < 11; i++) statuses.push((await callAs(deviceToken)).status);
@@ -126,9 +126,9 @@ describe("GET /calls", () => {
   it("lista os abertos do próprio restaurante, em ordem de chegada, com serverTime", async () => {
     const a = await ownerOf("a");
     const b = await ownerOf("b");
-    const one = await tableWithDevice(a.user.restaurant_id!, "A-1");
-    const two = await tableWithDevice(a.user.restaurant_id!, "A-2");
-    const deB = await tableWithDevice(b.user.restaurant_id!, "B-1");
+    const one = await tableWithDevice(a.restaurantId, "A-1");
+    const two = await tableWithDevice(a.restaurantId, "A-2");
+    const deB = await tableWithDevice(b.restaurantId, "B-1");
     await callAs(one.deviceToken, "BILL");
     await callAs(two.deviceToken);
     await callAs(deB.deviceToken);
@@ -141,8 +141,8 @@ describe("GET /calls", () => {
   });
 
   it("?status=DONE lista os finalizados; status inválido dá 400; sem token dá 401", async () => {
-    const { token, user } = await ownerOf("a");
-    const { deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const { deviceToken } = await tableWithDevice(restaurantId);
     const call = await callAs(deviceToken);
     await api().patch(`/api/v1/calls/${call.body.id}/done`).set(auth(token));
 
@@ -158,8 +158,8 @@ describe("GET /calls", () => {
 
 describe("GET /calls?since=", () => {
   it("filtra pelos chamados criados a partir da data; data inválida dá 400", async () => {
-    const { token, user } = await ownerOf("a");
-    const { deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const { deviceToken } = await tableWithDevice(restaurantId);
     const call = await callAs(deviceToken);
     await api().patch(`/api/v1/calls/${call.body.id}/done`).set(auth(token));
     const day = 24 * 60 * 60 * 1000;
@@ -175,10 +175,10 @@ describe("GET /calls?since=", () => {
 
 describe("PATCH /calls/:id/done", () => {
   it("STAFF finaliza e done_by recebe o id dele (DEC-06)", async () => {
-    const { token, user } = await ownerOf("a");
+    const { token, restaurantId } = await ownerOf("a");
     const staff = await staffToken(token);
     const staffUser = await prisma.users.findUniqueOrThrow({ where: { email: "garcom@teste.com" } });
-    const { deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { deviceToken } = await tableWithDevice(restaurantId);
     const call = await callAs(deviceToken);
 
     const res = await api().patch(`/api/v1/calls/${call.body.id}/done`).set(auth(staff));
@@ -190,9 +190,9 @@ describe("PATCH /calls/:id/done", () => {
   });
 
   it("duas finalizações simultâneas: uma 200 e outra 409 CALL_NOT_OPEN", async () => {
-    const { token, user } = await ownerOf("a");
+    const { token, restaurantId } = await ownerOf("a");
     const staff = await staffToken(token);
-    const { deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { deviceToken } = await tableWithDevice(restaurantId);
     const call = await callAs(deviceToken);
 
     const results = await Promise.all([token, staff].map((t) => api().patch(`/api/v1/calls/${call.body.id}/done`).set(auth(t))));
@@ -204,7 +204,7 @@ describe("PATCH /calls/:id/done", () => {
   it("chamado cancelado pelo encerramento da mesa dá 409; de outro restaurante dá 404", async () => {
     const a = await ownerOf("a");
     const b = await ownerOf("b");
-    const { table, deviceToken } = await tableWithDevice(a.user.restaurant_id!);
+    const { table, deviceToken } = await tableWithDevice(a.restaurantId);
     const call = await callAs(deviceToken);
     const session = await prisma.table_sessions.findFirstOrThrow({ where: { table_id: table.id } });
     await api().post(`/api/v1/sessions/${session.id}/close`).set(auth(a.token));
@@ -217,15 +217,15 @@ describe("PATCH /calls/:id/done", () => {
 
 describe("corrida entre chamado e encerramento", () => {
   it("o service não cria chamado numa sessão que já foi encerrada (token validado antes do encerramento)", async () => {
-    const { token, user } = await ownerOf("a");
-    const { table, deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const { table, deviceToken } = await tableWithDevice(restaurantId);
     const session = await prisma.table_sessions.findFirstOrThrow({ where: { table_id: table.id } });
     const saved = await prisma.session_tokens.findFirstOrThrow({ where: { session_id: session.id } });
     await api().post(`/api/v1/sessions/${session.id}/close`).set(auth(token));
     expect(deviceToken).toBeTruthy();
 
     // Simula a requisição que passou pelo ensureTableToken antes do encerramento
-    const device = { tokenId: saved.id, sessionId: session.id, restaurantId: user.restaurant_id!, tableLabel: table.label };
+    const device = { tokenId: saved.id, sessionId: session.id, restaurantId: restaurantId, tableLabel: table.label };
     await expect(container.resolve<CallsService>("CallsService").create(device, "WAITER")).rejects.toMatchObject({ statusCode: 401 });
 
     expect(await prisma.calls.count()).toBe(0);

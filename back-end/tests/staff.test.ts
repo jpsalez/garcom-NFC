@@ -71,11 +71,11 @@ describe("/staff (OWNER gerencia a equipe do próprio restaurante)", () => {
   });
 
   it("excluir o STAFF mantém o histórico: closed_by e done_by viram nulos", async () => {
-    const { token, user } = await ownerOf("a");
+    const { token, restaurantId } = await ownerOf("a");
     const staff = await staffToken(token);
     const staffUser = await prisma.users.findUniqueOrThrow({ where: { email: "garcom@teste.com" } });
-    const table = await createTable(user.restaurant_id!);
-    const session = await createSession(user.restaurant_id!, table.id);
+    const table = await createTable(restaurantId);
+    const session = await createSession(restaurantId, table.id);
     await api().post(`/api/v1/sessions/${session.id}/close`).set(auth(staff));
     expect((await prisma.table_sessions.findUniqueOrThrow({ where: { id: session.id } })).closed_by).toBe(staffUser.id);
 
@@ -126,10 +126,10 @@ describe("/admin/restaurants (SUPER_ADMIN)", () => {
   });
 
   it("desativar o restaurante encerra os atendimentos ativos (closed_by do SUPER_ADMIN) e bloqueia os tokens dos clientes", async () => {
-    const { user } = await ownerOf("a");
+    const { user, restaurantId } = await ownerOf("a");
     const superToken = await superAdminToken();
     const superUser = await prisma.users.findUniqueOrThrow({ where: { email: "super@teste.com" } });
-    const table = await createTable(user.restaurant_id!);
+    const table = await createTable(restaurantId);
     const scan = await api().post(`/api/v1/public/tables/${table.public_code}/scan`);
 
     await api().patch(`/api/v1/admin/restaurants/${user.restaurant_id}`).set(auth(superToken)).send({ active: false });
@@ -140,9 +140,9 @@ describe("/admin/restaurants (SUPER_ADMIN)", () => {
   });
 
   it("reativar o restaurante não reabre atendimentos", async () => {
-    const { user } = await ownerOf("a");
+    const { user, restaurantId } = await ownerOf("a");
     const superToken = await superAdminToken();
-    const table = await createTable(user.restaurant_id!);
+    const table = await createTable(restaurantId);
     await api().post(`/api/v1/public/tables/${table.public_code}/scan`);
     const url = `/api/v1/admin/restaurants/${user.restaurant_id}`;
     await api().patch(url).set(auth(superToken)).send({ active: false });

@@ -29,7 +29,7 @@ export function SetupRoutes(){
     const sessionsController = container.resolve(SessionsController);
     const callsController = container.resolve(CallsController);
 
-    router.get('/health', (req: Request, res: Response) => {
+    router.get('/health', (_req: Request, res: Response) => {
         res.send({ message: 'API Healthy' })
     })
 

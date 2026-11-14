@@ -47,7 +47,7 @@ function connectAs(token?: string) {
 }
 
 const next = (socket: Socket, event: string) =>
-  new Promise<any>((resolve, reject) => {
+  new Promise<Record<string, unknown>>((resolve, reject) => {
     socket.once(event, resolve);
     setTimeout(() => reject(new Error(`evento ${event} não chegou`)), 2000);
   });
@@ -97,7 +97,7 @@ describe("eventos do balcão", () => {
     const counterA = await connectAs(a.token);
     const counterB = await connectAs(b.token);
     const silenceB = expectSilence(counterB, "call:created");
-    const { deviceToken } = await tableWithDevice(a.user.restaurant_id!, "Mesa 12");
+    const { deviceToken } = await tableWithDevice(a.restaurantId, "Mesa 12");
     const received = next(counterA, "call:created");
 
     await api().post("/api/v1/public/calls").set("X-Table-Token", deviceToken).send({ type: "BILL" });
@@ -109,7 +109,7 @@ describe("eventos do balcão", () => {
   it("chamado repetido não emite de novo", async () => {
     const a = await ownerOf("a");
     const counter = await connectAs(a.token);
-    const { deviceToken } = await tableWithDevice(a.user.restaurant_id!);
+    const { deviceToken } = await tableWithDevice(a.restaurantId);
     await api().post("/api/v1/public/calls").set("X-Table-Token", deviceToken).send({ type: "WAITER" });
     const silence = expectSilence(counter, "call:created");
 
@@ -121,7 +121,7 @@ describe("eventos do balcão", () => {
   it("call:done ao finalizar", async () => {
     const a = await ownerOf("a");
     const counter = await connectAs(a.token);
-    const { deviceToken } = await tableWithDevice(a.user.restaurant_id!);
+    const { deviceToken } = await tableWithDevice(a.restaurantId);
     const call = await api().post("/api/v1/public/calls").set("X-Table-Token", deviceToken).send({ type: "WAITER" });
     const received = next(counter, "call:done");
 
@@ -133,7 +133,7 @@ describe("eventos do balcão", () => {
   it("session:opened no scan e no balcão, só uma vez por atendimento", async () => {
     const a = await ownerOf("a");
     const counter = await connectAs(a.token);
-    const table = await createTable(a.user.restaurant_id!, "Mesa 3");
+    const table = await createTable(a.restaurantId, "Mesa 3");
     const opened = next(counter, "session:opened");
 
     await api().post(`/api/v1/public/tables/${table.public_code}/scan`);
@@ -147,7 +147,7 @@ describe("eventos do balcão", () => {
   it("session:extended e session:closed (com o motivo)", async () => {
     const a = await ownerOf("a");
     const counter = await connectAs(a.token);
-    const { table } = await tableWithDevice(a.user.restaurant_id!);
+    const { table } = await tableWithDevice(a.restaurantId);
     const session = await prisma.table_sessions.findFirstOrThrow({ where: { table_id: table.id } });
     const extended = next(counter, "session:extended");
     await api().post(`/api/v1/sessions/${session.id}/extend`).set(auth(a.token));
@@ -162,7 +162,7 @@ describe("eventos do balcão", () => {
   it("session:closed com TIMEOUT quando o atendimento vence", async () => {
     const a = await ownerOf("a");
     const counter = await connectAs(a.token);
-    const { table } = await tableWithDevice(a.user.restaurant_id!);
+    const { table } = await tableWithDevice(a.restaurantId);
     await prisma.table_sessions.updateMany({ where: { table_id: table.id }, data: { expires_at: new Date(Date.now() - 1000) } });
     const closed = next(counter, "session:closed");
 

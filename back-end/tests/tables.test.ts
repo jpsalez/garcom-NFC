@@ -25,8 +25,8 @@ describe("public_url", () => {
 
 describe("GET /tables/:id/qrcode", () => {
   it("devolve image/svg+xml", async () => {
-    const { token, user } = await ownerOf("a");
-    const table = await createTable(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const table = await createTable(restaurantId);
 
     const res = await api().get(`/api/v1/tables/${table.id}/qrcode`).set(auth(token));
 
@@ -36,8 +36,8 @@ describe("GET /tables/:id/qrcode", () => {
   });
 
   it("mesa inativa fica ativa ao gerar o QR Code", async () => {
-    const { token, user } = await ownerOf("a");
-    const table = await createTable(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const table = await createTable(restaurantId);
     await prisma.tables.update({ where: { id: table.id }, data: { active: false } });
 
     expect((await api().get(`/api/v1/tables/${table.id}/qrcode`).set(auth(token))).status).toBe(200);
@@ -47,7 +47,7 @@ describe("GET /tables/:id/qrcode", () => {
   it("mesa de outro restaurante dá 404 e não é ativada", async () => {
     const a = await ownerOf("a");
     const b = await ownerOf("b");
-    const mesaDeB = await createTable(b.user.restaurant_id!);
+    const mesaDeB = await createTable(b.restaurantId);
     await prisma.tables.update({ where: { id: mesaDeB.id }, data: { active: false } });
 
     expect((await api().get(`/api/v1/tables/${mesaDeB.id}/qrcode`).set(auth(a.token))).status).toBe(404);
@@ -55,8 +55,8 @@ describe("GET /tables/:id/qrcode", () => {
   });
 
   it("STAFF dá 403", async () => {
-    const { token, user } = await ownerOf("a");
-    const table = await createTable(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const table = await createTable(restaurantId);
 
     const res = await api().get(`/api/v1/tables/${table.id}/qrcode`).set(auth(await staffToken(token)));
 
@@ -66,17 +66,17 @@ describe("GET /tables/:id/qrcode", () => {
 
 describe("DELETE /tables/:id", () => {
   it("mesa sem histórico: 204 e some do banco", async () => {
-    const { token, user } = await ownerOf("a");
-    const table = await createTable(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const table = await createTable(restaurantId);
 
     expect((await api().delete(`/api/v1/tables/${table.id}`).set(auth(token))).status).toBe(204);
     expect(await prisma.tables.findUnique({ where: { id: table.id } })).toBeNull();
   });
 
   it("mesa com sessão: 409 e continua no banco", async () => {
-    const { token, user } = await ownerOf("a");
-    const table = await createTable(user.restaurant_id!);
-    await createSession(user.restaurant_id!, table.id, "CLOSED");
+    const { token, restaurantId } = await ownerOf("a");
+    const table = await createTable(restaurantId);
+    await createSession(restaurantId, table.id, "CLOSED");
 
     const res = await api().delete(`/api/v1/tables/${table.id}`).set(auth(token));
     expect(res.status).toBe(409);
@@ -87,15 +87,15 @@ describe("DELETE /tables/:id", () => {
   it("mesa de outro restaurante: 404 e continua no banco", async () => {
     const a = await ownerOf("a");
     const b = await ownerOf("b");
-    const mesaDeB = await createTable(b.user.restaurant_id!);
+    const mesaDeB = await createTable(b.restaurantId);
 
     expect((await api().delete(`/api/v1/tables/${mesaDeB.id}`).set(auth(a.token))).status).toBe(404);
     expect(await prisma.tables.findUnique({ where: { id: mesaDeB.id } })).not.toBeNull();
   });
 
   it("STAFF dá 403", async () => {
-    const { token, user } = await ownerOf("a");
-    const table = await createTable(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const table = await createTable(restaurantId);
 
     expect((await api().delete(`/api/v1/tables/${table.id}`).set(auth(await staffToken(token)))).status).toBe(403);
   });
@@ -103,8 +103,8 @@ describe("DELETE /tables/:id", () => {
 
 describe("desativar a mesa", () => {
   it("encerra o atendimento ativo (STAFF, closed_by do OWNER), revoga tokens e cancela chamados", async () => {
-    const { token, user } = await ownerOf("a");
-    const table = await createTable(user.restaurant_id!);
+    const { token, user, restaurantId } = await ownerOf("a");
+    const table = await createTable(restaurantId);
     const scan = await api().post(`/api/v1/public/tables/${table.public_code}/scan`);
     await api().post("/api/v1/public/calls").set("X-Table-Token", scan.body.token).send({ type: "WAITER" });
 
@@ -120,15 +120,15 @@ describe("desativar a mesa", () => {
   });
 
   it("renomear ou reativar a mesa não encerra o atendimento; mesa sem atendimento desativa normalmente", async () => {
-    const { token, user } = await ownerOf("a");
-    const table = await createTable(user.restaurant_id!);
+    const { token, restaurantId } = await ownerOf("a");
+    const table = await createTable(restaurantId);
     await api().post(`/api/v1/public/tables/${table.public_code}/scan`);
 
     await api().patch(`/api/v1/tables/${table.id}`).set(auth(token)).send({ label: "Mesa nova" });
     await api().patch(`/api/v1/tables/${table.id}`).set(auth(token)).send({ active: true });
     expect(await prisma.table_sessions.count({ where: { status: "ACTIVE" } })).toBe(1);
 
-    const other = await createTable(user.restaurant_id!, "Mesa 2");
+    const other = await createTable(restaurantId, "Mesa 2");
     expect((await api().patch(`/api/v1/tables/${other.id}`).set(auth(token)).send({ active: false })).status).toBe(200);
   });
 });

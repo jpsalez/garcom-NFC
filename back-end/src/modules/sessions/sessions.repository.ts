@@ -1,5 +1,5 @@
 import { inject, injectable } from "tsyringe";
-import { tableStatus, type Prisma } from "../../../generated/prisma/client.ts";
+import { tableStatus } from "../../../generated/prisma/client.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type {
   CreateSessionTokenData,
