@@ -1,14 +1,16 @@
-# 6. Módulos parciais (tables, sessions, calls, restaurants) 
+# 6. Módulos de domínio (tables, sessions, calls, users, administration, restaurants) 
 
-Os módulos `tables`, `sessions`, `calls` e os repositories de restaurantes, usuários e tokens de sessão têm hoje apenas a camada de acesso a dados: interface do repository e sua implementação. Não há services em funcionamento, controllers, schemas de entrada, rotas, middlewares específicos ou tempo real. Tudo o que está descrito como regra de negócio sobre esses módulos nas notas é **[Planejado/Não implementado]** e é apenas citado aqui para contextualizar o que cada método do repository foi pensado para atender. As regras de negócio e os fluxos serão detalhados na seção 7. 
+> **Atualização 14/11/2026.** Este capítulo tinha o título "Módulos parciais" quando só existiam os repositories. Todos os módulos abaixo estão implementados em todas as camadas (repository, service, controller, schemas e rotas) e cobertos por testes (`back-end/tests`). O texto descreve o código atual; o histórico está no Apêndice A.
+
+Os módulos `tables`, `sessions`, `calls`, `users`, `administration` e `restaurants` formam o domínio da API. Cada um segue o molde do capítulo 3: schemas Zod, interfaces, repository, service e controller; as rotas ficam em `routes.ts` (capítulo 8). Os services de `tables` e `administration` dependem do `SessionsService` (para encerrar atendimentos ao desativar mesa ou restaurante); fora essa exceção, um service usa repositories de outros módulos e nunca services.
 
 ## 6.1 Convenções comuns a todos os repositories 
  
-- **Injeção do cliente.** Cada repository é uma classe injetável que recebe o `DbClient` no construtor. Pode receber o cliente global (uso normal, singleton do contêiner) ou o cliente de uma transação (instanciando a classe manualmente), conforme definido em 5.6.1. 
-- **Regra de tenant.** Quase todo método recebe o identificador do restaurante como primeiro parâmetro e o inclui no filtro de busca, atualização ou exclusão. O objetivo é o isolamento por restaurante exigido por RNF01 (toda consulta filtrada por `restaurant_id`): um identificador de recurso de outro restaurante simplesmente não é encontrado. Nos métodos de escrita, o Prisma lança o erro P2025 quando nenhum registro satisfaz o filtro; o tratador de erros converte em 404 (seção 5.3.3). As exceções (métodos sem tenant) estão assinaladas em cada tabela e são justificadas por rotas públicas, login, jobs ou tabelas sem a coluna. 
-- **Repository não decide.** Não gera hash, não valida permissão e não lança erros de negócio: só lê e grava. Quem decide é o service [Planejado]. 
-- **Tipos de entrada.** Cada módulo declara tipos de dados de criação e atualização com apenas os campos permitidos, evitando que o service passe campos arbitrários. 
-- **Operações em lote.** Dois métodos (`revokeAllBySession` e `cancelOpenBySession`) usam atualização em massa e devolvem apenas a quantidade de registros afetados, pensados para o encerramento de sessão em transação.  
+- **Injeção do cliente.** Cada repository é uma classe injetável que recebe o `DbClient` no construtor. Pode receber o cliente global (uso normal, singleton do contêiner) ou o cliente de uma transação (instanciando a classe manualmente, como `new SessionTokenRepository(tx)`), conforme 5.6.1. 
+- **Regra de tenant.** Todo método de dados de restaurante recebe o identificador do restaurante como **primeiro** parâmetro e o inclui no filtro de busca, atualização ou exclusão (RNF01): um recurso de outro restaurante simplesmente não é encontrado. O `restaurantId` vem do JWT, nunca do cliente. O script `check_tenant.py` varre os repositories atrás de métodos sem o filtro. 
+- **Repository não decide.** Não gera hash, não valida permissão e não lança erros de negócio: só lê e grava. Quem decide é o service. 
+- **Tipos de entrada.** Cada módulo declara tipos de dados de criação e atualização com apenas os campos permitidos. 
+- **Operações condicionais e em lote.** `closeIfActive`, `markDone`, `revokeAllBySession` e `cancelOpenBySession` usam atualização com condição de estado e devolvem a contagem de linhas afetadas; é assim que se resolve a concorrência (quem perde recebe `count = 0`).  
 
 _Figura: **Figura 6.1** – Métodos dos repositories de restaurantes, usuários e mesas (em negrito, exceções ao filtro de tenant). (Ver seções 6.2 e 6.4)_ 
 
@@ -16,125 +18,140 @@ _Figura: **Figura 6.2** – Métodos dos repositories de sessões, tokens e cham
 
 ## 6.2 Módulo `tables` 
 
-**[Atualizado 14/11/2026, branch `ia/mesas-url-qrcode-excluir`] [Implementado]:** o módulo `tables` está concluído: service, controller e schemas reais, repository com `hasSessions(restaurantId, id)`, `shared/utils/public-url.ts` (`tablePublicUrl(code)` = `<PUBLIC_APP_URL>/m/<public_code>`, DEC-05). Rotas: GET /tables (STAFF ou OWNER), POST e PATCH /tables/:id (OWNER), GET /tables/:id/qrcode (OWNER, `image/svg+xml`, reativa mesa inativa), DELETE /tables/:id (OWNER, 204; 404 se de outro restaurante; 409 se já teve sessão). list/create/update devolvem `public_url`. O texto abaixo sobre "esqueleto" é histórico e está superado.
+**[Implementado]** Arquivos: `tables.repository.interface.ts`, `tables.repository.ts`, `tables.service.ts`, `tables.controller.ts`, `tables.schemas.ts` e `tables.interfaces.ts`; mais `shared/utils/public-url.ts` (`tablePublicUrl(code)` = `<PUBLIC_APP_URL>/m/<public_code>`, DEC-05) e `shared/utils/token.ts` (`generatePublicCode`). Testes em `tests/tables.test.ts`. 
 
-**Estado (histórico, antes de 14/11).** Arquivos existentes: `tables.repository.interface.ts` e `tables.repository.ts` (completos); `tables.service.ts` (esqueleto); `tables.controller.ts` e `tables.schemas.ts` (arquivos vazios). O esqueleto do service é uma classe com nome iniciado em minúscula (`tablesService`), sem decorator de injeção e com um único método `create` vazio; portanto não é resolvido pelo contêiner nem está registrado. O nome do arquivo de schemas está no plural, enquanto as notas citam o singular (`tables.schema.ts`). (DV-45.) 
-
-**Tipos.** `CreateTableData` (identificador do restaurante, rótulo e código público) e `TableWithRestaurant` (mesa com os campos `id`, `name` e `slug` do restaurante). 
+**Regras do `TablesService`.** 
+ 
+- Listar, criar e editar devolvem a mesa com `public_url`. Criar gera o `public_code` de 12 caracteres (alfabeto sem ambíguos, `crypto.randomInt`); nomes repetidos são permitidos. 
+- Editar (rótulo e `active`): mesa de outro restaurante dá 404. Desativar (`active: false`) primeiro desativa e depois encerra o atendimento aberto da mesa (`closeActiveOfTable`, motivo STAFF, `closed_by` = quem desativou). 
+- `GET /tables/:id/qrcode` devolve o SVG; gerar o QR de mesa inativa a reativa. 
+- Excluir: 409 `TABLE_HAS_SESSIONS` se a mesa tem histórico de atendimentos ("desative em vez de excluir"); senão, exclusão definitiva (204). Uma corrida em que a mesa ganha atendimento durante a exclusão cai no P2003 (409). 
+- Permissões: OWNER cria, edita, gera QR e exclui; STAFF só lista; SUPER_ADMIN não usa `/tables`. 
 
 ### 6.2.1 Métodos do `TableRepository`  
 | Método | Entradas | O que faz | Tenant | Finalidade |
-|---|---|---|---|---|  ``````
-| create | restaurante, rótulo, código público | Insere uma mesa na tabela tables; active assume true por padrão do schema | restaurante vem no próprio dado | Cadastro de mesa pelo administrador | ``
-| findById | restaurante, id | Busca uma mesa por id restrita ao restaurante; devolve nulo se não houver | filtra | Obter a mesa para editar, ativar, desativar | ``****
-| findByPublicCode | código público | Busca pela chave única do código impresso na placa; inclui o restaurante (id, nome, slug) | sem filtro: o tenant é descoberto a partir da mesa | Rota pública do QR Code/NFC, onde o cliente não tem login | ``
-| findMany | restaurante, filtro opcional de ativa | Lista as mesas do restaurante ordenadas por rótulo crescente; se o filtro de ativa não for informado, é ignorado e retorna ativas e inativas | filtra | Painel do administrador | ``
-| update | restaurante, id, dados | Atualiza a mesa; erro P2025 se não encontrada no restaurante | filtra | Renomear, ativar, desativar, regenerar código | ``
-| delete | restaurante, id | Remove a mesa; erro P2025 se inexistente | filtra | Previsto só por completude; as notas recomendam desativar em vez de apagar, pois sessões e chamados têm chave estrangeira para a mesa |   
+|---|---|---|---|---|
+| create | dados (restaurante, rótulo, código público) | Insere uma mesa; `active` assume true | restaurante vem no próprio dado | Cadastro de mesa pelo OWNER |
+| findById | restaurante, id | Busca uma mesa restrita ao restaurante; nulo se não houver | filtra | Editar, gerar QR, excluir |
+| findByPublicCode | código público | Busca pela chave única do código impresso; inclui o restaurante (id, nome, slug, `active`) | sem filtro: o tenant é descoberto a partir da mesa | Scan do QR Code/NFC, onde o cliente não tem login |
+| findMany | restaurante, filtro opcional de ativa | Lista as mesas do restaurante por rótulo crescente | filtra | Painel `/admin/mesas` |
+| update | restaurante, id, dados | Atualiza a mesa; P2025 se não encontrada | filtra | Renomear, ativar, desativar |
+| hasSessions | restaurante, id | Informa se há atendimentos registrados para a mesa | filtra | Decidir entre excluir e desativar |
+| delete | restaurante, id | Remove a mesa; P2025 se inexistente | filtra | Exclusão de mesa sem histórico |
 
-**Transação.** Nenhum método usa transação por si; todos podem ser usados dentro de uma, via `DbClient`. 
+## 6.3 Módulo `sessions` (atendimentos) 
 
-**O que falta [Planejado].** Schemas Zod de criação e renomeação; service com geração do código público (nas notas, gerado com bytes aleatórios), listagem, renomear, ativar, desativar (recusando se há sessão ativa na mesa, com 409), regenerar código (a placa antiga deixa de funcionar) e a busca "ou falha" com 404 para mesa de outro restaurante; controller; rotas restritas ao papel ADMIN (dependem do `ensureRole`, inexistente); registro do service no contêiner. Nota: a geração de código e o endpoint de QR Code não existem; também não há dependência de biblioteca de QR Code. 
+**[Implementado]** Arquivos: `sessions.repository.interface.ts`, `sessions.repository.ts` (dois repositories: `TableSessionRepository` e `SessionTokenRepository`), `sessions.service.ts`, `sessions.controller.ts`, `sessions.interfaces.ts` e `sessions.schemas.ts` (só a query de `GET /sessions`). Testes em `tests/sessions.test.ts`, `tests/session-expiry.test.ts` e `tests/table-session-index.test.ts`. 
 
-## 6.3 Módulo de sessões (pasta `sessions`) 
-
-**Estado [Implementado em 14/11/2026]:** o módulo agora tem `sessions.service.ts`, `sessions.controller.ts`, `sessions.interfaces.ts` e rotas (ver cap. 8.2; sem schema Zod: não há corpo, só ids e o código da mesa na URL); testes em `back-end/tests/sessions.test.ts`. Expiração preguiçosa: sessão vencida é encerrada com `closed_reason` TIMEOUT no próximo scan/abertura; não há job (job e aviso de 15 min ficam para o Socket.IO). Token por aparelho: só o hash SHA-256 vai ao banco. Scans simultâneos: o índice `table_sessions_one_active` decide. Fechar (transação, `closeIfActive` só atualiza se ainda ACTIVE: dois encerramentos simultâneos dão 200 e 409): CLOSED, STAFF, `closed_by` do token, revoga tokens e cancela chamados. O texto abaixo descreve a camada de dados original.
-
-**Estado original (só dados).** Apenas `sessions.repository.interface.ts` e `sessions.repository.ts`, que contêm dois repositories: `TableSessionRepository` (tabela `table_sessions`, o atendimento da mesa) e `SessionTokenRepository` (tabela `session_tokens`, um token por aparelho). A pasta se chamava `seassions` (erro de digitação) e foi renomeada para `sessions` em 12/11/2026, com os imports do contêiner atualizados (DV-45). Nesta seção, "sessão" é o mesmo conceito que a v0.3 chama de "atendimento". 
-
-### 6.3.1 Tipos 
+### 6.3.1 Regras do `SessionsService` 
  
-- `CreateTableSessionData`: restaurante, mesa e instante de expiração. 
-- `UpdateTableSessionData`: campos opcionais de status (ACTIVE ou CLOSED), `keep_open`, `expires_at`, `closed_reason` (STAFF ou TIMEOUT) e `closed_by` (usuário). 
-- `TableSessionListItem`: sessão com o rótulo da mesa e a contagem de tokens. 
-- `CreateSessionTokenData`: sessão e hash do token. `SessionTokenWithSession`: token com a sessão associada.  
+- **`scan(publicCode)`** (rota pública): código fora do formato dá 404 sem consultar o banco; mesa inexistente, inativa ou de restaurante desativado dá o mesmo 404. Encontra o atendimento ativo da mesa ou abre um novo (4 h). Se dois scans abrem ao mesmo tempo, o índice `table_sessions_one_active` barra o segundo, que usa o atendimento vencedor. Cada scan gera um token novo (`generateSessionToken`), grava só o hash e devolve `{ token, expires_at, table: { label }, restaurant: { name } }`. 
+- **`open`** (balcão): 404 se a mesa não é do restaurante; 409 `TABLE_INACTIVE` se inativa; 409 `SESSION_ALREADY_ACTIVE` se já há atendimento ativo. Emite `session:opened`. 
+- **`close`**: 404 se não é do restaurante; 409 `SESSION_CLOSED` se já encerrado. Faz o fechamento atômico (ver 6.3.4). 
+- **`extend`** (também é o "manter aberto", DEC-09): acrescenta `TABLE_SESSION_TTL` (4 h) a partir do maior entre o vencimento atual e agora; emite `session:extended`. 
+- **`list`**: `GET /sessions?status=` (ACTIVE por padrão), com o rótulo da mesa e a contagem de tokens não revogados. 
+- **`expireDue`** (job): busca as vencidas de todos os restaurantes e encerra cada uma com TIMEOUT, uma por vez; a falha de uma não derruba as demais. 
+- **`closeActiveOfTable` e `closeAllActive`**: usados ao desativar mesa ou restaurante. 
+- **Segunda camada da expiração:** `findActive` encerra com TIMEOUT a sessão vencida no primeiro uso, mesmo que o job ainda não tenha rodado. 
 
 ### 6.3.2 Métodos do `TableSessionRepository`  
 | Método | Entradas | O que faz | Tenant | Finalidade |
-|---|---|---|---|---|  ````
-| create | restaurante, mesa, expiração | Insere a sessão (status ACTIVE, keep_open falso por padrão) | restaurante no dado | Abrir sessão da mesa | ``
-| findById | restaurante, id | Busca uma sessão do restaurante | filtra | Fechar, alterar "manter aberta" | ``****
-| findActiveByTable | mesa | Primeira sessão ACTIVE da mesa | sem restaurante (a mesa já é específica) | Saber se a mesa está aberta; atende a regra de uma sessão ativa por mesa e o fluxo "encontrar ou criar" | ``
-| findMany | restaurante, filtro opcional de status | Lista sessões do restaurante, incluindo id e rótulo da mesa e a contagem de tokens não revogados (celulares ativos); sem ordenação definida | filtra | Painel "mesas em atendimento" | ````****
-| findExpired | instante atual | Lista sessões ACTIVE com keep_open falso e expiração menor ou igual ao instante | sem tenant: varre todos os restaurantes | Job de expiração (RF12/RN10) | ````
-| update | restaurante, id, dados | Atualiza status, keep_open, expiração, motivo e autor do fechamento; P2025 se inexistente | filtra | Fechar a sessão, manter aberta | ``
-| delete | restaurante, id | Remove a sessão | filtra | Previsto por completude |   
+|---|---|---|---|---|
+| create | restaurante, mesa, expiração | Insere a sessão (status ACTIVE, keep_open falso) | restaurante no dado | Abrir atendimento |
+| findById | restaurante, id | Busca uma sessão do restaurante | filtra | Fechar, estender |
+| findActiveByTable | restaurante, mesa | Primeira sessão ACTIVE da mesa | filtra | Encontrar ou criar; regra de uma sessão ativa por mesa |
+| findMany | restaurante, filtro de status | Lista sessões do restaurante com id e rótulo da mesa e a contagem de tokens não revogados | filtra | Painel de mesas em atendimento |
+| findExpired | instante atual | Lista sessões ACTIVE com keep_open falso e expiração menor ou igual ao instante | sem tenant: varre todos os restaurantes | Job de expiração (RF12/RN10) |
+| update | restaurante, id, dados | Atualiza expiração e demais campos; P2025 se inexistente | filtra | Estender |
+| closeIfActive | restaurante, id, dados | Fecha **somente se ainda ACTIVE** (updateMany) e devolve a contagem | filtra | Fechamento atômico sem corrida |
+| lockActive | restaurante, sessão | Trava a linha da sessão ativa (`FOR SHARE`) dentro de uma transação | filtra | Criar chamado sem corrida com o encerramento |
 
-O banco garante, por índice único parcial (`table_sessions_one_active`, na migration de criação), no máximo uma sessão ACTIVE por mesa: a segunda criação simultânea falha com P2002, que o tratador converte em 409. O repository não faz essa checagem por conta própria. 
+O banco garante, por índice único parcial (`table_sessions_one_active`), no máximo uma sessão ACTIVE por mesa. 
 
 ### 6.3.3 Métodos do `SessionTokenRepository` 
 
-A tabela `session_tokens` não tem coluna de restaurante; o isolamento é obtido por meio da sessão (relação), nos métodos que recebem o restaurante.  
+A tabela `session_tokens` não tem coluna de restaurante; o isolamento vem da sessão. O módulo não expõe mais `findById`, `update` e `delete` de token (removidos na revisão geral como código morto).  
 | Método | Entradas | O que faz | Tenant | Finalidade |
-|---|---|---|---|---|  ``
-| create | sessão, hash do token | Insere o token de um aparelho (somente o hash é gravado) | não aplicável | Entrada do cliente na mesa | ``****
-| findById | id | Busca por id | sem tenant | Consultas internas por identificador | ``****
-| findByHash | hash do token | Busca pelo hash único e inclui a sessão | sem filtro: o tenant sai da sessão incluída | Validação do token do cliente a cada requisição (middleware futuro) | ``
-| findManyBySession | restaurante, sessão | Lista os tokens da sessão exigindo que a sessão pertença ao restaurante | filtra via sessão | Listar aparelhos da mesa | ``****
-| update | id, dados | Atualiza um token (por exemplo, revogá-lo) | sem tenant | Revogação individual | ``
-| revokeAllBySession | sessão, instante | Em lote, grava o instante de revogação em todos os tokens ainda não revogados da sessão; devolve a contagem | sem restaurante (a sessão já foi validada antes) | Encerramento de sessão: tokens deixam de valer (RN de revogação) | ``****
-| delete | id | Remove o token | sem tenant | Previsto por completude |   
-
-Observação de segurança: três métodos de token (`findById`, `update`, `delete`) não verificam tenant; o chamador (futuro service) deverá garantir que o id pertence ao restaurante, por exemplo via a sessão. Isso é consistente com o comentário do código, que diz que o tenant é checado pela sessão, mas hoje só `findManyBySession` o faz. (DV-33. Requer validação.) 
+|---|---|---|---|---|
+| create | sessão, hash do token | Insere o token de um aparelho (somente o hash é gravado) | não aplicável | Scan do cliente |
+| findByHash | hash do token | Busca pelo hash único e inclui a sessão e a mesa | sem filtro: o tenant sai da sessão incluída | `ensureTableToken` a cada chamada do cliente |
+| revokeAllBySession | sessão, instante | Em lote, grava o instante de revogação em todos os tokens ainda não revogados; devolve a contagem | sem restaurante (a sessão já foi validada) | Encerramento do atendimento (RN09) |
 
 ### 6.3.4 Uso em transação 
 
-O fechamento de uma sessão é descrito nas notas como uma única transação com três escritas: atualizar a sessão para CLOSED com motivo e autor, revogar todos os tokens (`revokeAllBySession`) e cancelar os chamados em aberto (`cancelOpenBySession`, do módulo de chamados). Por isso os três repositories são instanciados com o cliente da transação; os avisos em tempo real devem sair somente depois da confirmação. **[Planejado/Não implementado]**: nenhuma transação é aberta hoje. 
+O fechamento (`finish`, usado por encerrar, expirar e desativar) é uma única transação com três escritas: `closeIfActive` (sessão CLOSED com motivo e autor), `revokeAllBySession` e `cancelOpenBySession` (do módulo de chamados). Os três repositories são instanciados com o cliente transacional (`new TableSessionRepository(tx)` etc.). Se outro pedido encerrou antes (`count = 0`), o fechamento devolve nulo e não emite evento. Só depois do commit sai o `session:closed` (`{ id, reason }`) para a sala do restaurante. 
 
-### 6.3.5 O que falta 
+### 6.3.5 Limitações conhecidas 
  
-- Service: abrir sessão (recusar mesa inexistente, inativa ou já aberta, com expiração calculada por uma duração fixa), entrada do cliente pelo código público (gerar token aleatório, gravar só o hash, devolvê-lo uma única vez), fechar (motivo STAFF ou TIMEOUT), manter aberta, listar ativas e expirar em lote. A duração padrão diverge entre documentos: a v0.3 [Especificado] fala em 4 horas (variável `TABLE_SESSION_TTL` de 14400 s), enquanto as notas de módulos e o guia usam 3 horas como exemplo. (DV-03. Decisão: vale a v0.3 para o produto; nada no código fixa o valor.) 
-- Utilitário de geração e hash de tokens (`shared/utils/token.ts`, inexistente), middleware de validação do token do cliente (`x-table-token`), controllers, schemas, rotas, job de expiração e notificador. 
-- Definição de quando a sessão começa: a v0.3 diz "no primeiro chamado" (glossário) e "na entrada pela página" (API), e o README do back-end indica que o garçom abre a mesa manualmente. (DV-01. Requer validação.)  
+- `extend` não é condicional: um `close` simultâneo pode gerar `session:extended` depois de `session:closed` (baixo risco, registrado na revisão geral). 
+- O job de expiração roda no processo da API (instância única); com mais de uma instância seria preciso coordenar. 
+- O aviso de 15 min antes de vencer (DEC-02) é calculado no front a partir de `expires_at`; a API não o emite. 
+- Paginação do histórico de sessões [Planejado]. 
 
-## 6.4 Repositories de restaurantes e usuários (módulos `restaurants` e `users`) 
-
-Residem em `modules/restaurants/restaurants.repository.ts` e `modules/users/users.repository.ts` (antes ficavam em `auth.repository.ts`) e são consumidos pelo `auth` e, futuramente, pelo `administration`. Como o módulo de autenticação os usa de fato apenas em parte, o quadro abaixo indica o uso atual. 
+## 6.4 Módulos `restaurants`, `users` e `administration` 
 
 ### 6.4.1 `RestaurantRepository`  
 | Método | O que faz | Tenant | Uso atual |
-|---|---|---|---|  ``
-| create | Insere restaurante (nome, slug único) | a entidade é o tenant | nenhum (o cadastro não o chama) | ``
-| findById | Busca por id | idem | nenhum | ``
-| findBySlug | Busca por slug único | idem | nenhum; não citado no PDF das notas, extra do código | ``
-| update | Atualiza por id; P2025 se inexistente | idem | nenhum | ``
-| delete | Remove por id | idem | nenhum |   
+|---|---|---|---|
+| create | Insere restaurante (nome, slug único) | a entidade é o tenant | register e `POST /admin/restaurants` |
+| findAll | Lista restaurantes | idem | `GET /admin/restaurants` |
+| findById | Busca por id | idem | login (restaurante ativo), `UsersService.create`, administração |
+| findBySlug | Busca por slug único | idem | register (sufixo em colisão) e administração |
+| update | Atualiza por id; P2025 se inexistente | idem | `PATCH /admin/restaurants/:id` (ativar e desativar) |
 
-O cadastro de restaurante com geração de slug (nome do restaurante no corpo, criação de restaurante e administrador numa mesma transação) é o principal item **[Planejado/Não implementado]** deste repository. O guia propõe, para evitar restaurantes órfãos quando o e-mail já existe, uma transação ou escrita aninhada; o `DbClient` foi desenhado para isso. O esquema de entrada do cadastro hoje não tem campo de nome de restaurante. (DV-15.) 
+`slug.ts` traz `slugify` e `withRandomSuffix`. O `delete` de restaurante foi removido (restaurante não se exclui, desativa-se). 
 
 ### 6.4.2 `UserRepository`  
 | Método | O que faz | Tenant | Uso atual |
-|---|---|---|---|  ``
-| create | Insere usuário (nome, e-mail, hash, role, restaurante opcional) | restaurante no dado (opcional) | cadastro | ``****
-| findByEmail | Busca por e-mail único global | sem tenant (o login ainda não sabe o restaurante) | cadastro (checagem) e login | ``
-| findById | Busca por id dentro do restaurante | filtra | nenhum | ``
-| findMany | Lista usuários do restaurante | filtra | nenhum | ``
-| update | Atualiza usuário do restaurante | filtra | nenhum | ``
-| delete | Remove usuário do restaurante | filtra | nenhum |   
+|---|---|---|---|
+| create | Insere usuário (nome, e-mail, hash, role, restaurante, categoria) | restaurante no dado | register, `/staff` e `/admin/.../users` |
+| findByEmail | Busca por e-mail único global | sem tenant (o login ainda não sabe o restaurante) | register (checagem), login, criação de usuário |
+| findForAuth | Busca por id com o restaurante (para `active`) | sem tenant | `ensureAuthenticated` (cache miss) |
+| findById | Busca por id dentro do restaurante | filtra | editar e excluir |
+| findMany | Lista usuários do restaurante | filtra | listagens e regra do último OWNER |
+| update | Atualiza usuário do restaurante | filtra | nome, categoria e `active` |
+| delete | Remove usuário do restaurante | filtra | exclusão (`closed_by` e `done_by` viram nulos) |
 
-Consequências do e-mail único global: a mesma pessoa não pode ser funcionária de dois restaurantes com o mesmo e-mail. O guia registra o ponto sem discutir; fica como decisão a validar. Falta o módulo de usuários (POST/GET/DELETE em `/users`, administrador criando garçons com o restaurante dele), incluindo regra de "último administrador" e a dúvida da v0.3 (ponto a validar 2) sobre se o garçom terá login individual ou um único acesso do balcão. 
+### 6.4.3 `UsersService` e `StaffController` (equipe do OWNER) 
+
+Rotas `GET/POST /staff` e `PATCH/DELETE /staff/:id`, só OWNER, sempre com o `restaurantId` do token e restritas a usuários STAFF (outro papel ou outro restaurante dá 404). Regras: e-mail duplicado dá 409 "E-mail já cadastrado"; criar usuário em restaurante desativado dá 409 `RESTAURANT_INACTIVE` (DEC-13); `category` só vale para STAFF (400 caso contrário); desativar ou excluir o último OWNER ativo dá 409; ao editar ou excluir, o cache de autenticação é invalidado e, ao desativar ou excluir, o socket do usuário é derrubado. O mesmo service atende o SUPER_ADMIN com a lista de papéis permitidos. 
+
+### 6.4.4 `AdministrationService` (SUPER_ADMIN) 
+
+Arquivos: `administration.service.ts`, `administration.schema.ts` (criar restaurante e ativar ou desativar), `administration.controller.ts` e `administration.interfaces.ts`. Rotas `/admin/restaurants`: criar (slug em uso dá 409), listar, ativar ou desativar e gerenciar usuários de qualquer restaurante (`/admin/restaurants/:restaurantId/users`). Desativar um restaurante invalida o cache de todos os usuários dele, encerra os atendimentos ativos (`closeAllActive`, que não são reabertos ao reativar) e derruba os sockets (`disconnectRestaurant`). O primeiro SUPER_ADMIN vem do seed (`npm run db:seed:super-admin`). 
 
 ## 6.5 Módulo `calls` 
 
-**Estado (14/11/2026: implementado, ver "Atualizado" abaixo; o texto desta seção descreve o repository original).** Chamados têm tipo WAITER ou BILL e estado OPEN, DONE ou CANCELLED. 
+**[Implementado]** Arquivos: `calls.service.ts`, `calls.controller.ts`, `calls.interfaces.ts`, `calls.schemas.ts`, `calls.repository.ts` e `calls.repository.interface.ts`. Testes em `tests/calls.test.ts` e `tests/realtime.test.ts`. Chamados têm tipo WAITER ou BILL e estado OPEN, DONE ou CANCELLED. 
 
-**Tipos.** `CreateCallData` (restaurante, sessão, token do aparelho e tipo); `UpdateCallData` (status, instante de conclusão e usuário que concluiu); `CallWithTable` (chamado com a sessão e, dela, id e rótulo da mesa).  
+### 6.5.1 Regras do `CallsService` 
+ 
+- **`create`** (cliente, `POST /public/calls`, protegida por `ensureTableToken` e pelo limiter de 10 chamados por 5 min por token): se já há chamado OPEN do tipo na sessão, devolve-o (200, `created: false`) com o `created_at` original; senão abre uma transação, trava a sessão (`lockActive`, `FOR SHARE`) e cria o chamado; se a sessão encerrou nesse intervalo, o token deixa de valer (401). Toques simultâneos: o índice `calls_one_open_per_type` barra o segundo e o service devolve o que venceu. Emite `call:created` só depois do commit. 
+- **`list`** (balcão, `GET /calls?status=&since=`): devolve `{ serverTime, calls }`, com o rótulo da mesa, em ordem de chegada; `since` filtra por `created_at` (usado para "concluídos hoje"). 
+- **`done`** (`PATCH /calls/:id/done`): `markDone` condicional (`WHERE status = OPEN`) grava `done_by` = usuário do token. 404 se o chamado não é do restaurante; 409 `CALL_NOT_OPEN` se já finalizado ou cancelado. Emite `call:done`. 
+
+### 6.5.2 Métodos do `CallRepository` 
 | Método | Entradas | O que faz | Tenant | Finalidade |
-|---|---|---|---|---|  ``
-| create | restaurante, sessão, token, tipo | Insere chamado com status OPEN (padrão do schema) e instante de criação automático | no dado | Cliente chama garçom ou pede conta | ``
-| findById | restaurante, id | Busca um chamado do restaurante | filtra | Consulta e atendimento | ``
-| findMany | restaurante, filtro de status | Lista por ordem de criação crescente (chegada), incluindo sessão e mesa (id, rótulo) | filtra | Tela do balcão: um card por chamado (índice composto de restaurante e status no schema acelera esta consulta) | ``
-| findManyBySession | restaurante, sessão, filtro | Lista os chamados da sessão, ordem crescente | filtra por restaurante e sessão | Cliente vê seus chamados; checar duplicidade | ``
-| update | restaurante, id, dados | Atualiza status, conclusão e autor; P2025 se inexistente | filtra | Concluir ou cancelar | ``****
-| cancelOpenBySession | sessão | Em lote, muda de OPEN para CANCELLED todos os chamados abertos da sessão; devolve contagem | sem restaurante (a sessão já foi validada) | Parte da transação de fechamento de sessão | ``
-| delete | restaurante, id | Remove o chamado | filtra | Por completude |   
+|---|---|---|---|---|
+| create | dados (restaurante, sessão, token, tipo) | Insere chamado com status OPEN e `created_at` automático | no dado | Cliente chama garçom ou pede conta |
+| findById | restaurante, id | Busca um chamado do restaurante | filtra | Consulta após finalizar |
+| findOpen | restaurante, sessão, tipo | Chamado OPEN do tipo na sessão | filtra | Repetição devolve o existente (DEC-03) |
+| findMany | restaurante, status, since | Lista por ordem de chegada, com sessão e mesa (índice `restaurant_id, status`) | filtra | Tela do balcão |
+| markDone | restaurante, id, doneBy | Atualização condicional a OPEN; devolve a contagem | filtra | Finalizar sem sobrescrever outro garçom |
+| cancelOpenBySession | sessão | Em lote, OPEN para CANCELLED; devolve a contagem | sem restaurante (a sessão já foi validada) | Parte da transação de fechamento |
 
-**Concorrência [Implementado: markDone existe; cancelBySession não, `cancelOpenBySession` cobre o encerramento].** O método de atualização genérico não é adequado para "atender", pois escreveria por cima de outro garçom. As notas propõem um método novo de atualização em massa com status OPEN na condição (`markDone`, ausente no código): só um dos dois garçons concomitantes obtém contagem 1; o outro recebe 409. O mesmo vale para cancelamento pelo cliente (`cancelBySession`, também ausente). 
+### 6.5.3 Fora do MVP 
 
-**[Atualizado 14/11/2026: módulo implementado]** Arquivos: `calls.service.ts`, `calls.controller.ts`, `calls.interfaces.ts`, `calls.schemas.ts`, `calls.repository.ts` e `calls.repository.interface.ts`. Além do repository: `findOpen(restaurantId, sessionId, type)` e `markDone(restaurantId, id, doneBy)` (updateMany com `status: OPEN` na condição; `count 0` = perdeu), `CallsService` (`create` devolve o chamado OPEN existente do tipo, com `created_at` original, ou cria; em toques simultâneos o índice barra o segundo e o service devolve o vencedor; `list` devolve `{serverTime, calls}`; `done` dá 404 se não existe no restaurante e 409 `CALL_NOT_OPEN` se já finalizado/cancelado), controller, schemas Zod e rotas `POST /public/calls`, `GET /calls`, `PATCH /calls/:id/done`. Índice `calls_one_open_per_type` na migration manual 20261114120000. Limite 10/5 min por token (429 `TOO_MANY_REQUESTS`). `cancelOpenBySession` é usado ao encerrar o atendimento. Os métodos `findManyBySession`, `update` e `delete` existem sem uso por rota.
+`GET/DELETE /me/calls` (DEC-08: o cliente não acompanha o chamado) e os códigos `TOKEN_REVOKED` e `TABLE_NOT_FOUND` da v0.3 (o 401 do token usa mensagem única e o scan responde 404 genérico). Não há evento `call:cancelled`: `session:closed` limpa os cards da sessão. 
 
-**Ainda não [Planejado].** `GET/DELETE /me/calls` (fora do MVP, DEC-08), eventos Socket.IO, códigos `TOKEN_REVOKED` e `TABLE_NOT_FOUND` da v0.3 (o 401 do token usa mensagem única).
+## 6.6 Resumo por módulo 
 
-## 6.6 Resumo do que falta por módulo 
-
-Em todos os módulos deste capítulo, o repository está completo; faltam service, controller, schemas e rotas (a única exceção é `auth`, que tem tudo, com `register` incompleto, 2 rotas e sem `ensureRole`). Em `tables` o service é um esqueleto vazio e falta a geração do código público; em `sessions` faltam `token.ts`, o middleware da mesa, o job e o notificador; em `calls` faltam `markDone`, `cancelBySession`, o índice parcial, o tempo real e o limite; em `restaurants` falta a criação junto com o cadastro; o módulo futuro `users` (criação de garçons) depende dos repositories já existentes em `auth`. O quadro completo por módulo está em 9.1.
+| Módulo | Estado | Pendências |
+|---|---|---|
+| auth | Completo | refresh de token, recuperação de senha, `/auth/me` |
+| users e administration | Completo | tela do SUPER_ADMIN no front |
+| restaurants | Completo | não há exclusão (por desenho) |
+| tables | Completo | `/deactivate`, `/activate` e `/regenerate-code` não foram feitos (desativar é um PATCH) |
+| sessions | Completo | paginação do histórico; aviso de 15 min só no front |
+| calls | Completo | `/me/calls` fora do MVP |
+| realtime e job | Completo (instância única) | Redis adapter e lock do job para várias instâncias |

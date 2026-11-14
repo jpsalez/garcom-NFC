@@ -1,6 +1,8 @@
 ## C.5 Propostas do guia de estudos ainda não implementadas 
 
-O guia (GUIA) é material didático; tudo é **[Proposto]** e **[Planejado]**, e foi conferido contra o código. Ele declara que hash de senha, JWT, Express, Zod, Prisma básico e injeção de dependência já estão prontos. 
+> **Histórico (atualização 14/11/2026).** As propostas abaixo foram implementadas (register com restaurante em transação, `ensureRole`, `tenantOf`, rate limit, token por aparelho, índices parciais, transações). Onde o código difere, vale o código (capítulos 5 a 8).
+
+O guia (GUIA) é material didático; as propostas abaixo foram conferidas contra o código. Ele declara que hash de senha, JWT, Express, Zod, Prisma básico e injeção de dependência já estão prontos. 
 
 ### C.5.1 Cadastro com criação de restaurante em transação e slug (GUIA §3) 
  

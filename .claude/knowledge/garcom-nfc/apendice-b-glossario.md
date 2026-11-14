@@ -18,7 +18,7 @@
 | Docker Compose | Orquestração dos contêineres web, api e db (planejada). | 
 | Expiração preguiçosa (lazy) | Verificação de validade da sessão a cada requisição, complementar ao job. | 
 | Índice único parcial | Índice de unicidade com cláusula WHERE; garante uma sessão ACTIVE por mesa. | 
-| JWT | Token assinado com dados (sub, restaurantId, role) usado por Admin e balcão. | 
+| JWT | Token assinado com dados (sub, restaurantId, role) usado por OWNER, STAFF e SUPER_ADMIN. | 
 | Job de expiração | Rotina periódica (60 s) que encerra atendimentos vencidos sem "manter aberto". | 
 | KDS | Kitchen Display System, tela da cozinha (futuro). | ``
 | keep_open / manter aberto | Marca que impede a expiração de 4 h; só o balcão encerra. | 
@@ -28,14 +28,14 @@
 | OPEN | Estado de chamado aberto, com card na tela. | 
 | P2002, P2025 | Códigos de erro do Prisma: violação de unicidade (409) e registro não encontrado (404). | 
 | Prisma | ORM com tipos gerados e migrations versionadas. | 
-| RBAC | Controle de acesso por papel (ADMIN, STAFF). | ``
+| RBAC | Controle de acesso por papel (SUPER_ADMIN, OWNER, STAFF). | ``
 | Revogação | Preenchimento de revoked_at em tokens para invalidá-los imediatamente. | ````
 | Sala (room) | Grupo de conexões Socket.IO que recebe um evento (balcao, session). | 
 | scrypt | Algoritmo de hash de senha usado no código. | 
 | Slug | Nome do restaurante em formato de URL, único. | 
 | Socket.IO | Biblioteca de comunicação em tempo real com reconexão e salas. | 
-| STAFF / ADMIN | Papéis de usuário: balcão e dono do restaurante (ADMIN é o nome no código atual). |
-| SUPER_ADMIN / OWNER | [Especificado, não implementado] SUPER_ADMIN: dono da plataforma, sem restaurante. OWNER: dono de um restaurante, substitui o ADMIN (DV-48). | ``
+| STAFF / OWNER | Papéis de usuário: balcão (STAFF) e dono do restaurante (OWNER, que substituiu o ADMIN em 12/11/2026). |
+| SUPER_ADMIN / OWNER | [Implementado] SUPER_ADMIN: dono da plataforma, sem restaurante. OWNER: dono de um restaurante, substitui o ADMIN (DV-48). | ``
 | Tenant | Cada restaurante cliente do SaaS; isolamento por coluna restaurant_id. | 
 | Token do aparelho | Chave opaca e aleatória guardada no celular, ligada ao atendimento; só o hash fica no banco. | ``
 | TIMEOUT, STAFF | Motivos de fechamento da sessão (closed_reason): tempo ou balcão. | ``
