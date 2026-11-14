@@ -3,9 +3,10 @@ import { injectable } from "tsyringe";
 import { Server } from "socket.io";
 import type { INotifier } from "./notifier.ts";
 
-type Authenticate = (token: string) => Promise<{ restaurantId: string | null }>;
+type Authenticate = (token: string) => Promise<{ id: string; restaurantId: string | null }>;
 
 const roomOf = (restaurantId: string) => `restaurant:${restaurantId}`;
+const userRoomOf = (userId: string) => `user:${userId}`;
 
 // Uma sala por restaurante: o isolamento do tempo real é o mesmo do HTTP. Sem servidor ligado (testes), não envia nada.
 @injectable()
@@ -20,7 +21,7 @@ export class SocketNotifier implements INotifier {
       try {
         const user = await authenticate(String(socket.handshake.auth.token ?? ""));
         if (!user.restaurantId) throw new Error("Usuário sem restaurante");
-        socket.join(roomOf(user.restaurantId));
+        socket.join([roomOf(user.restaurantId), userRoomOf(user.id)]);
         next();
       } catch {
         next(new Error("Não autorizado"));
@@ -30,6 +31,14 @@ export class SocketNotifier implements INotifier {
 
   toRestaurant(restaurantId: string, event: string, payload: unknown) {
     this.io?.to(roomOf(restaurantId)).emit(event, payload);
+  }
+
+  disconnectUser(userId: string) {
+    this.io?.in(userRoomOf(userId)).disconnectSockets(true);
+  }
+
+  disconnectRestaurant(restaurantId: string) {
+    this.io?.in(roomOf(restaurantId)).disconnectSockets(true);
   }
 
   close() {

@@ -11,6 +11,10 @@ export function generatePublicCode() {
   return code;
 }
 
+// Formato do código: barra na hora o que não pode existir, sem ir ao banco
+const PUBLIC_CODE_FORMAT = new RegExp(`^[${ALPHABET}]{${PUBLIC_CODE_LENGTH}}$`);
+export const isPublicCode = (code: string) => PUBLIC_CODE_FORMAT.test(code);
+
 // Token do aparelho do cliente: o valor vai só para ele; o banco guarda apenas o hash
 export function generateSessionToken() {
   const token = randomBytes(32).toString("base64url");

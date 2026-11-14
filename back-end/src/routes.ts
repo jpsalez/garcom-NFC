@@ -14,7 +14,7 @@ import { TablesController } from "./modules/tables/tables.controller.ts";
 import { createTableSchema, updateTableSchema } from "./modules/tables/tables.schemas.ts";
 import { StaffController } from "./modules/users/staff.controller.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "./modules/users/users.schema.ts";
-import { callLimiter, loginLimiter, registerLimiter, scanLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
+import { callLimiter, loginIpLimiter, loginLimiter, registerLimiter, scanLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
 import { ensureAuthenticated, ensureRole } from "./shared/middlewares/auth.middleware.ts";
 import { role } from "../generated/prisma/enums.ts";
 import { createUserSchema, loginUserSchema } from "./modules/auth/auth.schema.ts";
@@ -34,7 +34,7 @@ export function SetupRoutes(){
     })
 
     router.post('/auth/register', registerLimiter, validateSchema(createUserSchema), authController.register);
-    router.post('/auth/login', loginLimiter, validateSchema(loginUserSchema), authController.login);
+    router.post('/auth/login', loginIpLimiter, loginLimiter, validateSchema(loginUserSchema), authController.login);
 
     // SUPER_ADMIN: plataforma
     const superAdmin = [ensureAuthenticated, ensureRole(role.SUPER_ADMIN)];

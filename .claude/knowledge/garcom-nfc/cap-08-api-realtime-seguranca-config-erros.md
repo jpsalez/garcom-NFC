@@ -45,6 +45,8 @@ Desativar uma mesa com atendimento ativo deve falhar com 409 ("Feche a mesa ante
 | PATCH /sessions/:id | Corpo com keepOpen verdadeiro ou falso (módulos: /keep-open) | Plan. | ``````
 | POST /sessions/:id/close | Encerrar; 200 com status, revokedTokens e cancelledCalls | Plan. |   
 
+Erros novos em 14/11/2026: 409 `TABLE_INACTIVE` (abrir atendimento em mesa inativa), 413 `PAYLOAD_TOO_LARGE` (corpo acima de 100 KB), 400 `BAD_REQUEST` para JSON inválido. Login tem ainda um limite só por IP (30/15 min).
+
 Sessões [Implementado em 14/11/2026; as linhas "Plan." acima sobre /sessions e o scan estão superadas; todas sob /api/v1]: `POST /public/tables/:code/scan` (público; 30/15 min por IP+mesa; abre ou reaproveita o atendimento; devolve `{token, expires_at, table, restaurant}`; mesa/restaurante inativo = 404; substitui o `/token` planejado); `GET /sessions` (`?status=ACTIVE` por padrão ou `CLOSED`; status inválido dá 400 pelo schema `sessions.schemas.ts` e `validateQuery`; sem paginação ainda, o que importa para o histórico de encerrados); `POST /tables/:id/session` (balcão; 409 SESSION_ALREADY_ACTIVE); `POST /sessions/:id/close` (409 SESSION_CLOSED se já encerrado); `POST /sessions/:id/extend` (+`TABLE_SESSION_TTL`, padrão 4 h). `PATCH /sessions/:id` (keepOpen) segue [Planejado]; `POST /public/calls` e o middleware do token de mesa (`ensureTableToken`) agora existem (módulo calls, 14/11/2026).
 
 O documento de módulos previa `GET /sessions` e `POST /tables/:id/sessions` (garçom abre a mesa), fora do desenho da v0.3 (DV-37); agora implementados (DEC-01). Rotas da v0.2 (setores, equipe, cardápio, comandas, KDS, avaliações, relatórios, `/auth/me`) não fazem parte do MVP e são futuras. 
@@ -128,6 +130,7 @@ Classe base `AppError` (mensagem, status, detalhes opcionais) e subclasses: `Bad
 | SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD | seed | Dados do primeiro SUPER_ADMIN (senha 12+ caracteres) | Usada (prisma/seed-super-admin.ts) | ``
 | TABLE_SESSION_TTL | api | Validade do atendimento em segundos (14400, 4 h) | Não usada | ````
 | PUBLIC_APP_URL (era PUBLIC_WEB_URL) | api | Base da URL pública da mesa e do QR Code (/m/código); obrigatória na subida (main.ts); padrão `http://localhost:3000` no .env.example e no compose (DV-43 resolvida) | Usada (14/11/2026) | ``
+| TRUST_PROXY | api | Quantos proxies reversos ficam à frente da API; sem valor, o IP dos limites é o da conexão direta (14/11/2026) | `1` | Opcional |
 | NEXT_PUBLIC_API_URL | web | URL da API vista pelo navegador (http://localhost:4000) | Sem front | ``
 | API_INTERNAL_URL | web | URL da API para renderização no servidor (http://api:4000) | Sem front | ``````
 | DB_USER, DB_PASSWORD | db | Credenciais do PostgreSQL; banco fixo garcom | Sem compose |   

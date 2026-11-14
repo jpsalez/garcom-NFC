@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { inject, injectable } from "tsyringe";
+import { userOf } from "../../shared/middlewares/auth.middleware.ts";
 import type { IUsersService } from "../users/users.interfaces.ts";
 import type { createRestaurantUserInput, updateUserInput } from "../users/users.schema.ts";
 import type { IAdministrationService } from "./administration.interfaces.ts";
@@ -30,7 +31,7 @@ export class AdministrationController {
 
   setRestaurantActive = async (req: Request, res: Response) => {
     const { active } = req.body as setActiveInput;
-    const restaurant = await this.administrationService.setRestaurantActive(String(req.params.restaurantId), active);
+    const restaurant = await this.administrationService.setRestaurantActive(String(req.params.restaurantId), active, userOf(req));
     return res.status(200).json(restaurant);
   };
 

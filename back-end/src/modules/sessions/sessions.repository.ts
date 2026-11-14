@@ -52,16 +52,19 @@ export class TableSessionRepository implements ITableSessionRepository {
     return this.db.table_sessions.update({ where: { id, restaurant_id: restaurantId }, data });
   }
 
+  // Trava a linha enquanto a transação durar, se a sessão ainda estiver ACTIVE: um encerramento simultâneo espera
+  async lockActive(restaurantId: string, id: string) {
+    const rows = await this.db.$queryRaw<{ id: string }[]>`
+      SELECT id FROM table_sessions WHERE id = ${id} AND restaurant_id = ${restaurantId} AND status = 'ACTIVE' FOR SHARE`;
+    return rows.length > 0;
+  }
+
   // Só atualiza se ainda estiver ACTIVE: dois encerramentos simultâneos não se sobrescrevem ({ count: 0 } = perdeu)
   closeIfActive(restaurantId: string, id: string, data: UpdateTableSessionData) {
     return this.db.table_sessions.updateMany({
       where: { id, restaurant_id: restaurantId, status: tableStatus.ACTIVE },
       data: { ...data, status: tableStatus.CLOSED },
     });
-  }
-
-  delete(restaurantId: string, id: string) {
-    return this.db.table_sessions.delete({ where: { id, restaurant_id: restaurantId } });
   }
 }
 
@@ -78,25 +81,11 @@ export class SessionTokenRepository implements ISessionTokenRepository {
     return this.db.session_tokens.create({ data });
   }
 
-  findById(id: string) {
-    return this.db.session_tokens.findUnique({ where: { id } });
-  }
-
   findByHash(tokenHash: string) {
     return this.db.session_tokens.findUnique({
       where: { token_hash: tokenHash },
       include: { table_session: { include: { table: { select: { label: true } } } } },
     });
-  }
-
-  findManyBySession(restaurantId: string, sessionId: string) {
-    return this.db.session_tokens.findMany({
-      where: { session_id: sessionId, table_session: { restaurant_id: restaurantId } },
-    });
-  }
-
-  update(id: string, data: Prisma.session_tokensUpdateInput) {
-    return this.db.session_tokens.update({ where: { id }, data });
   }
 
   // Retorna { count } com a quantidade de tokens revogados
@@ -105,9 +94,5 @@ export class SessionTokenRepository implements ISessionTokenRepository {
       where: { session_id: sessionId, revoked_at: null },
       data: { revoked_at: revokedAt },
     });
-  }
-
-  delete(id: string) {
-    return this.db.session_tokens.delete({ where: { id } });
   }
 }

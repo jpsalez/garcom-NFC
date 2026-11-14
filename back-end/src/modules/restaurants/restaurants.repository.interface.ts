@@ -6,5 +6,4 @@ export interface IRestaurantRepository {
   findById(id: string): Promise<restaurants | null>;
   findBySlug(slug: string): Promise<restaurants | null>;
   update(id: string, data: Prisma.restaurantsUpdateInput): Promise<restaurants>;
-  delete(id: string): Promise<restaurants>;
 }

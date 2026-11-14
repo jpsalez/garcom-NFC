@@ -32,7 +32,4 @@ export class RestaurantRepository implements IRestaurantRepository {
     return this.db.restaurants.update({ where: { id }, data });
   }
 
-  delete(id: string) {
-    return this.db.restaurants.delete({ where: { id } });
-  }
 }

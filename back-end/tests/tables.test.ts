@@ -100,3 +100,35 @@ describe("DELETE /tables/:id", () => {
     expect((await api().delete(`/api/v1/tables/${table.id}`).set(auth(await staffToken(token)))).status).toBe(403);
   });
 });
+
+describe("desativar a mesa", () => {
+  it("encerra o atendimento ativo (STAFF, closed_by do OWNER), revoga tokens e cancela chamados", async () => {
+    const { token, user } = await ownerOf("a");
+    const table = await createTable(user.restaurant_id!);
+    const scan = await api().post(`/api/v1/public/tables/${table.public_code}/scan`);
+    await api().post("/api/v1/public/calls").set("X-Table-Token", scan.body.token).send({ type: "WAITER" });
+
+    const res = await api().patch(`/api/v1/tables/${table.id}`).set(auth(token)).send({ active: false });
+
+    expect(res.status).toBe(200);
+    const session = await prisma.table_sessions.findFirstOrThrow({ where: { table_id: table.id } });
+    expect([session.status, session.closed_reason, session.closed_by]).toEqual(["CLOSED", "STAFF", user.id]);
+    expect((await prisma.session_tokens.findFirstOrThrow()).revoked_at).not.toBeNull();
+    expect((await prisma.calls.findFirstOrThrow()).status).toBe("CANCELLED");
+    const call = await api().post("/api/v1/public/calls").set("X-Table-Token", scan.body.token).send({ type: "WAITER" });
+    expect(call.status).toBe(401);
+  });
+
+  it("renomear ou reativar a mesa não encerra o atendimento; mesa sem atendimento desativa normalmente", async () => {
+    const { token, user } = await ownerOf("a");
+    const table = await createTable(user.restaurant_id!);
+    await api().post(`/api/v1/public/tables/${table.public_code}/scan`);
+
+    await api().patch(`/api/v1/tables/${table.id}`).set(auth(token)).send({ label: "Mesa nova" });
+    await api().patch(`/api/v1/tables/${table.id}`).set(auth(token)).send({ active: true });
+    expect(await prisma.table_sessions.count({ where: { status: "ACTIVE" } })).toBe(1);
+
+    const other = await createTable(user.restaurant_id!, "Mesa 2");
+    expect((await api().patch(`/api/v1/tables/${other.id}`).set(auth(token)).send({ active: false })).status).toBe(200);
+  });
+});

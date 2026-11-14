@@ -49,6 +49,7 @@ model tables {
   public_code   String           @unique
   active        Boolean          @default(true)
   tableSessions table_sessions[]
+  @@index([restaurant_id])
 }
 
 // Índice único parcial (um chamado OPEN por tipo e atendimento) fica na migration calls_one_open_per_type.
@@ -68,6 +69,8 @@ model table_sessions {
   user           users?           @relation(fields: [closed_by], references: [id])
   session_tokens session_tokens[]
   calls          calls[]
+  @@index([restaurant_id, status])
+  @@index([table_id])
 }
 
 model session_tokens {
@@ -77,6 +80,7 @@ model session_tokens {
   token_hash    String         @unique
   revoked_at    DateTime?
   calls         calls[]
+  @@index([session_id])
 }
 
 model calls {
@@ -95,6 +99,7 @@ model calls {
   user          users?         @relation(fields: [done_by], references: [id])
 
   @@index([restaurant_id, status])
+  @@index([token_id])
 }
 
 enum call_state {

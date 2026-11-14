@@ -34,8 +34,8 @@ export interface ITableSessionRepository {
   findMany(restaurantId: string, filter?: { status?: tableStatus }): Promise<TableSessionListItem[]>;
   findExpired(now: Date): Promise<table_sessions[]>;
   update(restaurantId: string, id: string, data: UpdateTableSessionData): Promise<table_sessions>;
+  lockActive(restaurantId: string, id: string): Promise<boolean>;
   closeIfActive(restaurantId: string, id: string, data: UpdateTableSessionData): Promise<Prisma.BatchPayload>;
-  delete(restaurantId: string, id: string): Promise<table_sessions>;
 }
 
 export type CreateSessionTokenData = {
@@ -49,10 +49,6 @@ export type SessionTokenWithSession = Prisma.session_tokensGetPayload<{
 
 export interface ISessionTokenRepository {
   create(data: CreateSessionTokenData): Promise<session_tokens>;
-  findById(id: string): Promise<session_tokens | null>;
   findByHash(tokenHash: string): Promise<SessionTokenWithSession | null>;
-  findManyBySession(restaurantId: string, sessionId: string): Promise<session_tokens[]>;
-  update(id: string, data: Prisma.session_tokensUpdateInput): Promise<session_tokens>;
   revokeAllBySession(sessionId: string, revokedAt: Date): Promise<Prisma.BatchPayload>;
-  delete(id: string): Promise<session_tokens>;
 }

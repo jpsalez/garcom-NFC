@@ -1,8 +1,11 @@
 import { inject, injectable } from "tsyringe";
 import type { call_state, calls, type_call } from "../../../generated/prisma/client.ts";
-import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
+import { ConflictError, NotFoundError, UnauthorizedError } from "../../shared/errors/http-errors.ts";
+import { runInTransaction } from "../../shared/providers/prisma.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
+import { TableSessionRepository } from "../sessions/sessions.repository.ts";
 import type { CallView, Device, ICallsService } from "./calls.interfaces.ts";
+import { CallRepository } from "./calls.repository.ts";
 import type { ICallRepository } from "./calls.repository.interface.ts";
 
 const toView = (call: calls, label: string): CallView => ({
@@ -32,11 +35,18 @@ export class CallsService implements ICallsService {
 
     let call: calls;
     try {
-      call = await this.callRepository.create({
-        restaurant_id: device.restaurantId,
-        session_id: device.sessionId,
-        token_id: device.tokenId,
-        type,
+      call = await runInTransaction(async (tx) => {
+        // O token foi validado antes: se o atendimento encerrou nesse intervalo, o chamado não nasce.
+        // A trava faz um encerramento simultâneo esperar este commit e cancelar o chamado junto com os demais.
+        if (!(await new TableSessionRepository(tx).lockActive(device.restaurantId, device.sessionId))) {
+          throw new UnauthorizedError("Token da mesa inválido ou expirado");
+        }
+        return new CallRepository(tx).create({
+          restaurant_id: device.restaurantId,
+          session_id: device.sessionId,
+          token_id: device.tokenId,
+          type,
+        });
       });
     } catch (err) {
       // Toques simultâneos: o índice calls_one_open_per_type barrou o segundo; devolve o que venceu

@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 export const createUserSchema = z.object({
-    name: z.string().min(1),
+    name: z.string().min(1).max(100),
     email: z.email().trim().toLowerCase(),
-    password: z.string().min(8),
-    restaurantName: z.string().min(1)
+    password: z.string().min(8).max(128),
+    restaurantName: z.string().min(1).max(100)
 });
 export type createUserInput = z.infer<typeof createUserSchema>;
 

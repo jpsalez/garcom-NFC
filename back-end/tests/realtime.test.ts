@@ -10,6 +10,7 @@ import type { SocketNotifier } from "../src/shared/realtime/socket-notifier.ts";
 import { api } from "./helpers/app.ts";
 import { auth, ownerOf, staffToken } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
+import { passwordHash } from "../src/shared/utils/password.ts";
 import { createTable } from "./helpers/factories.ts";
 
 let server: Server;
@@ -168,5 +169,47 @@ describe("eventos do balcão", () => {
     await container.resolve<ISessionsService>("SessionsService").expireDue();
 
     expect(await closed).toMatchObject({ reason: "TIMEOUT" });
+  });
+});
+
+describe("desconexão ao perder o acesso", () => {
+  const disconnected = (socket: Socket) =>
+    new Promise<void>((resolve, reject) => {
+      socket.once("disconnect", () => resolve());
+      setTimeout(() => reject(new Error("o socket não foi desconectado")), 2000);
+    });
+
+  it("desativar ou excluir o STAFF derruba o socket dele, mas não o do OWNER", async () => {
+    const a = await ownerOf("a");
+    const staffA = await api().post("/api/v1/staff").set(auth(a.token)).send({ name: "G1", email: "g1@teste.com", password: "senha-forte-123" });
+    const staffB = await api().post("/api/v1/staff").set(auth(a.token)).send({ name: "G2", email: "g2@teste.com", password: "senha-forte-123" });
+    const tokenOf = async (email: string) => (await api().post("/api/v1/auth/login").send({ email, password: "senha-forte-123" })).body.token;
+    const owner = await connectAs(a.token);
+    const first = await connectAs(await tokenOf("g1@teste.com"));
+    const second = await connectAs(await tokenOf("g2@teste.com"));
+
+    const firstGone = disconnected(first);
+    await api().patch(`/api/v1/staff/${staffA.body.id}`).set(auth(a.token)).send({ active: false });
+    await firstGone;
+    const secondGone = disconnected(second);
+    await api().delete(`/api/v1/staff/${staffB.body.id}`).set(auth(a.token));
+    await secondGone;
+
+    expect(owner.connected).toBe(true);
+  });
+
+  it("desativar o restaurante derruba todos os sockets dele e só dele", async () => {
+    const a = await ownerOf("a");
+    const b = await ownerOf("b");
+    const counterA = await connectAs(a.token);
+    const counterB = await connectAs(b.token);
+    await prisma.users.create({ data: { name: "Super", email: "super@teste.com", password_hash: await passwordHash("senha-forte-123"), role: "SUPER_ADMIN" } });
+    const superToken = (await api().post("/api/v1/auth/login").send({ email: "super@teste.com", password: "senha-forte-123" })).body.token;
+    const gone = disconnected(counterA);
+
+    await api().patch(`/api/v1/admin/restaurants/${a.user.restaurant_id}`).set(auth(superToken)).send({ active: false });
+
+    await gone;
+    expect(counterB.connected).toBe(true);
   });
 });

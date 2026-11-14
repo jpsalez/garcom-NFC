@@ -3,7 +3,7 @@ import type { reason, table_sessions, tables, tableStatus } from "../../../gener
 import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
 import { runInTransaction } from "../../shared/providers/prisma.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
-import { generateSessionToken } from "../../shared/utils/token.ts";
+import { generateSessionToken, isPublicCode } from "../../shared/utils/token.ts";
 import { CallRepository } from "../calls/calls.repository.ts";
 import type { ITableRepository } from "../tables/tables.repository.interface.ts";
 import type { ISessionsService } from "./sessions.interfaces.ts";
@@ -34,7 +34,7 @@ export class SessionsService implements ISessionsService {
 
   // Rota pública: o tenant vem da própria mesa. Mesa/restaurante inativos respondem como se não existissem.
   async scan(publicCode: string) {
-    const table = await this.tableRepository.findByPublicCode(publicCode);
+    const table = isPublicCode(publicCode) ? await this.tableRepository.findByPublicCode(publicCode) : null;
     if (!table?.active || !table.restaurant.active) throw new NotFoundError("Mesa não encontrada");
 
     const session = await this.activeOrOpen(table);
@@ -46,6 +46,7 @@ export class SessionsService implements ISessionsService {
   async open(restaurantId: string, tableId: string) {
     const table = await this.tableRepository.findById(restaurantId, tableId);
     if (!table) throw new NotFoundError("Mesa não encontrada");
+    if (!table.active) throw new ConflictError("A mesa está inativa", "TABLE_INACTIVE");
     if (await this.findActive(restaurantId, tableId)) {
       throw new ConflictError("A mesa já tem um atendimento ativo", "SESSION_ALREADY_ACTIVE");
     }
@@ -67,17 +68,23 @@ export class SessionsService implements ISessionsService {
     return extended;
   }
 
+  async closeActiveOfTable(restaurantId: string, tableId: string, userId: string) {
+    const active = await this.sessionRepository.findActiveByTable(restaurantId, tableId);
+    if (active) await this.finish(restaurantId, active.id, "STAFF", userId);
+  }
+
+  async closeAllActive(restaurantId: string, userId: string) {
+    for (const session of await this.sessionRepository.findMany(restaurantId, { status: "ACTIVE" })) {
+      await this.tryFinish(restaurantId, session.id, "STAFF", userId);
+    }
+  }
+
   async expireDue() {
     const due = await this.sessionRepository.findExpired(new Date());
-    // Um por vez: muitos vencidos juntos (ex.: API ficou fora do ar) não disputam o pool de conexões.
-    // Falha em um atendimento não trava os demais (só o id e a mensagem vão para o log).
+    // Um por vez: muitos vencidos juntos (ex.: API ficou fora do ar) não disputam o pool de conexões
     let closed = 0;
     for (const session of due) {
-      try {
-        if (await this.finish(session.restaurant_id, session.id, "TIMEOUT")) closed++;
-      } catch (err) {
-        console.error(`Falha ao encerrar o atendimento ${session.id}:`, err instanceof Error ? err.message : err);
-      }
+      if (await this.tryFinish(session.restaurant_id, session.id, "TIMEOUT")) closed++;
     }
     return closed;
   }
@@ -111,7 +118,7 @@ export class SessionsService implements ISessionsService {
     }
   }
 
-  // Atendimento vencido é encerrado aqui, no primeiro uso depois do vencimento (ainda não há job)
+  // Segunda camada da expiração: o job encerra de minuto em minuto, e aqui o vencido é encerrado no primeiro uso
   private async findActive(restaurantId: string, tableId: string) {
     const session = await this.sessionRepository.findActiveByTable(restaurantId, tableId);
     if (session && !session.keep_open && session.expires_at <= new Date()) {
@@ -127,6 +134,16 @@ export class SessionsService implements ISessionsService {
     if (!session) throw new NotFoundError("Atendimento não encontrado");
     if (session.status !== "ACTIVE") throw new ConflictError("O atendimento já foi encerrado", "SESSION_CLOSED");
     return session;
+  }
+
+  // Encerra vários em lote: falha em um atendimento não trava os demais (só o id e a mensagem vão para o log)
+  private async tryFinish(restaurantId: string, id: string, closedReason: reason, closedBy?: string) {
+    try {
+      return Boolean(await this.finish(restaurantId, id, closedReason, closedBy));
+    } catch (err) {
+      console.error(`Falha ao encerrar o atendimento ${id}:`, err instanceof Error ? err.message : err);
+      return false;
+    }
   }
 
   // Encerrar vale tudo ou nada: sessão fechada, tokens revogados e chamados abertos cancelados.

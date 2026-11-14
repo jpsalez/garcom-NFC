@@ -24,6 +24,8 @@ const byIpAndEmail = (req: Request) => {
   return `${byIp(req)}|${email}`;
 };
 
+// Só por IP: variar o e-mail não escapa do limite (cada tentativa custa um scrypt, mesmo com e-mail inexistente)
+export const loginIpLimiter = limiter(15, 30, "Muitas tentativas de login deste endereço. Tente novamente em alguns minutos.", byIp);
 export const loginLimiter = limiter(15, 10, "Muitas tentativas de login. Tente novamente em alguns minutos.", byIpAndEmail);
 export const registerLimiter = limiter(60, 5, "Muitos cadastros deste endereço. Tente novamente mais tarde.", byIp);
 

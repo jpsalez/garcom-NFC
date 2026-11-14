@@ -17,8 +17,14 @@ import { errorHandler } from "./shared/middlewares/error.middleware.ts";
 function bootstrap() {
   // Sem o domínio os QR Codes sairiam apontando para o lugar errado
   if (!process.env.PUBLIC_APP_URL) throw new Error("PUBLIC_APP_URL não definido no .env");
+  // Em produção, um segredo curto ou o padrão do compose deixaria os tokens forjáveis
+  const secret = process.env.JWT_SECRET ?? "";
+  if (process.env.NODE_ENV === "production" && (secret.length < 32 || secret.includes("desenvolvimento"))) {
+    throw new Error("JWT_SECRET fraco ou padrão de desenvolvimento: defina um segredo próprio com 32+ caracteres");
+  }
   registerDependencies();
-  app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
+  // A documentação só fica pública fora de produção
+  if (process.env.NODE_ENV !== "production") app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
   app.use("/api/v1", SetupRoutes());
   // Sempre por último: captura erros de todas as rotas acima
   app.use(errorHandler);

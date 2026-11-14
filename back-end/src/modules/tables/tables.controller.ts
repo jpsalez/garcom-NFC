@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { inject, injectable } from "tsyringe";
-import { tenantOf } from "../../shared/middlewares/auth.middleware.ts";
+import { tenantOf, userOf } from "../../shared/middlewares/auth.middleware.ts";
 import type { ITablesService } from "./tables.interfaces.ts";
 import type { createTableInput, updateTableInput } from "./tables.schemas.ts";
 
@@ -23,7 +23,7 @@ export class TablesController {
   };
 
   update = async (req: Request, res: Response) => {
-    const table = await this.tablesService.update(tenantOf(req), String(req.params.id), req.body as updateTableInput);
+    const table = await this.tablesService.update(tenantOf(req), String(req.params.id), req.body as updateTableInput, userOf(req));
     return res.status(200).json(table);
   };
 

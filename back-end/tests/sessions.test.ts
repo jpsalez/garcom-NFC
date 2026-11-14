@@ -9,6 +9,8 @@ afterAll(() => prisma.$disconnect());
 
 const HOUR = 60 * 60 * 1000;
 const scan = (code: string) => api().post(`/api/v1/public/tables/${code}/scan`);
+const activeSessionOf = (tableId: string) =>
+  prisma.table_sessions.findFirstOrThrow({ where: { table_id: tableId, status: "ACTIVE" } });
 const activeOf = (tableId: string) => prisma.table_sessions.findMany({ where: { table_id: tableId, status: "ACTIVE" } });
 
 describe("POST /public/tables/:code/scan", () => {
@@ -21,7 +23,7 @@ describe("POST /public/tables/:code/scan", () => {
     expect(res.status).toBe(201);
     expect(res.body.token).toBeTruthy();
     expect(res.body.table.label).toBe(table.label);
-    const [session] = await activeOf(table.id);
+    const session = await activeSessionOf(table.id);
     expect(session.expires_at.getTime() - Date.now()).toBeGreaterThan(3.9 * HOUR);
     // só o hash fica no banco
     const saved = await prisma.session_tokens.findFirstOrThrow({ where: { session_id: session.id } });
@@ -105,6 +107,18 @@ describe("POST /tables/:id/session (balcão)", () => {
     expect(again.body.code).toBe("SESSION_ALREADY_ACTIVE");
   });
 
+  it("mesa inativa dá 409 TABLE_INACTIVE e não abre atendimento", async () => {
+    const { token, user } = await ownerOf("a");
+    const table = await createTable(user.restaurant_id!);
+    await prisma.tables.update({ where: { id: table.id }, data: { active: false } });
+
+    const res = await api().post(`/api/v1/tables/${table.id}/session`).set(auth(token));
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("TABLE_INACTIVE");
+    expect(await prisma.table_sessions.count()).toBe(0);
+  });
+
   it("mesa de outro restaurante dá 404 e sem token dá 401", async () => {
     const a = await ownerOf("a");
     const b = await ownerOf("b");
@@ -120,7 +134,7 @@ describe("POST /sessions/:id/close", () => {
     const { token, user } = await ownerOf("a");
     const table = await createTable(user.restaurant_id!);
     await scan(table.public_code);
-    const [session] = await activeOf(table.id);
+    const session = await activeSessionOf(table.id);
     const savedToken = await prisma.session_tokens.findFirstOrThrow({ where: { session_id: session.id } });
     const call = await prisma.calls.create({
       data: { restaurant_id: user.restaurant_id!, session_id: session.id, token_id: savedToken.id, type: "WAITER" },

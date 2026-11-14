@@ -14,6 +14,9 @@ export interface ISessionsService {
   open(restaurantId: string, tableId: string): Promise<table_sessions>;
   close(restaurantId: string, id: string, userId: string): Promise<table_sessions>;
   extend(restaurantId: string, id: string): Promise<table_sessions>;
+  // Desativar a mesa ou o restaurante encerra os atendimentos ativos (closed_by = quem desativou)
+  closeActiveOfTable(restaurantId: string, tableId: string, userId: string): Promise<void>;
+  closeAllActive(restaurantId: string, userId: string): Promise<void>;
   // Job: encerra os vencidos de todos os restaurantes; devolve quantos encerrou
   expireDue(): Promise<number>;
   list(restaurantId: string, status: tableStatus): Promise<TableSessionListItem[]>;

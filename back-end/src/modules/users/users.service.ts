@@ -3,6 +3,7 @@ import type { users } from "../../../generated/prisma/client.ts";
 import type { role } from "../../../generated/prisma/enums.ts";
 import type { IRestaurantRepository } from "../restaurants/restaurants.repository.interface.ts";
 import type { IAuthCache } from "../../shared/cache/auth-cache.ts";
+import type { INotifier } from "../../shared/realtime/notifier.ts";
 import { passwordHash } from "../../shared/utils/password.ts";
 import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
 import { toPublicUser } from "./public-user.ts";
@@ -15,15 +16,18 @@ export class UsersService implements IUsersService {
   private readonly userRepository: IUserRepository;
   private readonly restaurantRepository: IRestaurantRepository;
   private readonly authCache: IAuthCache;
+  private readonly notifier: INotifier;
 
   constructor(
     @inject("UserRepository") userRepository: IUserRepository,
     @inject("RestaurantRepository") restaurantRepository: IRestaurantRepository,
     @inject("AuthCache") authCache: IAuthCache,
+    @inject("Notifier") notifier: INotifier,
   ) {
     this.userRepository = userRepository;
     this.restaurantRepository = restaurantRepository;
     this.authCache = authCache;
+    this.notifier = notifier;
   }
 
   async list(restaurantId: string, allowedRoles: role[]) {
@@ -64,6 +68,7 @@ export class UsersService implements IUsersService {
       active: input.active,
     });
     this.authCache.invalidateUser(id);
+    if (input.active === false) this.notifier.disconnectUser(id);
     return toPublicUser(updated);
   }
 
@@ -73,6 +78,7 @@ export class UsersService implements IUsersService {
     // Histórico de chamados e atendimentos fica: closed_by e done_by viram nulos (SET NULL)
     await this.userRepository.delete(restaurantId, id);
     this.authCache.invalidateUser(id);
+    this.notifier.disconnectUser(id);
   }
 
   private async findManaged(restaurantId: string, id: string, allowedRoles: role[]) {

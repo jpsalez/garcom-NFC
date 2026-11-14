@@ -4,6 +4,7 @@ import type { tables } from "../../../generated/prisma/client.ts";
 import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
 import { tablePublicUrl } from "../../shared/utils/public-url.ts";
 import { generatePublicCode } from "../../shared/utils/token.ts";
+import type { ISessionsService } from "../sessions/sessions.interfaces.ts";
 import type { ITablesService } from "./tables.interfaces.ts";
 import type { ITableRepository } from "./tables.repository.interface.ts";
 import type { createTableInput, updateTableInput } from "./tables.schemas.ts";
@@ -13,9 +14,14 @@ const withUrl = (table: tables) => ({ ...table, public_url: tablePublicUrl(table
 @injectable()
 export class TablesService implements ITablesService {
   private readonly tableRepository: ITableRepository;
+  private readonly sessionsService: ISessionsService;
 
-  constructor(@inject("TableRepository") tableRepository: ITableRepository) {
+  constructor(
+    @inject("TableRepository") tableRepository: ITableRepository,
+    @inject("SessionsService") sessionsService: ISessionsService,
+  ) {
     this.tableRepository = tableRepository;
+    this.sessionsService = sessionsService;
   }
 
   async list(restaurantId: string) {
@@ -32,9 +38,12 @@ export class TablesService implements ITablesService {
     return withUrl(table);
   }
 
-  async update(restaurantId: string, id: string, input: updateTableInput) {
+  async update(restaurantId: string, id: string, input: updateTableInput, userId: string) {
     await this.getOwned(restaurantId, id);
-    return withUrl(await this.tableRepository.update(restaurantId, id, { label: input.label, active: input.active }));
+    const table = await this.tableRepository.update(restaurantId, id, { label: input.label, active: input.active });
+    // Desativa primeiro (um novo scan já dá 404) e depois encerra o atendimento que ainda estava aberto
+    if (input.active === false) await this.sessionsService.closeActiveOfTable(restaurantId, id, userId);
+    return withUrl(table);
   }
 
   async qrCode(restaurantId: string, id: string) {

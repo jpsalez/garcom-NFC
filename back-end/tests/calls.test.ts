@@ -2,6 +2,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { api } from "./helpers/app.ts";
 import { auth, ownerOf, staffToken } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
+import { CallsService } from "../src/modules/calls/calls.service.ts";
+import { container } from "../src/shared/container/container.ts";
 import { createTable } from "./helpers/factories.ts";
 
 beforeEach(resetDb);
@@ -193,5 +195,22 @@ describe("PATCH /calls/:id/done", () => {
     expect((await prisma.calls.findUniqueOrThrow({ where: { id: call.body.id } })).status).toBe("CANCELLED");
     expect((await api().patch(`/api/v1/calls/${call.body.id}/done`).set(auth(a.token))).status).toBe(409);
     expect((await api().patch(`/api/v1/calls/${call.body.id}/done`).set(auth(b.token))).status).toBe(404);
+  });
+});
+
+describe("corrida entre chamado e encerramento", () => {
+  it("o service não cria chamado numa sessão que já foi encerrada (token validado antes do encerramento)", async () => {
+    const { token, user } = await ownerOf("a");
+    const { table, deviceToken } = await tableWithDevice(user.restaurant_id!);
+    const session = await prisma.table_sessions.findFirstOrThrow({ where: { table_id: table.id } });
+    const saved = await prisma.session_tokens.findFirstOrThrow({ where: { session_id: session.id } });
+    await api().post(`/api/v1/sessions/${session.id}/close`).set(auth(token));
+    expect(deviceToken).toBeTruthy();
+
+    // Simula a requisição que passou pelo ensureTableToken antes do encerramento
+    const device = { tokenId: saved.id, sessionId: session.id, restaurantId: user.restaurant_id!, tableLabel: table.label };
+    await expect(container.resolve<CallsService>("CallsService").create(device, "WAITER")).rejects.toMatchObject({ statusCode: 401 });
+
+    expect(await prisma.calls.count()).toBe(0);
   });
 });

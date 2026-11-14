@@ -1,3 +1,4 @@
+import { generatePublicCode } from "../../src/shared/utils/token.ts";
 import { prisma } from "./db.ts";
 
 let n = 0;
@@ -9,7 +10,7 @@ export function createRestaurant(name = "Restaurante") {
 
 export function createTable(restaurantId: string, label = "Mesa 1") {
   return prisma.tables.create({
-    data: { restaurant_id: restaurantId, label, public_code: `code-${uid()}` },
+    data: { restaurant_id: restaurantId, label, public_code: generatePublicCode() },
   });
 }
 
