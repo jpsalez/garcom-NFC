@@ -9,9 +9,9 @@ Leia ao retomar. O código manda sobre a documentação.
 
 ## MODO AUTÔNOMO (14/11, usuário ausente; seguir o harness, decidir pela recomendação sem perguntar)
 Ordem e estado (marque ao concluir):
-1. [em andamento] Branch `ia/revisao-geral`: correções da revisão geral (ver `revisao-geral-2026-11-14.md`). Falta: revisor, commit, push, merge ff na `dev`.
-2. [ ] Mergear a branch remota `frontend` (de outro dev) na `dev` (nunca na `main`), resolvendo conflitos com cuidado e sem apagar o trabalho dele.
-3. [ ] Integrar o front ao back-end em branches `ia/integracao-*` (base `dev`): URL `/api/v1`, login, balcão com Socket.IO e GET /calls + GET /sessions, tela da mesa (`/m/<código>` com scan e chamados), admin. Um passo por branch, testes onde couber, verify + check_tenant, revisor, docs, push e merge ff na `dev`.
+1. [feito] Branch `ia/revisao-geral` mesclada na `dev` (ver `revisao-geral-2026-11-14.md`).
+2. [feito] Branch remota `frontend` mesclada na `dev` (merge `ffadc29`) (de outro dev) na `dev` (nunca na `main`), resolvendo conflitos com cuidado e sem apagar o trabalho dele.
+3. [em andamento; ver `integracao-front-2026-11-14.md`] Integrar o front ao back-end em branches `ia/integracao-*` (base `dev`): URL `/api/v1`, login, balcão com Socket.IO e GET /calls + GET /sessions, tela da mesa (`/m/<código>` com scan e chamados), admin. Um passo por branch, testes onde couber, verify + check_tenant, revisor, docs, push e merge ff na `dev`.
 4. [ ] Ao final: relatório curto do que foi feito, decisões tomadas sozinho (registradas em `decisoes.md`) e o que o usuário deve revisar.
 Regras: nunca tocar na `main`; não apagar código do outro dev; se o ambiente reiniciar, subir o Postgres de teste (`pg_ctl` na porta 5433, veja o histórico) e continuar.
 

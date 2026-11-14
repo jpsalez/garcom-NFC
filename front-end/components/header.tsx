@@ -1,10 +1,12 @@
 'use client'
 import { useRouter } from "next/navigation";
 import { FaRegUser } from "react-icons/fa";
+import { clearSession, useSession } from "@/lib/session";
 
 export default function Header() {
 
     const router = useRouter()
+    const session = useSession()
     
     return(
         <>
@@ -27,7 +29,13 @@ export default function Header() {
                     >Psiu</span>
                 </div>
 
-                <div className="flex items-center justify-center">
+                <div className="flex items-center justify-center gap-3">
+                    {session && (
+                        <button
+                        onClick={() => { clearSession(); router.push('/login') }}
+                        className="text-sm underline cursor-pointer"
+                        >Sair</button>
+                    )}
                     <FaRegUser onClick={() => router.push('/login')} 
                     className="cursor-pointer 
                     transition-all duration-300
