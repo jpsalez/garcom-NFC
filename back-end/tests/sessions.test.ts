@@ -204,3 +204,33 @@ describe("GET /sessions", () => {
     expect(res.body.map((s: { table: { label: string } }) => s.table.label)).toEqual(["A-1"]);
   });
 });
+
+describe("bordas dos atendimentos", () => {
+  it("atendimento com keep_open não vence por TIMEOUT no scan", async () => {
+    const { user } = await ownerOf("a");
+    const table = await createTable(user.restaurant_id!);
+    const session = await createSession(user.restaurant_id!, table.id, "ACTIVE", new Date(Date.now() - 1000));
+    await prisma.table_sessions.update({ where: { id: session.id }, data: { keep_open: true } });
+
+    expect((await scan(table.public_code)).status).toBe(201);
+    expect((await activeOf(table.id)).map((s) => s.id)).toEqual([session.id]);
+  });
+
+  it("estender um atendimento já vencido conta a partir de agora", async () => {
+    const { token, user } = await ownerOf("a");
+    const table = await createTable(user.restaurant_id!);
+    const session = await createSession(user.restaurant_id!, table.id, "ACTIVE", new Date(Date.now() - HOUR));
+
+    const res = await api().post(`/api/v1/sessions/${session.id}/extend`).set(auth(token));
+
+    expect(new Date(res.body.expires_at).getTime() - Date.now()).toBeGreaterThan(3.9 * HOUR);
+  });
+
+  it("id inválido dá 400 e sem token dá 401 nas rotas do balcão", async () => {
+    const { token } = await ownerOf("a");
+
+    expect((await api().post("/api/v1/sessions/nao-e-uuid/close").set(auth(token))).status).toBe(400);
+    expect((await api().get("/api/v1/sessions")).status).toBe(401);
+    expect((await api().post("/api/v1/sessions/00000000-0000-4000-8000-000000000000/extend")).status).toBe(401);
+  });
+});
