@@ -12,15 +12,11 @@ export default function MesaPage() {
                 <button className="w-full background outline rounded-sm p-3 shadow-lg">
                     Chamar Garçom
                 </button>
-                
-                <button className="w-full background outline rounded-sm p-3 shadow-lg">
-                    Avaliar Atendimento
-                </button>
             </div>
 
             <div className="w-full flex-none flex items-center justify-center p-5">
                 <button className="w-full background outline rounded-sm p-3 shadow-lg">
-                    Chamar Garçom
+                    Solicitar a Conta
                 </button>
             </div>
         </div>
