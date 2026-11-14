@@ -13,6 +13,7 @@ jobs:
           POSTGRES_USER: garcom
           POSTGRES_PASSWORD: garcom
           POSTGRES_DB: garcom_test
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         ports: ["5433:5432"]
         options: >-
           --health-cmd "pg_isready -U garcom -d garcom_test"
