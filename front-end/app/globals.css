@@ -140,10 +140,16 @@
     @apply font-sans;
   }
 
+  button {
+    @apply w-full cursor-pointer p-3 rounded-sm transition-all duration-300 hover:scale-105 hover:shadow-lg active:scale-105 
+  }
+
+  input {
+    @apply w-full bg-linear-130 from-gray-100 via-white to-gray-100 border p-3 rounded-lg shadow-lg;
+  };  
+
 }
 
-
-
-.input-style {
+.input {
   @apply w-full bg-linear-130 from-gray-100 via-white to-gray-100 border p-3 rounded-lg shadow-lg;
 };  

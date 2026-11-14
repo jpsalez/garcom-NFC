@@ -11,23 +11,23 @@ export default function Header() {
             <header 
             className="
             w-full
-            flex items-center justify-center
+            grid grid-cols-[40_1fr_40]
             h-12 px-5
             shadow-lg 
             ">
-                <div className="flex flex-none"></div>
+                <div className=""></div>
 
-                <div className="w-full flex-1 flex items-center justify-center">
+                <div className="w-full flex items-center justify-center">
                     <span
                     onClick={() => router.push('/')}
-                    className="cursor-pointer 
+                    className="cursor-pointer text-center
                     transition-all duration-300
                     hover:scale-120 active:scale-120
                     "
                     >Psiu</span>
                 </div>
 
-                <div className="flex flex-none">
+                <div className="flex items-center justify-center">
                     <FaRegUser onClick={() => router.push('/login')} 
                     className="cursor-pointer 
                     transition-all duration-300
