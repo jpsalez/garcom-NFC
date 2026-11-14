@@ -191,7 +191,7 @@ Requer validação: como `users.restaurant_id` é opcional e o cadastro atual cr
 
 Cada módulo segue o molde: arquivo de schema Zod, arquivo de interfaces (contratos e tipos internos, como `PublicUser` sem o hash e `LoginResult`), repository, service e controller. A separação entre schema e interfaces existe porque o cliente envia `password` e o banco guarda `password_hash`. 
 
-Não existem as pastas `realtime` (com arquivos), `jobs`, nem `web`. O guia de módulos previa `shared/realtime` como diretório vazio para o futuro Socket.IO. 
+[Atualizado 14/11/2026] `shared/realtime` agora tem `notifier.ts` (INotifier) e `socket-notifier.ts` (SocketNotifier, token "Notifier"); `main.ts` usa `http.createServer(app)` e o Socket.IO divide a porta (DV-44 resolvida). Dependências `socket.io` e `socket.io-client` (dev). Continuam ausentes `jobs` (etapa B) e `web`. 
 
 ### 3.6.3 Diferenças entre a estrutura especificada e a real 
  

@@ -109,7 +109,7 @@ A v0.3 é contraditória: RN08 (definida) diz que cada novo chamado gera um novo
 - Eventos: `call.created` adiciona o card, `call.done` remove, `session.updated` atualiza o painel de mesas, `session.closed` remove os cards da mesa (ver seção 8.3). 
 - Reconexão automática do cliente Socket.IO (RNF03: o balcão fica sempre ligado).  
 
-**[Não implementado]** Socket.IO (nenhuma dependência instalada; `shared/realtime` é uma pasta vazia), a tela do balcão e a sala por restaurante. O desenho de módulos propõe, como etapa intermediária, uma interface `Notifier` com implementação que apenas escreve no console, trocada depois por uma implementação Socket.IO. Ponto a validar nº 1: alerta sonoro ao chegar um card. 
+**[Implementado no back-end, 14/11/2026]** Socket.IO e a sala por restaurante (`restaurant:<id>`, ver 8.3). **[Não implementado]** a tela do balcão. O desenho de módulos propõe, como etapa intermediária, uma interface `Notifier` com implementação que apenas escreve no console, trocada depois por uma implementação Socket.IO. Ponto a validar nº 1: alerta sonoro ao chegar um card. 
 
 ## 7.7 Atendimento (finalização) do chamado 
 

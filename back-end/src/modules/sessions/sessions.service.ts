@@ -1,7 +1,8 @@
 import { inject, injectable } from "tsyringe";
-import type { reason, table_sessions, tableStatus } from "../../../generated/prisma/client.ts";
+import type { reason, table_sessions, tables, tableStatus } from "../../../generated/prisma/client.ts";
 import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
 import { runInTransaction } from "../../shared/providers/prisma.ts";
+import type { INotifier } from "../../shared/realtime/notifier.ts";
 import { generateSessionToken } from "../../shared/utils/token.ts";
 import { CallRepository } from "../calls/calls.repository.ts";
 import type { ITableRepository } from "../tables/tables.repository.interface.ts";
@@ -17,34 +18,38 @@ export class SessionsService implements ISessionsService {
   private readonly tableRepository: ITableRepository;
   private readonly sessionRepository: ITableSessionRepository;
   private readonly tokenRepository: ISessionTokenRepository;
+  private readonly notifier: INotifier;
 
   constructor(
     @inject("TableRepository") tableRepository: ITableRepository,
     @inject("TableSessionRepository") sessionRepository: ITableSessionRepository,
     @inject("SessionTokenRepository") tokenRepository: ISessionTokenRepository,
+    @inject("Notifier") notifier: INotifier,
   ) {
     this.tableRepository = tableRepository;
     this.sessionRepository = sessionRepository;
     this.tokenRepository = tokenRepository;
+    this.notifier = notifier;
   }
 
   // Rota pública: o tenant vem da própria mesa. Mesa/restaurante inativos respondem como se não existissem.
   async scan(publicCode: string) {
     const table = await this.tableRepository.findByPublicCode(publicCode);
-    if (!table || !table.active || !table.restaurant.active) throw new NotFoundError("Mesa não encontrada");
+    if (!table?.active || !table.restaurant.active) throw new NotFoundError("Mesa não encontrada");
 
-    const session = await this.activeOrOpen(table.restaurant_id, table.id);
+    const session = await this.activeOrOpen(table);
     const { token, tokenHash } = generateSessionToken();
     await this.tokenRepository.create({ session_id: session.id, token_hash: tokenHash });
     return { token, expires_at: session.expires_at, table: { label: table.label }, restaurant: { name: table.restaurant.name } };
   }
 
   async open(restaurantId: string, tableId: string) {
-    if (!(await this.tableRepository.findById(restaurantId, tableId))) throw new NotFoundError("Mesa não encontrada");
+    const table = await this.tableRepository.findById(restaurantId, tableId);
+    if (!table) throw new NotFoundError("Mesa não encontrada");
     if (await this.findActive(restaurantId, tableId)) {
       throw new ConflictError("A mesa já tem um atendimento ativo", "SESSION_ALREADY_ACTIVE");
     }
-    return this.create(restaurantId, tableId);
+    return this.create(table);
   }
 
   async close(restaurantId: string, id: string, userId: string) {
@@ -57,29 +62,35 @@ export class SessionsService implements ISessionsService {
   async extend(restaurantId: string, id: string) {
     const session = await this.getActive(restaurantId, id);
     const base = Math.max(session.expires_at.getTime(), Date.now());
-    return this.sessionRepository.update(restaurantId, id, { expires_at: new Date(base + sessionTtlMs()) });
+    const extended = await this.sessionRepository.update(restaurantId, id, { expires_at: new Date(base + sessionTtlMs()) });
+    this.notifier.toRestaurant(restaurantId, "session:extended", { id, expires_at: extended.expires_at });
+    return extended;
   }
 
   list(restaurantId: string, status: tableStatus) {
     return this.sessionRepository.findMany(restaurantId, { status });
   }
 
-  private create(restaurantId: string, tableId: string) {
-    return this.sessionRepository.create({
-      restaurant_id: restaurantId,
-      table_id: tableId,
+  private async create(table: Pick<tables, "id" | "label" | "restaurant_id">) {
+    const session = await this.sessionRepository.create({
+      restaurant_id: table.restaurant_id,
+      table_id: table.id,
       expires_at: new Date(Date.now() + sessionTtlMs()),
     });
+    const { id, label } = table;
+    this.notifier.toRestaurant(table.restaurant_id, "session:opened", { id: session.id, table: { id, label }, expires_at: session.expires_at });
+    return session;
   }
 
-  private async activeOrOpen(restaurantId: string, tableId: string) {
-    const active = await this.findActive(restaurantId, tableId);
+  private async activeOrOpen(table: Pick<tables, "id" | "label" | "restaurant_id">) {
+    const restaurantId = table.restaurant_id;
+    const active = await this.findActive(restaurantId, table.id);
     if (active) return active;
     try {
-      return await this.create(restaurantId, tableId);
+      return await this.create(table);
     } catch (err) {
       // Scans simultâneos: o índice table_sessions_one_active barrou o segundo; usa o atendimento que venceu
-      const winner = await this.sessionRepository.findActiveByTable(restaurantId, tableId);
+      const winner = await this.sessionRepository.findActiveByTable(restaurantId, table.id);
       if (!winner) throw err;
       return winner;
     }
@@ -105,8 +116,8 @@ export class SessionsService implements ISessionsService {
 
   // Encerrar vale tudo ou nada: sessão fechada, tokens revogados e chamados abertos cancelados.
   // Devolve null se outro pedido encerrou antes. Tokens e chamados não recebem restaurantId: a sessão já é do tenant.
-  private finish(restaurantId: string, id: string, closedReason: reason, closedBy?: string) {
-    return runInTransaction(async (tx) => {
+  private async finish(restaurantId: string, id: string, closedReason: reason, closedBy?: string) {
+    const closed = await runInTransaction(async (tx) => {
       const sessions = new TableSessionRepository(tx);
       const { count } = await sessions.closeIfActive(restaurantId, id, { closed_reason: closedReason, closed_by: closedBy });
       if (count === 0) return null;
@@ -114,5 +125,8 @@ export class SessionsService implements ISessionsService {
       await new CallRepository(tx).cancelOpenBySession(id);
       return sessions.findById(restaurantId, id);
     });
+    // Avisa o balcão só depois do commit
+    if (closed) this.notifier.toRestaurant(restaurantId, "session:closed", { id, reason: closedReason });
+    return closed;
   }
 }

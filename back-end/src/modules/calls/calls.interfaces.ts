@@ -5,6 +5,7 @@ export type Device = { tokenId: string; sessionId: string; restaurantId: string;
 
 export type CallView = {
   id: string;
+  session_id: string;
   type: type_call;
   status: call_state;
   created_at: Date;

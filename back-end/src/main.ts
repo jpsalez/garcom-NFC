@@ -2,11 +2,14 @@
 import "reflect-metadata";
 // Carrega o .env (JWT_SECRET etc.) antes de qualquer módulo que leia process.env
 import "dotenv/config";
+import { createServer } from "node:http";
 import swaggerUi from "swagger-ui-express";
-import { app } from "./server.ts";
+import { allowedOrigins, app } from "./server.ts";
+import { authenticateToken } from "./shared/middlewares/auth.middleware.ts";
 import { openApiSpec } from "./docs/openapi.ts";
 import { SetupRoutes } from "./routes.ts";
-import { registerDependencies } from "./shared/container/container.ts";
+import { container, registerDependencies } from "./shared/container/container.ts";
+import type { SocketNotifier } from "./shared/realtime/socket-notifier.ts";
 import { errorHandler } from "./shared/middlewares/error.middleware.ts";
 
 function bootstrap() {
@@ -20,6 +23,9 @@ function bootstrap() {
 
   // Só sobe depois que tudo está registrado
   const port = Number(process.env.PORT) || 4000;
-  app.listen(port, () => console.log(`rodando na ${port}`));
+  // Servidor HTTP próprio: o Socket.IO divide a mesma porta com a API
+  const httpServer = createServer(app);
+  container.resolve<SocketNotifier>("Notifier").attach(httpServer, authenticateToken, allowedOrigins);
+  httpServer.listen(port, () => console.log(`rodando na ${port}`));
 }
 bootstrap();

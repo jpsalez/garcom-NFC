@@ -5,7 +5,7 @@ import type { Application } from "express";
 const app: Application = express();
 
 // FRONTEND_URL: endereço(s) do front, separados por vírgula. Sem ela, nenhuma origem de navegador é liberada.
-const allowedOrigins = (process.env.FRONTEND_URL ?? "")
+export const allowedOrigins = (process.env.FRONTEND_URL ?? "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);

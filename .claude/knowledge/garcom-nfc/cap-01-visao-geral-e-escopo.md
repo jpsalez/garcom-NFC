@@ -86,7 +86,7 @@ Observação: a v0.3 inclui NFC em RF04, RF13 e nos perfis, mas o quadro "No MVP
 | Setores e vínculo garçom-setor | Definida (RF03) | Fora (item APP) | Não existe no schema | 
 | Página da mesa por QR/NFC sem login | Definida (RF06) | MVP (RF04) | Não implementado | 
 | Chamar garçom / pedir a conta | Definida (RF08, RF09) | MVP (RF05, RF06) | Não implementado (só repositório de chamados) | 
-| Cards de chamados em tempo real no balcão | Equivalente: lista do garçom por setor (RF12) | MVP (RF08, RF09) | Não implementado (sem Socket.IO) | 
+| Cards de chamados em tempo real no balcão | Equivalente: lista do garçom por setor (RF12) | MVP (RF08, RF09) | Implementado no back-end (Socket.IO, etapa A, 14/11/2026); tela do balcão no front ainda não | 
 | Atendimento (sessão) de 4 h, manter aberto, encerrar, revogar tokens | Definida (RF07, RF15, RF16); token único por sessão | MVP (RF10, RF11, RF12); token por aparelho | Parcial: schema e repositórios; sem service, rotas, job | 
 | Cardápio digital | Definida (RF05, RF06) | Futuro (RF14) | Não existe | 
 | Comanda do garçom, KDS, consumo do cliente | Definida (RF10, RF13, RF14, RF18) | Futuro (RF15) | Não existe | 

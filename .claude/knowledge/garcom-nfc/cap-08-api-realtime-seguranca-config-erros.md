@@ -51,22 +51,23 @@ O documento de módulos previa `GET /sessions` e `POST /tables/:id/sessions` (ga
 
 ## 8.3 Eventos Socket.IO 
 
-**[Especificado]** Eventos do servidor para as telas (v0.3):  
-| Evento | Sala | Destinatário | Conteúdo |
-|---|---|---|---|  ````
-| call.created | balcao:{restaurantId} | Tela do balcão (novo card) | id, type, table, createdAt | ````
-| call.done | balcao:{restaurantId} | Balcão (remove card) | id | ````
-| session.updated | balcao:{restaurantId} | Balcão (lista de mesas) | id, table, devices, keepOpen | ``````
-| session.closed | balcao e session:{id} | Balcão e aparelhos da mesa | id, reason |   
+**[Implementado] (etapa A, 14/11/2026).** Código em `back-end/src/shared/realtime/` (`notifier.ts`: interface `INotifier` com `toRestaurant(restaurantId, event, payload)`; `socket-notifier.ts`: `SocketNotifier`, registrado no container como "Notifier"; sem servidor ligado, como nos testes, não envia nada). `main.ts` usa `http.createServer(app)` e o Socket.IO divide a porta com o Express. Dependências: `socket.io` e `socket.io-client` (dev). Testes: `tests/realtime.test.ts`.
 
-_Figura: **Figura 8.1** – Salas e eventos do Socket.IO (planejados). (Ver seção 8.3)_ 
- 
-- As salas fazem o isolamento por restaurante no tempo real; a conexão do balcão é autenticada com o mesmo JWT (`verifyToken`, que já existe e é reutilizável); a do aparelho da mesa, opcionalmente, com o token da mesa. 
-- Emissão apenas após o commit da transação. 
-- Nomenclatura divergente: o documento de módulos e o guia usam `call:created`, `call:done`, `call:cancelled`, `session:opened`, `session:closed` e salas `restaurant:<id>`/`session:<id>` (DV-38). Adotados os nomes da v0.3. 
-- Eventos da v0.2 (`order.created`, `tab.updated`, `call.accepted` etc.) são do produto ampliado e não fazem parte do MVP. 
-- Futuro: módulo "integrations" consumindo eventos internos do service de chamados; adapter Redis só com mais de uma instância da API. 
-- **[Não implementado]** Nada disso: sem dependência `socket.io`, sem servidor HTTP compartilhado (o `server.ts` chama `listen` diretamente no app) e com `shared/realtime` vazio.  
+| Evento | Sala | Payload |
+|---|---|---|
+| call:created | restaurant:<restaurantId> | CallView {id, session_id, type, status, created_at, done_at, table:{label}}; só quando cria, não no chamado repetido (DEC-03) |
+| call:done | restaurant:<restaurantId> | {id} |
+| session:opened | restaurant:<restaurantId> | {id, table:{id,label}, expires_at} |
+| session:extended | restaurant:<restaurantId> | {id, expires_at} |
+| session:closed | restaurant:<restaurantId> | {id, reason} (reason STAFF ou TIMEOUT) |
+
+- Autenticação: JWT em `handshake.auth.token`, mesma regra do HTTP (`authenticateToken` em `auth.middleware.ts`, que usa `AuthCache`). Só quem tem restaurante (OWNER/STAFF) entra; a sala é `restaurant:<restaurantId>`. CORS pelas mesmas origens (FRONTEND_URL).
+- Emissão apenas após o commit, só para a sala do restaurante (isolamento por tenant).
+- Não existe `call:cancelled`: `session:closed` manda o balcão remover todos os cards da sessão (por isso CallView ganhou `session_id`). Nomes com dois pontos por decisão do usuário (DV-38 resolvida; substituem os com ponto da v0.3).
+- O cliente (mesa) não usa tempo real (DEC-08); sem sala `session:<id>`.
+- Aviso de 15 min (DEC-02): calculado no front a partir de `expires_at`; o back-end não emite aviso. O job de expiração (a cada 60 s) é a etapa B, ainda [Planejado]: só encerra com TIMEOUT e emite `session:closed`.
+- Limitações aceitas: o socket aberto continua depois de o usuário ser desativado até reconectar (JWT só checado na conexão); instância única (várias exigiriam adapter Redis); eventos podem se perder em queda, então o balcão recarrega `GET /calls` e `GET /sessions` ao reconectar.
+- Eventos da v0.2 (`order.created`, `tab.updated`, `call.accepted` etc.) não fazem parte do MVP. Futuro: módulo "integrations".
 
 ## 8.4 Autenticação, autorização, papéis e tenant 
 

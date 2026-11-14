@@ -38,7 +38,8 @@ Nenhuma no momento.
 - **Lista do balcão**: `GET /calls` responde `{ serverTime, calls[] }` (DEC-03), em ordem de chegada, com `table.label`.
 - **Erro único `409 CALL_NOT_OPEN`** para chamado já finalizado ou cancelado em `PATCH /calls/:id/done`.
 - **Restaurante desativado não é checado no token do cliente** (decisão do usuário: deixar assim; o token só depende da sessão ACTIVE e dentro do prazo).
-- Não implementados de propósito: `GET/DELETE /me/calls` (DEC-08) e eventos Socket.IO (fase seguinte).
+- Não implementados de propósito: `GET/DELETE /me/calls` (DEC-08).
+- **Socket.IO etapa A [Implementado, 14/11/2026]**: eventos com dois pontos (`call:created`, `call:done`, `session:opened`, `session:extended`, `session:closed`; decisão do usuário, substituem os da v0.3, DV-38), só após o commit, só na sala `restaurant:<id>`; sem `call:cancelled` (`session:closed` limpa os cards da sessão); cliente sem tempo real (DEC-08). Aviso de 15 min (DEC-02) calculado no front a partir de `expires_at`; o back-end não emite. Job de 60 s (etapa B, não implementado) só encerra com TIMEOUT e emite `session:closed`. Limitações aceitas: socket continua após desativar usuário até reconectar; instância única (Redis se escalar); balcão recarrega GET /calls e GET /sessions ao reconectar.
 
 ## Decididas
 - **Módulo tables (12/11/2026) [Especificado, NÃO implementado]**: (1) `public_code` com 12 caracteres aleatórios (alfabeto sem caracteres ambíguos, gerado com `crypto.randomInt`; o cliente nunca escolhe o código); (2) nomes de mesa repetidos no mesmo restaurante são permitidos (sem `@@unique([restaurant_id, label])`); (3) permissões: OWNER cria, lista e edita mesas; STAFF só lista; SUPER_ADMIN não usa as rotas `/tables` (não tem restaurante). Escopo inicial: criar, listar e editar (nome, ativa/desativa); excluir mesa fica para TAB-06.

@@ -4,9 +4,9 @@ import type { IUserRepository } from "../../modules/users/users.repository.inter
 import type { IAuthCache } from "../cache/auth-cache.ts";
 import { container } from "../container/container.ts";
 import { ForbiddenError, UnauthorizedError } from "../errors/http-errors.ts";
-import { verifyToken } from "../utils/jwt.ts";
+import { type TokenPayload, verifyToken } from "../utils/jwt.ts";
 
-function readPayload(req: Request) {
+function bearerToken(req: Request) {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     throw new UnauthorizedError("Token não informado");
@@ -16,18 +16,19 @@ function readPayload(req: Request) {
   if (scheme !== "Bearer" || !token) {
     throw new UnauthorizedError("Token mal formatado");
   }
-
-  try {
-    return verifyToken(token);
-  } catch {
-    throw new UnauthorizedError("Token inválido ou expirado");
-  }
+  return token;
 }
 
 // Valida o JWT e confere se o usuário e o restaurante continuam ativos. Role e restaurantId vêm do banco, não do token.
 // O resultado fica em cache (AuthCache); desativar/excluir invalida a entrada, então o corte continua imediato.
-export async function ensureAuthenticated(req: Request, _res: Response, next: NextFunction) {
-  const payload = readPayload(req);
+// Usada pelas rotas HTTP e pela conexão do Socket.IO.
+export async function authenticateToken(token: string) {
+  let payload: TokenPayload;
+  try {
+    payload = verifyToken(token);
+  } catch {
+    throw new UnauthorizedError("Token inválido ou expirado");
+  }
 
   const cache = container.resolve<IAuthCache>("AuthCache");
   let entry = cache.get(payload.sub);
@@ -42,8 +43,11 @@ export async function ensureAuthenticated(req: Request, _res: Response, next: Ne
     entry = { id: user.id, restaurantId: user.restaurant_id, role: user.role };
     cache.set(entry, version);
   }
+  return entry;
+}
 
-  req.user = entry;
+export async function ensureAuthenticated(req: Request, _res: Response, next: NextFunction) {
+  req.user = await authenticateToken(bearerToken(req));
   next();
 }
 

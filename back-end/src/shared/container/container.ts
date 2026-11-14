@@ -26,6 +26,8 @@ import type { ISessionsService } from "../../modules/sessions/sessions.interface
 import { SessionsService } from "../../modules/sessions/sessions.service.ts";
 import type { ICallsService } from "../../modules/calls/calls.interfaces.ts";
 import { CallsService } from "../../modules/calls/calls.service.ts";
+import type { INotifier } from "../realtime/notifier.ts";
+import { SocketNotifier } from "../realtime/socket-notifier.ts";
 import type { ICallRepository } from "../../modules/calls/calls.repository.interface.ts";
 import { CallRepository } from "../../modules/calls/calls.repository.ts";
 
@@ -44,6 +46,7 @@ export function registerDependencies() {
 
   
   container.registerSingleton<IAuthCache>("AuthCache", AuthCache);
+  container.registerSingleton<INotifier>("Notifier", SocketNotifier);
 
   // Services
   container.registerSingleton<IAuthService>("AuthService", AuthService);

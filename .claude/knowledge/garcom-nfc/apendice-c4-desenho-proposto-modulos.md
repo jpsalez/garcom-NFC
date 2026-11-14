@@ -18,7 +18,7 @@ A extensão do tipo de requisição ganharia quatro campos: identificador do usu
 
 ### C.4.3 Notificador de tempo real (MOD seção 13.4) 
 
-Interface com duas operações: enviar para o restaurante inteiro e enviar para a sessão. A primeira implementação, que apenas escreve no console, é registrada no contêiner como "Notifier", permitindo desenvolver services e testes sem Socket.IO; a implementação final emitiria para as salas do restaurante e da sessão, e o service continuaria idêntico. Regra importante (MOD e GUIA): **emitir somente depois do commit**. 
+[Implementado em 14/11/2026 com um método só, `toRestaurant`, e `SocketNotifier`; o cliente não usa tempo real, DEC-08.] Desenho original: interface com duas operações: enviar para o restaurante inteiro e enviar para a sessão. A primeira implementação, que apenas escreve no console, é registrada no contêiner como "Notifier", permitindo desenvolver services e testes sem Socket.IO; a implementação final emitiria para as salas do restaurante e da sessão, e o service continuaria idêntico. Regra importante (MOD e GUIA): **emitir somente depois do commit**. 
 
 ### C.4.4 Serviço de mesas, perfil ADMIN (MOD seção 14) 
 
