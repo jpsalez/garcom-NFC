@@ -48,6 +48,7 @@ services:
       # Use caracteres seguros em URL na senha do banco (evite @ : / ? #)
       DATABASE_URL: postgresql://${POSTGRES_USER:-garcom}:${POSTGRES_PASSWORD:-garcom}@db:5432/${POSTGRES_DB:-garcom}?schema=public
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
       JWT_SECRET: ${JWT_SECRET:-segredo-apenas-para-desenvolvimento-local-troque-em-producao}
     ports:
       - "${API_PORT:-4000}:4000"

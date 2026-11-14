@@ -24,6 +24,8 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     // Violação de unique (ex.: dois cadastros simultâneos com o mesmo e-mail)
     if (err.code === "P2002") return sendAppError(res, new ConflictError());
+    // Registro ainda referenciado (ex.: mesa que ganhou atendimento durante a exclusão)
+    if (err.code === "P2003") return sendAppError(res, new ConflictError());
     // Registro não encontrado em update/delete
     if (err.code === "P2025") return sendAppError(res, new NotFoundError());
   }

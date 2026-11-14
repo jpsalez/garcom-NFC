@@ -26,4 +26,14 @@ export class TablesController {
     const table = await this.tablesService.update(tenantOf(req), String(req.params.id), req.body as updateTableInput);
     return res.status(200).json(table);
   };
+
+  qrCode = async (req: Request, res: Response) => {
+    const svg = await this.tablesService.qrCode(tenantOf(req), String(req.params.id));
+    return res.status(200).type("image/svg+xml").send(svg);
+  };
+
+  remove = async (req: Request, res: Response) => {
+    await this.tablesService.remove(tenantOf(req), String(req.params.id));
+    return res.status(204).send();
+  };
 }

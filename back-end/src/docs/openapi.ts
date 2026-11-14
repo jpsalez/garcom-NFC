@@ -96,6 +96,10 @@ export const openApiSpec = {
     },
     "/tables/{id}": {
       patch: operation({ tag: "Mesas", summary: "Atualiza mesa (OWNER)", body: updateTableSchema, params: ["id"] }),
+      delete: operation({ tag: "Mesas", summary: "Exclui mesa sem atendimentos; com histórico dá 409 (OWNER)", success: 204, params: ["id"] }),
+    },
+    "/tables/{id}/qrcode": {
+      get: operation({ tag: "Mesas", summary: "QR Code da mesa em SVG (OWNER)", params: ["id"] }),
     },
   },
 };

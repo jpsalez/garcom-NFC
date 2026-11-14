@@ -16,5 +16,6 @@ export interface ITableRepository {
   findByPublicCode(publicCode: string): Promise<TableWithRestaurant | null>;
   findMany(restaurantId: string, filter?: { active?: boolean }): Promise<tables[]>;
   update(restaurantId: string, id: string, data: Prisma.tablesUpdateInput): Promise<tables>;
+  hasSessions(restaurantId: string, id: string): Promise<boolean>;
   delete(restaurantId: string, id: string): Promise<tables>;
 }

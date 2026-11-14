@@ -53,6 +53,8 @@ export function SetupRoutes(){
     router.get('/tables', ...staffOrOwner, tablesController.list);
     router.post('/tables', ...owner, validateSchema(createTableSchema), tablesController.create);
     router.patch('/tables/:id', ...owner, validateUuidParams('id'), validateSchema(updateTableSchema), tablesController.update);
+    router.get('/tables/:id/qrcode', ...owner, validateUuidParams('id'), tablesController.qrCode);
+    router.delete('/tables/:id', ...owner, validateUuidParams('id'), tablesController.remove);
 
     return router;
 }

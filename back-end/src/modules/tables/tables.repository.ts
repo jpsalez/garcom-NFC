@@ -38,6 +38,10 @@ export class TableRepository implements ITableRepository {
     return this.db.tables.update({ where: { id, restaurant_id: restaurantId }, data });
   }
 
+  async hasSessions(restaurantId: string, id: string) {
+    return (await this.db.table_sessions.count({ where: { restaurant_id: restaurantId, table_id: id }, take: 1 })) > 0;
+  }
+
   delete(restaurantId: string, id: string) {
     return this.db.tables.delete({ where: { id, restaurant_id: restaurantId } });
   }
