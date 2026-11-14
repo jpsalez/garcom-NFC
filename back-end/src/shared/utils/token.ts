@@ -14,5 +14,7 @@ export function generatePublicCode() {
 // Token do aparelho do cliente: o valor vai só para ele; o banco guarda apenas o hash
 export function generateSessionToken() {
   const token = randomBytes(32).toString("base64url");
-  return { token, tokenHash: createHash("sha256").update(token).digest("hex") };
+  return { token, tokenHash: hashToken(token) };
 }
+
+export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");

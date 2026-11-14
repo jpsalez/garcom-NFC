@@ -22,12 +22,14 @@ export type CallWithTable = Prisma.callsGetPayload<{
 export interface ICallRepository {
   create(data: CreateCallData): Promise<calls>;
   findById(restaurantId: string, id: string): Promise<calls | null>;
+  findOpen(restaurantId: string, sessionId: string, type: type_call): Promise<calls | null>;
   findMany(restaurantId: string, filter?: { status?: call_state }): Promise<CallWithTable[]>;
   findManyBySession(
     restaurantId: string,
     sessionId: string,
     filter?: { status?: call_state },
   ): Promise<calls[]>;
+  markDone(restaurantId: string, id: string, doneBy: string): Promise<Prisma.BatchPayload>;
   update(restaurantId: string, id: string, data: UpdateCallData): Promise<calls>;
   cancelOpenBySession(sessionId: string): Promise<Prisma.BatchPayload>;
   delete(restaurantId: string, id: string): Promise<calls>;

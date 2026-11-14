@@ -71,12 +71,13 @@ Cada aparelho que entra no atendimento recebe um token próprio (RN05). Isso per
 - **[Especificado]** Token aleatório e opaco, sem significado; só o hash fica no banco (coluna `session_tokens.token_hash`, única); o texto do token existe apenas no aparelho (RNF05). 
 - **[Especificado, desenho do guia/módulos]** 32 bytes aleatórios em base64url (cerca de 43 caracteres), hash SHA-256 em hexadecimal. SHA-256 (e não scrypt) porque o token é procurado pelo próprio hash e tem 256 bits de entropia, o que torna força bruta inviável. 
 - **[Especificado]** Validação a cada requisição de chamado: calcular o hash do token recebido, buscar por `findByHash` (que já traz o atendimento), rejeitar se inexistente, se `revoked_at` estiver preenchido, ou se o atendimento não estiver ACTIVE ou já estiver vencido. A checagem de expiração na requisição é necessária porque o job roda só a cada minuto. 
-- **[Planejado/Não implementado]** Geração (`token.ts`), middleware de token da mesa, cabeçalho `X-Table-Token` (nome na v0.3; o desenho de módulos usa `x-table-token`, equivalente) e armazenamento no navegador. Onde guardar o token no aparelho está em aberto: v0.3 prevê `lib/token` com cabeçalho; módulos citam `localStorage`; o guia recomenda cookie httpOnly com SameSite=Lax (DV-21). 
+- **[Implementado 14/11/2026]** Geração e hash (`utils/token.ts`) e middleware `ensureTableToken` (`X-Table-Token`): 401 se ausente, desconhecido, revogado, sessão não ACTIVE ou vencida sem `keep_open`; não checa restaurante desativado (decisão do usuário). Resultado em `req.tableToken`.
+- **[Planejado]** Armazenamento no navegador (cabeçalho `X-Table-Token`; o desenho de módulos usa `x-table-token`, equivalente). Onde guardar o token no aparelho está em aberto: v0.3 prevê `lib/token` com cabeçalho; módulos citam `localStorage`; o guia recomenda cookie httpOnly com SameSite=Lax (DV-21). 
 - **[Implementado]** Tabela `session_tokens` (`token_hash` único, `revoked_at` opcional) e `SessionTokenRepository` com `create`, `findById`, `findByHash`, `findManyBySession`, `update`, `revokeAllBySession` e `delete`.  
 
 ### 7.4.3 Limite de abuso 
 
-**[Especificado, proposto]** RNF06 e o erro 429 `TOO_MANY_CALLS` preveem um limite de chamados por token e por mesa; está planejado no roadmap em BE-07. O guia de estudos acrescenta limitação de taxa por IP nas rotas públicas e um limite mais apertado no login. **[Não implementado]**. 
+**[Implementado 14/11/2026]** `callLimiter`: 10 chamados por 5 min por token do aparelho; excedeu = 429 com `code` `TOO_MANY_REQUESTS` (o `TOO_MANY_CALLS` da v0.3 não será usado). Contadores em memória, off em testes; sem limite por mesa e sem `trust proxy` (limites por IP, como login e scan, dependem disso atrás de proxy). Login (10/15 min) e scan (30/15 min) também têm limite.
 
 ## 7.5 Chamado de garçom e de conta 
 
@@ -92,11 +93,13 @@ O chamado é o pedido de atenção feito pela mesa. Tem dois tipos (RN03): `WAIT
 
 ### 7.5.2 Chamados repetidos 
 
+**[Implementado 14/11/2026, DEC-03]** Vale isto, no lugar do "Requer validação" abaixo: um chamado OPEN por tipo e por sessão; tocar de novo devolve o mesmo chamado com 200 e `created_at` intacto (201 só quando cria; não há 409); WAITER e BILL coexistem; toques simultâneos são resolvidos pelo índice parcial `calls_one_open_per_type` e o service devolve o vencedor. O texto a seguir é o histórico da dúvida.
+
 A v0.3 é contraditória: RN08 (definida) diz que cada novo chamado gera um novo card; RN12 e o ponto a validar nº 3 deixam em aberto "novo card ou agrupar". O desenho de módulos propõe responder 409 (mensagem "Você já chamou. O garçom está a caminho") quando já existe um chamado OPEN do mesmo tipo na sessão, reforçado por um índice único parcial (sessão, tipo) onde status é OPEN; WAITER e BILL podem coexistir. A v0.2 trazia a mesma ideia (RN14, a validar). **Decisão adotada:** documentar o comportamento da v0.3 (um card por chamado) como especificação vigente e o bloqueio por tipo como proposta. **Status: Requer validação** (DV-02). O índice parcial de chamados não existe na migration. 
 
 ### 7.5.3 Estado de implementação 
 
-**[Implementado]** Tabela `calls` (tipo WAITER ou BILL, status OPEN, DONE ou CANCELLED, `created_at`, `done_at`, `done_by`) e `CallRepository` com `create`, `findById`, `findMany` (por status, ordem de chegada, com mesa), `findManyBySession`, `update`, `cancelOpenBySession` e `delete`. **[Não implementado]** service, controller, schema, rota `/public/calls`, limite de chamados. 
+**[Implementado 14/11/2026]** Tabela `calls`, `CallRepository` (inclui `findOpen` e `markDone`), `CallsService`, controller, schemas e rota `POST /public/calls` (corpo `{type}`; resposta `{id, type, status, created_at, done_at, table:{label}}`; 201 criou, 200 já existia), com limite de chamados (7.4.3). Encerrar o atendimento cancela os chamados abertos (sessions). **[Não implementado]** evento `call.created` (Socket.IO) e `/me/calls`. O trecho "Emite o evento" e "Responde 201" acima descrevem a especificação; hoje a resposta pode ser 200. 
 
 ## 7.6 Card em tempo real no balcão 
 
@@ -110,7 +113,7 @@ A v0.3 é contraditória: RN08 (definida) diz que cada novo chamado gera um novo
 
 ## 7.7 Atendimento (finalização) do chamado 
 
-**[Especificado]** Depois de atender a mesa, o garçom volta ao balcão e aciona Finalizar: `PATCH /calls/:id/done` (v0.3; o desenho de módulos o chama de `/calls/:id/attend`, DV-37). A API muda o status de OPEN para DONE, grava `done_at` e `done_by` e emite `call.done` à sala do balcão; o card é removido. 
+**[Implementado 14/11/2026, sem o evento]** `PATCH /calls/:id/done` (OWNER/STAFF): `markDone` condicional, `done_by` = id do usuário logado (DEC-06), 404 se inexistente ou de outro restaurante, 409 `CALL_NOT_OPEN` se já finalizado ou cancelado; duas finalizações simultâneas dão 200 e 409. `call.done` (Socket.IO) ainda não existe. Especificação original: depois de atender a mesa, o garçom volta ao balcão e aciona Finalizar: `PATCH /calls/:id/done` (v0.3; o desenho de módulos o chama de `/calls/:id/attend`, DV-37). A API muda o status de OPEN para DONE, grava `done_at` e `done_by` e emite `call.done` à sala do balcão; o card é removido. 
  
 - **Concorrência:** o desenho de módulos e o guia exigem atualização condicional atômica (atualizar apenas onde o status ainda é OPEN e conferir a contagem de linhas afetadas). Se dois garçons clicam ao mesmo tempo, um recebe sucesso e o outro 409 ("Este chamado já foi atendido"); se o chamado não existe no restaurante, 404. O `update` atual do repositório não filtra por status; falta o método condicional (`markDone`). 
 - **Quem finalizou:** `done_by` existe, mas o MVP prevê um acesso único do balcão; registrar o garçom individual depende da decisão do ponto a validar nº 2 (DV-07). 
@@ -190,7 +193,7 @@ _Figura: **Figura 7.6** – Tratamento de erros: do middleware de validação ao
 | Token de mesa ausente, revogado, expirado ou sessão encerrada | 401 TOKEN_REVOKED (v0.3); texto "Sua sessão nesta mesa terminou" (módulos) | Middleware de token da mesa | [Planejado] | ``
 | Mesa inexistente ou inativa | 404 TABLE_NOT_FOUND | Rota pública da mesa | [Planejado] | 
 | Recurso de outro restaurante | 404 (nunca 403, para não confirmar existência) | Repositórios com filtro de tenant | [Parcial: filtro nos repositórios] | ``
-| Excesso de chamados | 429 TOO_MANY_CALLS (proposto) | Limite por token e mesa | [Planejado] | 
+| Excesso de chamados | 429 TOO_MANY_REQUESTS | 10 por 5 min por token | [Implementado 14/11/2026] | 
 | Chamado já finalizado por outro garçom | 409 | Atualização condicional | [Planejado] | 
 | Encerrar sessão já fechada | 409 | Service de sessões | [Planejado] | 
 | Violação de unicidade (e-mail, slug, código, sessão ativa duplicada) | 409 (Prisma P2002) | Tratador global | [Implementado] | 
@@ -211,7 +214,7 @@ A tabela completa de códigos e o formato do corpo de erro estão na seção 8.5
 
 ### 7.14.2 Vários aparelhos na mesma mesa 
 
-João escaneia o mesmo QR na mesma mesa: recebe outro token no atendimento existente; o painel mostra "2 aparelhos". Os dois podem chamar; pela RN08 cada chamado vira um card (a validar). Pedir a conta cria um card do tipo Fechar conta, que pode coexistir com um chamado de garçom aberto. 
+João escaneia o mesmo QR na mesma mesa: recebe outro token no atendimento existente; o painel mostra "2 aparelhos". Os dois podem chamar; pela DEC-03 há um card por tipo e sessão: o segundo toque do mesmo tipo devolve o chamado aberto. Pedir a conta cria um card do tipo Fechar conta, que pode coexistir com um chamado de garçom aberto. 
 
 ### 7.14.3 Encerramento pelo balcão 
 

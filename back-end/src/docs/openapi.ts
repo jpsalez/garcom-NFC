@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createRestaurantSchema, setActiveSchema } from "../modules/administration/administration.schema.ts";
 import { createUserSchema, loginUserSchema } from "../modules/auth/auth.schema.ts";
+import { createCallSchema } from "../modules/calls/calls.schemas.ts";
 import { createTableSchema, updateTableSchema } from "../modules/tables/tables.schemas.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "../modules/users/users.schema.ts";
 
@@ -114,6 +115,15 @@ export const openApiSpec = {
     },
     "/sessions/{id}/extend": {
       post: operation({ tag: "Atendimentos", summary: "Estende o atendimento em mais 4 h (OWNER ou STAFF)", params: ["id"] }),
+    },
+    "/public/calls": {
+      post: operation({ tag: "Chamados", summary: "Cliente chama o garçom ou pede a conta (cabeçalho X-Table-Token); 201 novo, 200 se já havia um aberto do tipo", success: 201, body: createCallSchema, auth: false }),
+    },
+    "/calls": {
+      get: operation({ tag: "Chamados", summary: "Lista chamados e serverTime; ?status=OPEN (padrão), DONE ou CANCELLED (OWNER ou STAFF)" }),
+    },
+    "/calls/{id}/done": {
+      patch: operation({ tag: "Chamados", summary: "Finaliza o chamado; 409 CALL_NOT_OPEN se não estiver mais aberto (OWNER ou STAFF)", params: ["id"] }),
     },
     "/tables/{id}/qrcode": {
       get: operation({ tag: "Mesas", summary: "QR Code da mesa em SVG; reativa a mesa se estiver inativa (OWNER)", params: ["id"] }),

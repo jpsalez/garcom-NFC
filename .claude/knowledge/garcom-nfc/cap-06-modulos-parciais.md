@@ -116,7 +116,7 @@ Consequências do e-mail único global: a mesma pessoa não pode ser funcionári
 
 ## 6.5 Módulo `calls` 
 
-**Estado.** Apenas `calls.repository.interface.ts` e `calls.repository.ts`. Chamados têm tipo WAITER ou BILL e estado OPEN, DONE ou CANCELLED. 
+**Estado (14/11/2026: implementado, ver "Atualizado" abaixo; o texto desta seção descreve o repository original).** Chamados têm tipo WAITER ou BILL e estado OPEN, DONE ou CANCELLED. 
 
 **Tipos.** `CreateCallData` (restaurante, sessão, token do aparelho e tipo); `UpdateCallData` (status, instante de conclusão e usuário que concluiu); `CallWithTable` (chamado com a sessão e, dela, id e rótulo da mesa).  
 | Método | Entradas | O que faz | Tenant | Finalidade |
@@ -129,9 +129,11 @@ Consequências do e-mail único global: a mesma pessoa não pode ser funcionári
 | cancelOpenBySession | sessão | Em lote, muda de OPEN para CANCELLED todos os chamados abertos da sessão; devolve contagem | sem restaurante (a sessão já foi validada) | Parte da transação de fechamento de sessão | ``
 | delete | restaurante, id | Remove o chamado | filtra | Por completude |   
 
-**Concorrência.** O método de atualização genérico não é adequado para "atender", pois escreveria por cima de outro garçom. As notas propõem um método novo de atualização em massa com status OPEN na condição (`markDone`, ausente no código): só um dos dois garçons concomitantes obtém contagem 1; o outro recebe 409. O mesmo vale para cancelamento pelo cliente (`cancelBySession`, também ausente). 
+**Concorrência [Implementado: markDone existe; cancelBySession não, `cancelOpenBySession` cobre o encerramento].** O método de atualização genérico não é adequado para "atender", pois escreveria por cima de outro garçom. As notas propõem um método novo de atualização em massa com status OPEN na condição (`markDone`, ausente no código): só um dos dois garçons concomitantes obtém contagem 1; o outro recebe 409. O mesmo vale para cancelamento pelo cliente (`cancelBySession`, também ausente). 
 
-**O que falta [Planejado].** Service (criar, listar os meus, cancelar, listar abertos, atender), controller, schemas (tipo WAITER ou BILL), rotas do cliente (`/me/calls`) e do garçom (`/calls`, atender), emissão em tempo real, e o índice parcial "um chamado OPEN por tipo por sessão" (`calls_one_open_per_type`), que não existe na migration. Também ausentes: limite de chamados e erro 429 (RNF06, marcado como proposto), códigos de erro `TOKEN_REVOKED` e `TABLE_NOT_FOUND` da v0.3. 
+**[Atualizado 14/11/2026: módulo implementado]** Arquivos: `calls.service.ts`, `calls.controller.ts`, `calls.interfaces.ts`, `calls.schemas.ts`, `calls.repository.ts` e `calls.repository.interface.ts`. Além do repository: `findOpen(restaurantId, sessionId, type)` e `markDone(restaurantId, id, doneBy)` (updateMany com `status: OPEN` na condição; `count 0` = perdeu), `CallsService` (`create` devolve o chamado OPEN existente do tipo, com `created_at` original, ou cria; em toques simultâneos o índice barra o segundo e o service devolve o vencedor; `list` devolve `{serverTime, calls}`; `done` dá 404 se não existe no restaurante e 409 `CALL_NOT_OPEN` se já finalizado/cancelado), controller, schemas Zod e rotas `POST /public/calls`, `GET /calls`, `PATCH /calls/:id/done`. Índice `calls_one_open_per_type` na migration manual 20261114120000. Limite 10/5 min por token (429 `TOO_MANY_REQUESTS`). `cancelOpenBySession` é usado ao encerrar o atendimento. Os métodos `findManyBySession`, `update` e `delete` existem sem uso por rota.
+
+**Ainda não [Planejado].** `GET/DELETE /me/calls` (fora do MVP, DEC-08), eventos Socket.IO, códigos `TOKEN_REVOKED` e `TABLE_NOT_FOUND` da v0.3 (o 401 do token usa mensagem única).
 
 ## 6.6 Resumo do que falta por módulo 
 

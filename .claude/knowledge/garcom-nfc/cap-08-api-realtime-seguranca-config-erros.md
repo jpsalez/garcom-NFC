@@ -22,7 +22,7 @@ Legenda de estado: **Impl.** = implementado; **Plan.** = planejado (não impleme
 ### 8.2.2 Da mesa (token de aparelho)  
 | Método e caminho | Finalidade | Entrada e saída | Estado |
 |---|---|---|---|  ````````````
-| POST /public/calls | Chamar garçom ou pedir conta | Entrada: type WAITER ou BILL. 201: id, type, status OPEN, table. Erros: 401 TOKEN_REVOKED, 429 TOO_MANY_CALLS | Plan. (módulos: POST /me/calls; também GET /me/calls e DELETE /me/calls/:id) |   
+| POST /public/calls | Chamar garçom ou pedir conta | Entrada: type WAITER ou BILL. 201: id, type, status OPEN, table. Erros: 401 TOKEN_REVOKED, 429 TOO_MANY_CALLS | **Implementado 14/11/2026**: cabeçalho X-Table-Token; 201 criou, 200 se já havia OPEN do mesmo tipo (mesmo chamado, created_at intacto); resposta {id, type, status, created_at, done_at, table:{label}}; 401 (sem code) para token ausente/desconhecido/revogado/sessão não ACTIVE ou vencida; 429 TOO_MANY_REQUESTS (10/5 min por token). /me/calls não implementado (DEC-08) |   
 
 ### 8.2.3 Admin (JWT; papéis SUPER_ADMIN e OWNER) [Implementado, 12/11/2026]
 SUPER_ADMIN: POST/GET /admin/restaurants; PATCH /admin/restaurants/:restaurantId (active); GET/POST /admin/restaurants/:restaurantId/users; PATCH/DELETE /admin/restaurants/:restaurantId/users/:id. OWNER: GET/POST /staff; PATCH/DELETE /staff/:id (só STAFF; restaurantId do token). Último OWNER ativo protegido (409). Login: 10/15 min por IP+e-mail (429).
@@ -39,13 +39,13 @@ Desativar uma mesa com atendimento ativo deve falhar com 409 ("Feche a mesa ante
 ### 8.2.4 Balcão (JWT, papel STAFF)  
 | Método e caminho | Finalidade | Estado |
 |---|---|---|  ``
-| GET /calls?status=OPEN | Cards em ordem de chegada | Plan. | ````
-| PATCH /calls/:id/done | Finalizar chamado (módulos: /attend) | Plan. | ``
+| GET /calls?status=OPEN | Cards em ordem de chegada | Implementado 14/11: status OPEN (padrão), DONE ou CANCELLED; OWNER/STAFF; resposta {serverTime, calls[]} com table.label | ````
+| PATCH /calls/:id/done | Finalizar chamado (módulos: /attend) | Implementado 14/11: OWNER/STAFF; done_by = usuário logado; 404; 409 CALL_NOT_OPEN | ``
 | GET /sessions?status=ACTIVE | Mesas em atendimento, com aparelhos | Implementado em 14/11 | ``````
 | PATCH /sessions/:id | Corpo com keepOpen verdadeiro ou falso (módulos: /keep-open) | Plan. | ``````
 | POST /sessions/:id/close | Encerrar; 200 com status, revokedTokens e cancelledCalls | Plan. |   
 
-Sessões [Implementado em 14/11/2026; as linhas "Plan." acima sobre /sessions e o scan estão superadas; todas sob /api/v1]: `POST /public/tables/:code/scan` (público; 30/15 min por IP+mesa; abre ou reaproveita o atendimento; devolve `{token, expires_at, table, restaurant}`; mesa/restaurante inativo = 404; substitui o `/token` planejado); `GET /sessions` (`?status=ACTIVE` por padrão ou `CLOSED`; status inválido dá 400 pelo schema `sessions.schemas.ts` e `validateQuery`; sem paginação ainda, o que importa para o histórico de encerrados); `POST /tables/:id/session` (balcão; 409 SESSION_ALREADY_ACTIVE); `POST /sessions/:id/close` (409 SESSION_CLOSED se já encerrado); `POST /sessions/:id/extend` (+`TABLE_SESSION_TTL`, padrão 4 h). `PATCH /sessions/:id` (keepOpen) segue [Planejado]; `POST /public/calls` e o middleware do token de mesa dependem do módulo calls.
+Sessões [Implementado em 14/11/2026; as linhas "Plan." acima sobre /sessions e o scan estão superadas; todas sob /api/v1]: `POST /public/tables/:code/scan` (público; 30/15 min por IP+mesa; abre ou reaproveita o atendimento; devolve `{token, expires_at, table, restaurant}`; mesa/restaurante inativo = 404; substitui o `/token` planejado); `GET /sessions` (`?status=ACTIVE` por padrão ou `CLOSED`; status inválido dá 400 pelo schema `sessions.schemas.ts` e `validateQuery`; sem paginação ainda, o que importa para o histórico de encerrados); `POST /tables/:id/session` (balcão; 409 SESSION_ALREADY_ACTIVE); `POST /sessions/:id/close` (409 SESSION_CLOSED se já encerrado); `POST /sessions/:id/extend` (+`TABLE_SESSION_TTL`, padrão 4 h). `PATCH /sessions/:id` (keepOpen) segue [Planejado]; `POST /public/calls` e o middleware do token de mesa (`ensureTableToken`) agora existem (módulo calls, 14/11/2026).
 
 O documento de módulos previa `GET /sessions` e `POST /tables/:id/sessions` (garçom abre a mesa), fora do desenho da v0.3 (DV-37); agora implementados (DEC-01). Rotas da v0.2 (setores, equipe, cardápio, comandas, KDS, avaliações, relatórios, `/auth/me`) não fazem parte do MVP e são futuras. 
 
@@ -107,12 +107,13 @@ Classe base `AppError` (mensagem, status, detalhes opcionais) e subclasses: `Bad
 |---|---|---|---|  ``
 | 400 | ValidationError | Corpo não passa no esquema Zod | Impl. | ``
 | 401 | UnauthorizedError | Login inválido; token de usuário ausente, mal formatado, inválido ou expirado | Impl. | ``
-| 401 | TOKEN_REVOKED | Token de aparelho revogado ou expirado, ou atendimento encerrado | Plan. | ``
+| 401 | TOKEN_REVOKED | Token de aparelho revogado ou expirado, ou atendimento encerrado | Plan. (hoje: 401 UnauthorizedError sem esse code, ensureTableToken) | ``
 | 403 | ForbiddenError | Papel sem permissão; usuário sem restaurante vinculado | Classe impl.; uso plan. | ``
 | 404 | TABLE_NOT_FOUND | Mesa inexistente ou inativa | Plan. | ``
 | 404 | NotFoundError | Recurso ausente ou de outro tenant; Prisma P2025 | Impl. (tratador) | ``
 | 409 | ConflictError | E-mail já cadastrado; unicidade violada (P2002); violação de chave estrangeira (P2003, error.middleware, 14/11); mesa com sessão ao excluir; chamado já finalizado; sessão já fechada; mesa com atendimento ativo ao desativar | Parcial | ``
-| 429 | TOO_MANY_CALLS | Limite de chamados por token/mesa; limitação de taxa nas rotas públicas | Plan. (proposto) | ``
+| 409 | CALL_NOT_OPEN | Finalizar chamado já finalizado ou cancelado | Impl. 14/11 |
+| 429 | TOO_MANY_REQUESTS | Limite de chamados (10/5 min por token), login e scan; substitui o TOO_MANY_CALLS (não será usado) | Impl. | ``
 | 500 | InternalServerError | Erro não previsto; é registrado em log e a resposta não vaza detalhes | Impl. |   
 
 ## 8.6 Configuração e variáveis de ambiente  
@@ -138,7 +139,7 @@ Classe base `AppError` (mensagem, status, detalhes opcionais) e subclasses: `Bad
 | Isolamento entre restaurantes (RNF01, RN01) | Filtro por restaurante em toda consulta; 404 para recurso de outro tenant | Parcial (repositórios); sem middleware de tenant | 
 | Senha (RNF05) | Hash com salt, comparação em tempo constante | Impl. (scrypt); sem política de tamanho mínimo no schema | 
 | Token do aparelho (RNF05) | Aleatório, só hash no banco, revogável | Schema impl.; emissão/validação plan. | ``
-| Abuso (RNF06) | Limite de chamados; limitação de taxa por IP nas rotas públicas e no login; trust proxy atrás de proxy | Plan. | 
+| Abuso (RNF06) | Limite de chamados (10/5 min por token, Impl. 14/11); limitação de taxa por IP no login e no scan (Impl.); trust proxy atrás de proxy | Parcial (trust proxy Plan.) | 
 | Código público da mesa | Aleatório (6 a 9 bytes em base64url), nunca sequencial | Plan.; coluna única impl. | 
 | Concorrência | Índice único parcial de sessão ativa; atualização condicional em chamados; transação ao encerrar | Índice de sessão impl.; demais plan. | 
 | CORS, cookies | Origens explícitas (nunca curinga com credenciais); cookie httpOnly/SameSite se esse for o meio escolhido | Plan.; sem biblioteca | 

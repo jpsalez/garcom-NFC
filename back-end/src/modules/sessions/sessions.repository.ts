@@ -85,7 +85,7 @@ export class SessionTokenRepository implements ISessionTokenRepository {
   findByHash(tokenHash: string) {
     return this.db.session_tokens.findUnique({
       where: { token_hash: tokenHash },
-      include: { table_session: true },
+      include: { table_session: { include: { table: { select: { label: true } } } } },
     });
   }
 

@@ -51,6 +51,7 @@ model tables {
   tableSessions table_sessions[]
 }
 
+// Índice único parcial (um chamado OPEN por tipo e atendimento) fica na migration calls_one_open_per_type.
 // Índice único parcial (uma sessão ACTIVE por mesa) fica na migration em SQL:
 // CREATE UNIQUE INDEX table_sessions_one_active ON table_sessions(table_id) WHERE status = 'ACTIVE';
 model table_sessions {

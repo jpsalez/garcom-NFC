@@ -1,17 +1,20 @@
 import express from "express";
 import type { Router, Request, Response } from "express";
 import { container } from "./shared/container/container.ts";
+import { ensureTableToken } from "./shared/middlewares/table-token.middleware.ts";
 import { validateQuery, validateSchema, validateUuidParams } from "./shared/middlewares/validator.middleware.ts";
 import { AuthController } from "./modules/auth/auth.controller.ts";
 import { AdministrationController } from "./modules/administration/administration.controller.ts";
 import { createRestaurantSchema, setActiveSchema } from "./modules/administration/administration.schema.ts";
+import { CallsController } from "./modules/calls/calls.controller.ts";
+import { createCallSchema, listCallsQuery } from "./modules/calls/calls.schemas.ts";
 import { listSessionsQuery } from "./modules/sessions/sessions.schemas.ts";
 import { SessionsController } from "./modules/sessions/sessions.controller.ts";
 import { TablesController } from "./modules/tables/tables.controller.ts";
 import { createTableSchema, updateTableSchema } from "./modules/tables/tables.schemas.ts";
 import { StaffController } from "./modules/users/staff.controller.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "./modules/users/users.schema.ts";
-import { loginLimiter, registerLimiter, scanLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
+import { callLimiter, loginLimiter, registerLimiter, scanLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
 import { ensureAuthenticated, ensureRole } from "./shared/middlewares/auth.middleware.ts";
 import { role } from "../generated/prisma/enums.ts";
 import { createUserSchema, loginUserSchema } from "./modules/auth/auth.schema.ts";
@@ -24,6 +27,7 @@ export function SetupRoutes(){
     const staffController = container.resolve(StaffController);
     const tablesController = container.resolve(TablesController);
     const sessionsController = container.resolve(SessionsController);
+    const callsController = container.resolve(CallsController);
 
     router.get('/health', (req: Request, res: Response) => {
         res.send({ message: 'API Healthy' })
@@ -65,6 +69,11 @@ export function SetupRoutes(){
     router.post('/tables/:id/session', ...staffOrOwner, validateUuidParams('id'), sessionsController.open);
     router.post('/sessions/:id/close', ...staffOrOwner, validateUuidParams('id'), sessionsController.close);
     router.post('/sessions/:id/extend', ...staffOrOwner, validateUuidParams('id'), sessionsController.extend);
+
+    // Chamados: o cliente chama com o token do aparelho; o balcão lista e finaliza
+    router.post('/public/calls', ensureTableToken, callLimiter, validateSchema(createCallSchema), callsController.create);
+    router.get('/calls', ...staffOrOwner, validateQuery(listCallsQuery), callsController.list);
+    router.patch('/calls/:id/done', ...staffOrOwner, validateUuidParams('id'), callsController.done);
 
     return router;
 }

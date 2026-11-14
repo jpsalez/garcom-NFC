@@ -12,7 +12,7 @@ Legenda: Completo, Parcial, Esqueleto, Vazio, Ausente. Fonte: conferência com o
 | Middlewares de segurança [Implementado] | Parcial | ensureAuthenticated consulta o banco (findForAuth) com cache em memória (shared/cache/auth-cache.ts, TTL 30 s, AUTH_CACHE_TTL_SECONDS; invalidação em UsersService.update/remove e AdministrationService.setRestaurantActive; contador de versão contra corrida); req.user {id, restaurantId, role} vem do banco; ensureRole; tenantOf | Token da mesa, middleware da mesa |
 | tables [atualizado 14/11/2026] | Implementado | Repository, service, controller, schemas; list/create/update com public_url; GET /tables/:id/qrcode (SVG); DELETE /tables/:id; 19 testes em back-end/tests/tables.test.ts | Rotas /deactivate, /activate, /regenerate-code (se mantidas) | ````
 | sessions [atualizado 14/11/2026] | Implementado (MVP) | Repositórios, service, controller, rotas (scan, abrir, listar, fechar em transação, estender), token por aparelho (hash SHA-256), expiração preguiçosa, TABLE_SESSION_TTL, testes em tests/sessions.test.ts | Job de expiração e aviso de 15 min (Socket.IO), middleware do token de mesa (com calls), keepOpen | ````
-| calls | Parcial (só dados) | Repositório e cancelOpenBySession | Service, controller, rotas, atualização condicional de finalização, índice parcial por tipo, limite | ``
+| calls [atualizado 14/11/2026] | Implementado (MVP, sem tempo real) | Repositório (findOpen, markDone), service, controller, rotas POST /public/calls, GET /calls, PATCH /calls/:id/done, ensureTableToken, índice calls_one_open_per_type, limite 10/5 min por token, tests/calls.test.ts | Eventos Socket.IO, /me/calls (DEC-08, fora do MVP) | ``
 | Tempo real (shared/realtime) | Vazio | Pasta vazia | Socket.IO, salas, autenticação, eventos | 
 | Banco (Prisma) | Completo para o MVP | 6 tabelas, enums (role SUPER_ADMIN/OWNER/STAFF, staff_category), 4 migrations (init + roles_and_staff_category + staff_category_and_checks + users_restaurant_by_role), CHECKs users_category_only_staff e users_restaurant_by_role, active em users e restaurants, índice table_sessions_one_active preservado, índices únicos e índice (restaurante, status) em chamados | Timestamps de sessão, índice parcial de chamados, campos citados em divergências | ``````````
 | Front-end Next.js (/m/[code], /balcao, /admin, /login, /cadastro) | Ausente | Nada no repositório | Todas as áreas | ``
@@ -26,7 +26,7 @@ Legenda: Completo, Parcial, Esqueleto, Vazio, Ausente. Fonte: conferência com o
 | RF02 Mesas e QR Code | Definido | Não implementado (repositório pronto) | 
 | RF03 Acesso do balcão | Definido | Não implementado | 
 | RF04 Tela da mesa sem login | Definido | Não implementado | 
-| RF05, RF06 Chamar garçom, pedir conta | Definido | Não implementado (repositório de chamados) | 
+| RF05, RF06 Chamar garçom, pedir conta | Definido | Implementado (14/11/2026, POST /public/calls) | 
 | RF07 Confirmação de envio | Proposto | Não implementado | 
 | RF08 Cards em tempo real | Definido | Não implementado | 
 | RF09 Finalizar chamado | Definido | Não implementado | 
@@ -61,11 +61,11 @@ O documento de módulos propõe uma ordem de implementação própria: (1) prepa
 ### 9.4.2 Riscos técnicos 
  
 - **Vazamento entre restaurantes** [parcialmente mitigado em 12/11/2026]: CHECK users_restaurant_by_role (OWNER e STAFF sempre com restaurante) e req.user vindo do banco reduzem o risco; ainda depende de disciplina em cada consulta e faltam testes de isolamento. 
-- **Concorrência:** abrir atendimento e finalizar chamado exigem garantia no banco; só o primeiro índice existe. 
+- **Concorrência:** abrir atendimento e finalizar chamado exigem garantia no banco; os dois existem (índices table_sessions_one_active e calls_one_open_per_type; finalização por updateMany condicional). 
 - **Estado parcial no encerramento:** sem transação, é possível fechar a sessão sem revogar tokens. O encerramento deve ser sempre transacional. 
 - **Expiração dependente de job:** mitigada pela verificação em cada requisição. 
 - **Tempo real:** perda de eventos em quedas de rede; mitigada por recarga REST na reconexão; meta de 2 s não validada. 
-- **Abuso da rota pública:** abrir atendimento no primeiro scan permite uso por quem tem apenas a foto do QR; limitação de taxa, limite de chamados, expiração e revogação são as defesas, todas planejadas. 
+- **Abuso da rota pública:** abrir atendimento no primeiro scan permite uso por quem tem apenas a foto do QR; limitação de taxa, limite de chamados (implementado 14/11), expiração e revogação são as defesas; ficam pendentes `trust proxy` e o job de expiração. 
 - **Falta de timestamps:** sessão sem criação/fechamento e chamado cancelado sem data dificultam auditoria e relatórios futuros. 
 - **Servidor escuta ao importar** [resolvido]: hoje `server.ts` só cria o app; a escuta fica no `main.ts` após rotas e errorHandler. Ainda não há testes. 
 - **NFC:** travar a etiqueta é irreversível; domínio e formato da URL devem estar definidos antes. 

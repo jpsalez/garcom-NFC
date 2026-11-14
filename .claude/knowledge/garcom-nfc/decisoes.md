@@ -32,6 +32,14 @@ Nenhuma no momento.
 - **Scan é POST, não GET [Implementado]**: `POST /api/v1/public/tables/:code/scan` tem efeito colateral (abre atendimento e emite token), então não pode ser GET (prefetch/crawlers abririam sessões). Detalhes em DEC-01/DEC-07.
 - **Expiração preguiçosa por ora [Implementado]**: sessão vencida é encerrada com `closed_reason` TIMEOUT no próximo scan ou abertura pelo balcão; não há job. Job e aviso de 15 min (DEC-02) ficam para o Socket.IO.
 
+## Módulo calls (14/11/2026) [Implementado]
+- **Cabeçalho do token do cliente**: `X-Table-Token` (resolve DV-21 no código).
+- **Limite de chamados**: 10 por 5 min por token do aparelho; excedeu = 429 com `code` `TOO_MANY_REQUESTS` (o `TOO_MANY_CALLS` da doc não será usado).
+- **Lista do balcão**: `GET /calls` responde `{ serverTime, calls[] }` (DEC-03), em ordem de chegada, com `table.label`.
+- **Erro único `409 CALL_NOT_OPEN`** para chamado já finalizado ou cancelado em `PATCH /calls/:id/done`.
+- **Restaurante desativado não é checado no token do cliente** (decisão do usuário: deixar assim; o token só depende da sessão ACTIVE e dentro do prazo).
+- Não implementados de propósito: `GET/DELETE /me/calls` (DEC-08) e eventos Socket.IO (fase seguinte).
+
 ## Decididas
 - **Módulo tables (12/11/2026) [Especificado, NÃO implementado]**: (1) `public_code` com 12 caracteres aleatórios (alfabeto sem caracteres ambíguos, gerado com `crypto.randomInt`; o cliente nunca escolhe o código); (2) nomes de mesa repetidos no mesmo restaurante são permitidos (sem `@@unique([restaurant_id, label])`); (3) permissões: OWNER cria, lista e edita mesas; STAFF só lista; SUPER_ADMIN não usa as rotas `/tables` (não tem restaurante). Escopo inicial: criar, listar e editar (nome, ativa/desativa); excluir mesa fica para TAB-06.
 - **Implementado e resolvido (12/11/2026) [Implementado]**: register fluxo B (OWNER + restaurante em transação `runInTransaction`, slug automático com sufixo, `{ user, restaurant }`, erro genérico de e-mail duplicado); primeiro SUPER_ADMIN por seed (`SUPER_ADMIN_EMAIL`/`SUPER_ADMIN_PASSWORD`, 12+ caracteres); STAFF: desativar (PATCH) e excluir (DELETE, closed_by/done_by viram NULL); MANAGER é categoria (`users.category`, `job_title` removido); auth com cache em memória (TTL 30 s; Redis só para multi-instância). Os itens abaixo marcados "NÃO implementado" estão implementados, exceto `POST /restaurant` (substituído pelo fluxo B) e painel/insights.

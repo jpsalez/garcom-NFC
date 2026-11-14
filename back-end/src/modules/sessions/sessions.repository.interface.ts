@@ -44,7 +44,7 @@ export type CreateSessionTokenData = {
 };
 
 export type SessionTokenWithSession = Prisma.session_tokensGetPayload<{
-  include: { table_session: true };
+  include: { table_session: { include: { table: { select: { label: true } } } } };
 }>;
 
 export interface ISessionTokenRepository {
