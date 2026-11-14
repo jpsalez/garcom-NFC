@@ -10,7 +10,7 @@ let ready = false;
 export function api() {
   if (!ready) {
     registerDependencies();
-    app.use(SetupRoutes());
+    app.use("/api/v1", SetupRoutes());
     app.use(errorHandler);
     ready = true;
   }

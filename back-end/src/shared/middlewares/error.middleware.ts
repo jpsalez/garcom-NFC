@@ -4,11 +4,12 @@ import { AppError } from "../errors/AppError.ts";
 import { ConflictError, NotFoundError } from "../errors/http-errors.ts";
 
 // Handler global de erros: deve ser registrado DEPOIS das rotas.
-// Formato único de resposta: { error, message, details? }
+// Formato único de resposta: { error, code, message, details? }
 
 function sendAppError(res: Response, err: AppError) {
   return res.status(err.statusCode).json({
     error: err.name,
+    code: err.code,
     message: err.message,
     ...(err.details !== undefined && { details: err.details }),
   });
@@ -32,5 +33,5 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
 
   // Qualquer outro erro é inesperado: loga e não vaza detalhes para o cliente
   console.error(err);
-  return res.status(500).json({ error: "InternalServerError", message: "Erro interno do servidor" });
+  return res.status(500).json({ error: "InternalServerError", code: "INTERNAL_ERROR", message: "Erro interno do servidor" });
 }

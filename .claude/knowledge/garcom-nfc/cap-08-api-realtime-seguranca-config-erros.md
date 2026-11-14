@@ -3,7 +3,7 @@
 ## 8.1 Convenções gerais da API 
  
 - **[Especificado]** Base `/api/v1`, corpos JSON. Usuários do balcão e do admin enviam `Authorization: Bearer` com JWT; a mesa envia o cabeçalho `X-Table-Token` (v0.3; a v0.2 usava `X-Table-Session` para um token compartilhado, DV-24). 
-- **[Implementado]** As rotas são montadas na raiz, sem prefixo `/api/v1`, e o servidor escuta na porta fixa 3000 (documentação: 4000) (DV-36). Existe ainda `GET /health`, não previsto na documentação, que responde um objeto com a mensagem "API Healthy". 
+- **[Implementado, 14/11/2026]** Todas as rotas são montadas sob `/api/v1` (DEC-11), inclusive `GET /api/v1/health` (usado no healthcheck do Compose); `/docs` fica fora do prefixo. O erro sempre tem o formato `{ error, code, message, details? }` (DEC-12): `code` é estável (`BAD_REQUEST`, `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `TOO_MANY_REQUESTS`, `INTERNAL_ERROR`) e os erros novos têm código próprio (`TABLE_HAS_SESSIONS`, `RESTAURANT_INACTIVE`). 
 - Rotas "públicas" não exigem usuário; as "da mesa" exigem token de aparelho; as demais exigem JWT e papel.  
 
 ## 8.2 Endpoints REST 

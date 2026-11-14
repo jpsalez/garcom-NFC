@@ -14,7 +14,7 @@ function bootstrap() {
   if (!process.env.PUBLIC_APP_URL) throw new Error("PUBLIC_APP_URL não definido no .env");
   registerDependencies();
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
-  app.use(SetupRoutes());
+  app.use("/api/v1", SetupRoutes());
   // Sempre por último: captura erros de todas as rotas acima
   app.use(errorHandler);
 

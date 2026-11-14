@@ -13,7 +13,7 @@ async function superAdminToken() {
   await prisma.users.create({
     data: { name: "Super", email, password_hash: await passwordHash(password), role: "SUPER_ADMIN" },
   });
-  return (await api().post("/auth/login").send({ email, password })).body.token as string;
+  return (await api().post("/api/v1/auth/login").send({ email, password })).body.token as string;
 }
 
 const newUser = { name: "Dono", email: "dono@teste.com", password: "senha-forte-123", role: "OWNER" };
@@ -24,7 +24,7 @@ describe("POST /admin/restaurants/:id/users", () => {
     const token = await superAdminToken();
     const restaurant = await createRestaurant();
 
-    const res = await api().post(`/admin/restaurants/${restaurant.id}/users`).set("Authorization", `Bearer ${token}`).send(newUser);
+    const res = await api().post(`/api/v1/admin/restaurants/${restaurant.id}/users`).set("Authorization", `Bearer ${token}`).send(newUser);
 
     expect(res.status).toBe(201);
   });
@@ -34,9 +34,10 @@ describe("POST /admin/restaurants/:id/users", () => {
     const restaurant = await createRestaurant();
     await prisma.restaurants.update({ where: { id: restaurant.id }, data: { active: false } });
 
-    const res = await api().post(`/admin/restaurants/${restaurant.id}/users`).set("Authorization", `Bearer ${token}`).send(newUser);
+    const res = await api().post(`/api/v1/admin/restaurants/${restaurant.id}/users`).set("Authorization", `Bearer ${token}`).send(newUser);
 
     expect(res.status).toBe(409);
+    expect(res.body.code).toBe("RESTAURANT_INACTIVE");
     expect(await prisma.users.findUnique({ where: { email: newUser.email } })).toBeNull();
   });
 });

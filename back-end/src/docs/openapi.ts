@@ -49,6 +49,7 @@ const restaurantUsers = "/admin/restaurants/{restaurantId}/users";
 
 export const openApiSpec = {
   openapi: "3.0.3",
+  servers: [{ url: "/api/v1" }],
   info: {
     title: "garcom-NFC API",
     version: "1.0.0",

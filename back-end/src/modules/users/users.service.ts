@@ -34,7 +34,7 @@ export class UsersService implements IUsersService {
   async create(restaurantId: string, input: createRestaurantUserInput) {
     const restaurant = await this.restaurantRepository.findById(restaurantId);
     if (!restaurant) throw new NotFoundError("Restaurante não encontrado");
-    if (!restaurant.active) throw new ConflictError("Restaurante desativado: reative antes de criar usuários");
+    if (!restaurant.active) throw new ConflictError("Restaurante desativado: reative antes de criar usuários", "RESTAURANT_INACTIVE");
     if (await this.userRepository.findByEmail(input.email)) {
       throw new ConflictError("E-mail já cadastrado");
     }

@@ -73,7 +73,7 @@ services:
         npx prisma migrate deploy
         exec npx --yes tsx watch src/main.ts
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -131,7 +131,7 @@ services:
       api:
         condition: service_started # não espera o healthcheck: o front sobe em paralelo com o npm ci da API
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api/v1}
     ports:
       - "${WEB_PORT:-3000}:3000"
     volumes:

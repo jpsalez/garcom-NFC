@@ -47,7 +47,7 @@ export class TablesService implements ITablesService {
   async remove(restaurantId: string, id: string) {
     await this.getOwned(restaurantId, id);
     if (await this.tableRepository.hasSessions(restaurantId, id)) {
-      throw new ConflictError("Mesa com atendimentos registrados: desative em vez de excluir");
+      throw new ConflictError("Mesa com atendimentos registrados: desative em vez de excluir", "TABLE_HAS_SESSIONS");
     }
     await this.tableRepository.delete(restaurantId, id);
   }

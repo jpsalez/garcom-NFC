@@ -11,7 +11,7 @@ function limiter(windowMinutes: number, max: number, message: string, key: (req:
     skip: () => process.env.NODE_ENV === "test",
     keyGenerator: key,
     handler: (_req, res) => {
-      res.status(429).json({ error: "TooManyRequestsError", message });
+      res.status(429).json({ error: "TooManyRequestsError", code: "TOO_MANY_REQUESTS", message });
     },
   });
 }
