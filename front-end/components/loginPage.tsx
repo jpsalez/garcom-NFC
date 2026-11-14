@@ -43,19 +43,16 @@ export default function LoginPage() {
                     <input type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="input-style"
                     placeholder="Usuário"
                     />
                     <input type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="input-style"
                     placeholder="Senha"
                     />
                     <div className="w-full">
                         <button className="w-full p-3 bg-linear-130 from-gray-300 via-gray-100 to-gray-300 outline outline-gray-300  rounded-lg shadow-lg
-                        transition-all duration-300 cursor-pointer
-                        hover:scale-105 hover:shadow-lg active:scale-105    
+                           
                         ">Entrar</button>
                     </div>
 
