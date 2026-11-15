@@ -134,9 +134,10 @@ describe("PATCH /auth/password", () => {
     expect(res.body.user.password_hash).toBeUndefined();
     expect((await api().post("/api/v1/auth/login").send({ email: user.email, password: novaSenha })).status).toBe(200);
     expect((await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password })).status).toBe(401);
+    // o par novo primeiro: reusar um token revogado derruba todas as sessões, inclusive o novo
+    expect((await refresh(res.body.refreshToken)).status).toBe(200);
     expect((await refresh(first.refreshToken)).status).toBe(401);
     expect((await refresh(other.refreshToken)).status).toBe(401);
-    expect((await refresh(res.body.refreshToken)).status).toBe(200);
   });
 
   it("recusa a senha atual errada (400, não 401), senha igual, senha curta e pedido sem token", async () => {
