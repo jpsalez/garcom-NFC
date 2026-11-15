@@ -70,3 +70,5 @@ Branch `docs/decisoes-2026-11-13`: registro das decisões e este arquivo. Ainda 
 - Novo: `limit`/`offset` em `GET /calls` (padrão 500, máx. 1000); testes de RN02 e de isolamento HTTP em `/tables`.
 - Compose de produção testado localmente (build, subida, cadastro/login pelo Caddy, `/docs` 404, HSTS). Falta só um servidor real.
 - Abertas: decisão do token no `localStorage` (mantido como risco aceito), merge da `dev` na `main`.
+- Sessão do balcão migrada para cookies httpOnly (branch `ia/cookie-httponly`): `access_token` e `refresh_token`, `SameSite=Lax`, filtro de `Origin` contra CSRF, socket pelo cookie, sem `Authorization: Bearer`. Validado por 7 agentes de teste em navegador real (login, refresh, senha, segurança, tempo real, gestão, cliente): todos aprovados. Achado e corrigido: a tela do cliente (`/m/`) chamava `/auth/me` e `/auth/refresh`.
+- Limites conhecidos: JWT de acesso vale até expirar após o logout; XSS ainda usa a sessão em curso; refresh_token não é limpo quando o refresh falha; `.next/dev/types` antigo quebra o `typecheck` local do front (apague `front-end/.next/dev`).

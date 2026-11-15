@@ -16,7 +16,7 @@ Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-en
 | tables | Completo | CRUD, `public_url`, QR Code em SVG, exclusão, encerramento do atendimento ao desativar | Rotas `/deactivate`, `/activate` e `/regenerate-code` (não feitas; desativar é um PATCH) |
 | sessions | Completo | Scan público, abrir pelo balcão, listar, encerrar (transação), estender, token por aparelho (SHA-256), expiração no uso | `keep_open` nunca é escrito (virou estender, DEC-09) |
 | calls | Completo | Criar com trava de sessão, repetir devolve o aberto (DEC-03), listar (`status`, `since`, `serverTime`), finalizar condicional, índice `calls_one_open_per_type`, limite 10/5 min por token | `/me/calls` (fora do MVP, DEC-08) |
-| Tempo real (shared/realtime) | Completo (instância única) | `INotifier`/`SocketNotifier`, JWT no handshake, sala `restaurant:<id>`, eventos `call:created`, `call:done`, `session:opened`, `session:extended`, `session:closed`, `disconnectUser` e `disconnectRestaurant` | Adapter Redis e lock do job para várias instâncias |
+| Tempo real (shared/realtime) | Completo (instância única) | `INotifier`/`SocketNotifier`, cookie de sessão no handshake, sala `restaurant:<id>`, eventos `call:created`, `call:done`, `session:opened`, `session:extended`, `session:closed`, `disconnectUser` e `disconnectRestaurant` | Adapter Redis e lock do job para várias instâncias |
 | Jobs | Completo (instância única) | `shared/jobs/session-expiry.job.ts` (60 s, motivo TIMEOUT) e `token-cleanup.job.ts` (de hora em hora, apaga refresh tokens e links de redefinição vencidos) | |
 | Banco (Prisma) | Completo | 8 tabelas (6 do domínio, `refresh_tokens` e `password_resets`), enums, 9 migrations, CHECKs, índices parciais `table_sessions_one_active` e `calls_one_open_per_type`, índices de consulta, seeds (OWNER demo e SUPER_ADMIN) | Data de cancelamento dos chamados |
 | Front-end Next.js 16 | Completo para o MVP | `/login`, `/cadastro` (autocadastro do restaurante e do OWNER), `/admin/waiter` (balcão em tempo real), `/admin/mesas` (CRUD e QR), `/admin/equipe`, `/admin/restaurantes` (SUPER_ADMIN: restaurantes e seus usuários), `/admin/senha` (trocar a senha), `/esqueci-senha` e `/redefinir-senha`, `/m/[code]` (cliente), cliente da API com `ApiError`, `code` e renovação do token, sessão no `localStorage` | Dashboard e métricas (pós-MVP); decisão sobre cookie httpOnly |
@@ -77,7 +77,7 @@ O documento de módulos propunha uma ordem própria: (1) preparação; (2) tabel
 - **Perda de evento entre o commit e a emissão** [aceito]: sem outbox; o balcão recarrega por REST a cada reconexão. 
 - **Tempo real:** o JWT só é conferido na conexão (desativar ou excluir derruba o socket); a meta de 2 s não foi medida. 
 - **Abuso da rota pública:** o primeiro scan abre atendimento, então quem tem a foto do QR pode abri-lo; defesas: limite de scan, limite de chamados, expiração em 4 h e revogação. Um valor errado de `TRUST_PROXY` enfraquece os limites por IP. 
-- **Token no `localStorage`** (balcão e aparelho do cliente): risco de XSS; alternativa futura é cookie httpOnly. 
+- **Token do aparelho do cliente no `localStorage`**: risco de XSS aceito (é um token de mesa, só chama garçom; a sessão do balcão migrou para cookies httpOnly em 15/11/2026). Limites do httpOnly: um script injetado ainda usa a sessão enquanto a página está aberta, e o JWT de acesso já emitido vale até expirar mesmo depois do logout (o refresh é revogado). 
 - **Timestamps:** a sessão tem `created_at` e `closed_at` desde 14/11/2026 (os antigos ficaram sem `closed_at`); o chamado cancelado ainda não tem data, o que dificulta auditoria e relatórios. 
 - **Dependências:** `npm audit` do back-end limpo desde 14/11/2026: a `deepmerge-ts` (versão < 8, vulnerável a estouro de pilha em objetos recursivos) usada pelo CLI do Prisma é forçada para a ^8.0.2 por `overrides` no `package.json`. O Prisma 6.19.3 continua; a correção oficial só existe na linha 7 (mudança grande). Validado com `prisma validate`, `generate` e `migrate diff`; falta rodar `migrate deploy` e a suíte num banco real. 
 - **NFC:** travar a etiqueta é irreversível; domínio e formato da URL (`PUBLIC_APP_URL`) devem estar definidos antes. 
@@ -90,7 +90,7 @@ Todos decididos em 13–14/11/2026 (ver 2.7.1): alerta sonoro (sim, DEC-10), reg
 
 ## 9.5 Pendências e próximos passos (não bloqueantes) 
  
-- **Segurança de produção:** decisão sobre cookie httpOnly (o `TRUST_PROXY` já vem definido no compose de produção). 
+- **Segurança de produção:** o `TRUST_PROXY` já vem definido no compose de produção; falta testar os cookies `Secure` num domínio real com HTTPS. 
 - **Infra:** testar o compose de produção (`docker-compose.prod.yml`) num servidor real (localmente já foi); mesclar a `dev` na `main`. 
 - **Back-end:** timestamps nos chamados cancelados. 
 - **Front:** nada bloqueia o MVP; falta testar as telas no navegador. 

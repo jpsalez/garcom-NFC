@@ -118,13 +118,13 @@ Classe injetável cuja dependência é o service, obtida pelo nome "AuthService"
 
 ### 5.2.7 Renovação do login (refresh token), logout e `/auth/me` 
 
-**[Implementado, 14/11/2026]** O login (e cada renovação) devolve `{ token, refreshToken, user }`: `token` é o JWT de acesso (padrão 15 min, `JWT_EXPIRES_IN`) e `refreshToken` é um valor opaco de 32 bytes que vale 30 dias (`REFRESH_TOKEN_TTL_DAYS`); no banco (`refresh_tokens`) fica só o hash SHA-256. 
+**[Implementado, 14/11/2026]** O login (e cada renovação) grava dois cookies httpOnly e devolve só `{ user }`: `access_token` é o JWT de acesso (padrão 15 min, `JWT_EXPIRES_IN`; cookie de sessão, `Path=/`) e `refresh_token` é um valor opaco de 32 bytes que vale 30 dias (`REFRESH_TOKEN_TTL_DAYS`); no banco (`refresh_tokens`) fica só o hash SHA-256. 
  
-- **`POST /auth/refresh`** `{ refreshToken }`: se o token existe, não foi usado e não venceu, ele é revogado (atualização condicional, de modo que dois pedidos simultâneos não passam os dois) e o service confere o usuário e o restaurante no banco (desativados não renovam); devolve um par novo. Token desconhecido, vencido ou de usuário inativo dá 401 "Sessão expirada. Entre novamente". 
+- **`POST /auth/refresh`** (lê o cookie `refresh_token`, `Path=/api/v1/auth`): se o token existe, não foi usado e não venceu, ele é revogado (atualização condicional, de modo que dois pedidos simultâneos não passam os dois) e o service confere o usuário e o restaurante no banco (desativados não renovam); grava um par novo de cookies e devolve `{ user }`. Sem cookie, token desconhecido, vencido ou de usuário inativo dá 401 "Sessão expirada. Entre novamente". 
 - **Rotação com detecção de reuso:** se chega um token que já foi trocado, todas as sessões do usuário são revogadas e a resposta é 401, porque o valor pode ter sido copiado. 
-- **`POST /auth/logout`** `{ refreshToken }`: revoga o token e responde 204 (token desconhecido também dá 204). 
+- **`POST /auth/logout`** (cookie `refresh_token`): revoga o token, limpa os dois cookies e responde 204 (sem cookie ou token desconhecido também dá 204). 
 - **`GET /auth/me`** (JWT): devolve o usuário logado, lido do banco, sem o hash. 
-- **`PATCH /auth/password`** `{ currentPassword, newPassword }` (JWT; nova senha de 8 a 128 caracteres e diferente da atual): confere a senha atual (errada dá 400 `INVALID_CURRENT_PASSWORD`, e não 401, porque o front trata 401 como token vencido), troca o hash e revoga todos os refresh tokens na mesma transação, e devolve `{ token, refreshToken, user }` novos para este aparelho; os outros precisam entrar de novo. Limite de 10 por 15 min por usuário (`changePasswordLimiter`). No front, a tela é `/admin/senha` (OWNER e STAFF, item "Senha" do menu do painel): pede a senha atual e a nova duas vezes, e grava na sessão o par de tokens que a API devolve. 
+- **`PATCH /auth/password`** `{ currentPassword, newPassword }` (JWT; nova senha de 8 a 128 caracteres e diferente da atual): confere a senha atual (errada dá 400 `INVALID_CURRENT_PASSWORD`, e não 401, porque o front trata 401 como token vencido), troca o hash e revoga todos os refresh tokens na mesma transação, grava cookies novos para este aparelho e devolve `{ user }`; os outros precisam entrar de novo. Limite de 10 por 15 min por usuário (`changePasswordLimiter`). No front, a tela é `/admin/senha` (OWNER e STAFF, item "Senha" do menu do painel): pede a senha atual e a nova duas vezes, e guarda só o usuário devolvido (os cookies vêm da API). 
 - Limite de 60 renovações ou logouts por 15 min por IP (`refreshLimiter`). Os arquivos são `refresh-tokens.repository.ts` e `refresh-tokens.repository.interface.ts`, em `modules/auth`. Testes em `tests/auth.test.ts`. 
 - **Front:** o `lib/api.ts` renova uma vez ao receber 401 com token do balcão e repete o pedido (pedidos simultâneos compartilham uma só renovação); o socket relê o token a cada conexão; sair chama `/auth/logout`. 
 
@@ -151,10 +151,10 @@ Classe injetável cuja dependência é o service, obtida pelo nome "AuthService"
 
 ### 5.3.2 Autenticação (`auth.middleware.ts`, função `ensureAuthenticated`) 
 
-**Finalidade.** Exigir um JWT válido no cabeçalho `Authorization`, identificar o usuário e conferir se ele continua ativo. **Funcionamento passo a passo:** 
+**Finalidade.** Exigir um JWT válido no cookie `access_token`, identificar o usuário e conferir se ele continua ativo. **Funcionamento passo a passo:** 
  
 - Sem cabeçalho: `UnauthorizedError` "Token não informado" (401). 
-- Se o esquema não é exatamente "Bearer" ou o token está vazio: 401 "Token mal formatado". 
+- `Authorization: Bearer` não é mais aceito (a sessão do balcão vai só em cookie httpOnly). 
 - `authenticateToken` valida assinatura e expiração (`verifyToken`); qualquer falha vira 401 "Token inválido ou expirado". 
 - Consulta o `AuthCache` (em memória, TTL de 30 s, `AUTH_CACHE_TTL_SECONDS`; 0 desliga). Em caso de falha do cache, busca o usuário no banco (`findForAuth`); usuário inexistente, desativado ou de restaurante desativado resulta no mesmo 401. 
 - Grava em `req.user` o objeto `{ id, restaurantId, role }`, **vindo do banco** e não do token. 

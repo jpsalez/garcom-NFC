@@ -68,7 +68,7 @@ As decisões de PostgreSQL, Prisma e Socket.IO estão confirmadas na prática pe
 | zod | ^4.6.7 | Validação de corpo, query e parâmetros das requisições. |
 | jsonwebtoken | ^9.0.3 | Emissão e verificação do JWT da equipe. |
 | tsyringe e reflect-metadata | ^4.10.0 e ^0.2.2 | Injeção de dependência por decorators. |
-| socket.io | ^4.8.4 | Tempo real do balcão (sala por restaurante, JWT no handshake). |
+| socket.io | ^4.8.4 | Tempo real do balcão (sala por restaurante, cookie de sessão no handshake). |
 | cors | ^2.8.6 | CORS por `FRONTEND_URL`. |
 | express-rate-limit | ^8.7.4 | Limites de login, cadastro, scan e chamados. |
 | qrcode | ^1.5.4 | QR Code em SVG da mesa. |
