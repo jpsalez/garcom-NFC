@@ -26,6 +26,10 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
     });
   }
 
+  deleteExpired(now: Date) {
+    return this.db.refresh_tokens.deleteMany({ where: { expires_at: { lt: now } } });
+  }
+
   revokeAllByUser(userId: string, now: Date) {
     return this.db.refresh_tokens.updateMany({ where: { user_id: userId, revoked_at: null }, data: { revoked_at: now } });
   }

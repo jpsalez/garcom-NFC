@@ -5,7 +5,9 @@ import "dotenv/config";
 import { createServer } from "node:http";
 import swaggerUi from "swagger-ui-express";
 import type { ISessionsService } from "./modules/sessions/sessions.interfaces.ts";
+import type { ITokenCleanupService } from "./modules/auth/auth.interfaces.ts";
 import { startSessionExpiryJob } from "./shared/jobs/session-expiry.job.ts";
+import { startTokenCleanupJob } from "./shared/jobs/token-cleanup.job.ts";
 import { allowedOrigins, app } from "./server.ts";
 import { authenticateToken } from "./shared/middlewares/auth.middleware.ts";
 import { openApiSpec } from "./docs/openapi.ts";
@@ -36,5 +38,6 @@ function bootstrap() {
   container.resolve<SocketNotifier>("Notifier").attach(httpServer, authenticateToken, allowedOrigins);
   httpServer.listen(port, () => console.log(`rodando na ${port}`));
   startSessionExpiryJob(container.resolve<ISessionsService>("SessionsService"));
+  startTokenCleanupJob(container.resolve<ITokenCleanupService>("TokenCleanupService"));
 }
 bootstrap();

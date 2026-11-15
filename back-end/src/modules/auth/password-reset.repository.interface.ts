@@ -12,4 +12,5 @@ export interface IPasswordResetRepository {
   // Só consome se ainda valer: dois usos do mesmo link não passam os dois ({ count: 0 } = perdeu)
   useIfValid(id: string, now: Date): Promise<Prisma.BatchPayload>;
   useAllByUser(userId: string, now: Date): Promise<Prisma.BatchPayload>;
+  deleteExpired(now: Date): Promise<Prisma.BatchPayload>;
 }
