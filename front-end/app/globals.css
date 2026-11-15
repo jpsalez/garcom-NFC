@@ -62,7 +62,7 @@
 
 :root {
   --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --foreground: #F8FAFC;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -76,7 +76,7 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
+  --border: #263F66;
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.87 0 0);
@@ -134,7 +134,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground bg-linear-135 from-[#070E1A] via-[#12233F] to-[#070E1A];
   }
   html {
     @apply font-sans;
@@ -145,7 +145,7 @@
   }
 
   input {
-    @apply w-full bg-linear-130 from-gray-100 via-white to-gray-100 border p-3 rounded-lg shadow-lg;
+    @apply w-full bg-linear-130 from-gray-100 via-white to-gray-100 border p-3 rounded-lg shadow-lg text-gray-800 placeholder:text-gray-400;
   };  
 
 }
@@ -153,3 +153,35 @@
 .input {
   @apply w-full bg-linear-130 from-gray-100 via-white to-gray-100 border p-3 rounded-lg shadow-lg;
 };  
+/* Formulários (login, recuperação de senha). Em @layer components, as utilidades do Tailwind ainda sobrescrevem. */
+@layer components {
+  .page-div {
+    @apply w-full flex items-center justify-center p-5 overflow-hidden;
+  }
+
+  .form-background {
+    @apply relative p-5 rounded-xl border border-white/40 bg-[#182B49] outline-gray-200 shadow-xl w-full max-w-100;
+  }
+
+  .form-style {
+    @apply flex flex-col items-center justify-center gap-5;
+  }
+
+  .btn-primary {
+    @apply text-gray-700 bg-linear-130 from-gray-400 via-gray-100 to-gray-400 outline outline-gray-300 rounded-lg shadow-lg;
+  }
+
+  /* Mensagens que abrem e fecham com animação: <p className={`error ${texto ? 'visible' : ''}`}> */
+  .error {
+    @apply text-red-500 overflow-hidden text-center transition-all ease-in-out duration-500 max-h-0 opacity-0 -mt-5;
+  }
+
+  .success {
+    @apply text-green-500 overflow-hidden text-center transition-all ease-in-out duration-500 max-h-0 opacity-0 -mt-5;
+  }
+
+  .error.visible,
+  .success.visible {
+    @apply max-h-20 opacity-100 mt-0;
+  }
+}

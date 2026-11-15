@@ -92,7 +92,7 @@ export default function MesaPage({ code }: { code: string }) {
             <div 
             role="dialog" aria-modal="true" aria-label="Confirmar o pedido da conta"
             onClick={(e) => e.stopPropagation()}
-            className={`bg-white space-y-3 p-5 z-40 cursor-auto
+            className={`bg-white text-gray-900 space-y-3 p-5 z-40 cursor-auto
             w-full m-5 md:max-w-90
             rounded-lg shadow-xl
             `}>

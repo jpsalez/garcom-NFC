@@ -11,3 +11,12 @@ export async function logout() {
   clearSession();
   if (session) await api("/auth/logout", { method: "POST", body: { refreshToken: session.refreshToken } }).catch(() => {});
 }
+
+// Pede o link de redefinição por e-mail; a API responde igual para qualquer e-mail
+export function forgotPassword(email: string) {
+  return api<void>("/auth/forgot-password", { method: "POST", body: { email } });
+}
+
+export function resetPassword(token: string, password: string) {
+  return api<void>("/auth/reset-password", { method: "POST", body: { token, password } });
+}

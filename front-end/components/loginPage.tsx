@@ -1,6 +1,7 @@
 'use client'
 import { FormEvent, useState } from "react";
 import { BorderBeam } from "./ui/border-beam";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { saveSession } from "@/lib/session";
@@ -42,26 +43,13 @@ export default function LoginPage() {
     }
     
     return(
-        <>
-        <div
-        className="w-full flex items-center justify-center p-5 overflow-hidden"
-        >            
-                
-            <div className="relative p-5 rounded-lg outline outline-gray-200 shadow-xl
-            w-full max-w-100
-            ">
-
+        <div className="page-div">
+            <div className="form-background">
                 <BorderBeam size={200} duration={3} colorFrom="#d4d4d8" colorTo="#71717a"/>
-                
-                <form action=""
-                onSubmit={handleSubmit}
-                className="
-                flex flex-col items-center justify-center space-y-5"
-                >
-                
-                
+
+                <form onSubmit={handleSubmit} className="form-style">
                     <h2>Realizar Login</h2>
-                    
+
                     <input type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -76,19 +64,14 @@ export default function LoginPage() {
                     autoComplete="current-password"
                     required
                     />
-                    {error && <p role="alert" className="text-sm text-red-600 text-center">{error}</p>}
-                    <div className="w-full">
-                        <button disabled={loading} className="w-full p-3 bg-linear-130 from-gray-300 via-gray-100 to-gray-300 outline outline-gray-300  rounded-lg shadow-lg
-                           
-                        ">{loading ? 'Entrando...' : 'Entrar'}</button>
-                    </div>
 
-                    <p className="text-sm">Esqueceu sua senha? <a className="underline cursor-pointer">Clique aqui.</a></p>
+                    <button disabled={loading} className="btn-primary">{loading ? 'Entrando...' : 'Entrar'}</button>
+
+                    <p role="alert" className={`error ${error ? 'visible' : ''}`}>{error}</p>
+
+                    <p className="text-sm">Esqueceu sua senha? <Link href="/esqueci-senha" className="underline">Clique aqui.</Link></p>
                 </form>
             </div>
-                
-            
         </div>
-        </>
     )
 }

@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Psiu",
+  title: "Psiu!",
   description: "Chame o garçom ou peça a conta pela mesa",
 };
 
