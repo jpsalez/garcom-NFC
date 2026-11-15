@@ -16,6 +16,11 @@ export type LoginResult = {
   user: PublicUser;
 };
 
+export interface ITokenCleanupService {
+  // Apaga refresh tokens e links de redefinição vencidos; devolve quantos apagou
+  purgeExpired(): Promise<number>;
+}
+
 export interface IAuthService {
   register(createUser: createUserInput): Promise<RegisterResult>;
   login(credentials: loginUserInput): Promise<LoginResult>;

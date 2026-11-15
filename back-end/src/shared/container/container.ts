@@ -1,7 +1,7 @@
 import { container } from "tsyringe";
 import { prisma, type DbClient } from "../providers/prisma.ts";
 
-import type { IAuthService } from "../../modules/auth/auth.interfaces.ts";
+import type { IAuthService, ITokenCleanupService } from "../../modules/auth/auth.interfaces.ts";
 import type { IRestaurantRepository } from "../../modules/restaurants/restaurants.repository.interface.ts";
 import { RestaurantRepository } from "../../modules/restaurants/restaurants.repository.ts";
 import type { IUserRepository } from "../../modules/users/users.repository.interface.ts";
@@ -13,6 +13,7 @@ import type { IPasswordResetRepository } from "../../modules/auth/password-reset
 import { PasswordResetRepository } from "../../modules/auth/password-reset.repository.ts";
 import type { IPasswordResetService } from "../../modules/auth/password-reset.interfaces.ts";
 import { PasswordResetService } from "../../modules/auth/password-reset.service.ts";
+import { TokenCleanupService } from "../../modules/auth/token-cleanup.service.ts";
 import { createMailer, type IMailer } from "../mail/mailer.ts";
 import type { IAuthCache } from "../cache/auth-cache.ts";
 import { AuthCache } from "../cache/auth-cache.ts";
@@ -61,6 +62,7 @@ export function registerDependencies() {
   // Services
   container.registerSingleton<IAuthService>("AuthService", AuthService);
   container.registerSingleton<IPasswordResetService>("PasswordResetService", PasswordResetService);
+  container.registerSingleton<ITokenCleanupService>("TokenCleanupService", TokenCleanupService);
   container.registerSingleton<IUsersService>("UsersService", UsersService);
   container.registerSingleton<IAdministrationService>("AdministrationService", AdministrationService);
   container.registerSingleton<ITablesService>("TablesService", TablesService);

@@ -70,6 +70,7 @@ O compose de produção existe (`docker-compose.prod.yml`, Dockerfiles e Caddy) 
 ## 4. Back-end: melhorias que não bloqueiam
 
 Pode fazer depois do piloto, nesta ordem de valor:
+- [x] Limpeza de tokens vencidos: job de hora em hora apaga `refresh_tokens` e `password_resets` vencidos (14/11/2026).
 - [ ] `extend` não é condicional: um `close` simultâneo pode gerar `session:extended` depois de `session:closed`.
 - [ ] "Último OWNER" não é atômico: dois OWNER se desativando ao mesmo tempo passam os dois.
 - [ ] Criar usuário com e-mail repetido revela que a conta existe (o autocadastro já responde de forma genérica).

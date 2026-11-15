@@ -187,7 +187,7 @@ Há exceções deliberadas, todas documentadas no código ou nos guias:
 | src/shared/utils/ | password.ts (scrypt e hash falso), jwt.ts, token.ts (`public_code`, token do aparelho e SHA-256) e public-url.ts. |
 | src/shared/cache/ | auth-cache.ts (cache de autenticação em memória). |
 | src/shared/realtime/ | notifier.ts (`INotifier`) e socket-notifier.ts (`SocketNotifier`). |
-| src/shared/jobs/ | session-expiry.job.ts (job de 60 s). |
+| src/shared/jobs/ | session-expiry.job.ts (job de 60 s) e token-cleanup.job.ts (de hora em hora, apaga tokens vencidos). |
 | src/modules/auth/ | Register (fluxo B) e login: schema, interfaces, service e controller. |
 | src/modules/users/ | Repository, `UsersService`, `StaffController` (rotas `/staff` do OWNER), schemas e `toPublicUser`. |
 | src/modules/administration/ | `AdministrationService`/controller do SUPER_ADMIN: restaurantes e usuários de qualquer restaurante. |

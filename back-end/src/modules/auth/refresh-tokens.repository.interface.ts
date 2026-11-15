@@ -12,4 +12,6 @@ export interface IRefreshTokenRepository {
   // Só revoga se ainda valer: dois pedidos com o mesmo token não passam os dois ({ count: 0 } = perdeu)
   revokeIfActive(id: string, now: Date): Promise<Prisma.BatchPayload>;
   revokeAllByUser(userId: string, now: Date): Promise<Prisma.BatchPayload>;
+  // Vencido não serve mais nem para detectar reuso: pode sair do banco
+  deleteExpired(now: Date): Promise<Prisma.BatchPayload>;
 }

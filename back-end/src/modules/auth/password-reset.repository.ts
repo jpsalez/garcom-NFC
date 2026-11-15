@@ -23,6 +23,10 @@ export class PasswordResetRepository implements IPasswordResetRepository {
     return this.db.password_resets.updateMany({ where: { id, used_at: null, expires_at: { gt: now } }, data: { used_at: now } });
   }
 
+  deleteExpired(now: Date) {
+    return this.db.password_resets.deleteMany({ where: { expires_at: { lt: now } } });
+  }
+
   useAllByUser(userId: string, now: Date) {
     return this.db.password_resets.updateMany({ where: { user_id: userId, used_at: null }, data: { used_at: now } });
   }
