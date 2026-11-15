@@ -28,6 +28,8 @@ export type Table = {
 
 export type StaffCategory = "WAITER" | "MANAGER" | "CLEANING" | "KITCHEN" | "OTHER";
 
+export const CATEGORIES: Record<StaffCategory, string> = { WAITER: "Garçom", MANAGER: "Gerente", CLEANING: "Limpeza", KITCHEN: "Cozinha", OTHER: "Outro" };
+
 export type StaffUser = {
   id: string;
   name: string;
@@ -35,3 +37,14 @@ export type StaffUser = {
   category: StaffCategory | null;
   active: boolean;
 };
+
+// Telas do SUPER_ADMIN (GET /admin/restaurants e /admin/restaurants/:id/users)
+export type Restaurant = {
+  id: string;
+  name: string;
+  slug: string;
+  active: boolean;
+  created_at: string;
+};
+
+export type RestaurantUser = StaffUser & { role: "OWNER" | "STAFF" };

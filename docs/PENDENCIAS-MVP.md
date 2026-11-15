@@ -42,6 +42,7 @@ Ninguém rodou isso depois das mudanças de refresh token, tema escuro e recuper
 - [ ] Deixar o balcão aberto por mais de 15 minutos e confirmar que ele continua logado (renovação do token) e que o socket reconecta.
 - [ ] Trocar a senha em `/admin/senha`: a sessão continua logada, os outros aparelhos caem, e a senha antiga deixa de entrar.
 - [ ] Esqueci minha senha: `/esqueci-senha` → e-mail no Mailpit (`http://localhost:8025`) → `/redefinir-senha` → login com a senha nova.
+- [ ] Entrar como SUPER_ADMIN: o login leva a `/admin/restaurantes`; criar restaurante, criar um OWNER para ele, desativar o restaurante (confirmação) e ver o OWNER perder o acesso.
 - [ ] **Conferir as cores:** o tema escuro mudou o texto padrão para claro. Olhar balcão, mesas, equipe, modal do QR e modal de confirmação da conta, que têm fundo claro.
 
 ---
@@ -49,7 +50,7 @@ Ninguém rodou isso depois das mudanças de refresh token, tema escuro e recuper
 ## 2. Front-end que falta
 
 - [ ] **Tela de cadastro de restaurante** (`/cadastro`, RF01): a API existe, falta a tela. O Luan tem uma versão em `/admin/register` na `main`, mas como tela do SUPER_ADMIN.
-- [ ] **Telas do SUPER_ADMIN**: listar restaurantes, ativar ou desativar, gerir usuários. O login dele hoje mostra "ainda não tem tela". Aproveitar o trabalho do Luan (ver 1.2), usando o cliente `api()` e o token da sessão.
+- [x] **Tela do SUPER_ADMIN** (`/admin/restaurantes`, 14/11/2026): criar, ativar e desativar restaurantes e gerir os usuários de cada um (criar OWNER ou STAFF, ativar, desativar e excluir). Falta testar no navegador. Dashboard e métricas ficam para depois do MVP.
 - [ ] Decidir a sessão do navegador: hoje o token fica no `localStorage` (risco de XSS). A alternativa é cookie httpOnly, que o Luan começou. Se for trocar, é uma mudança que envolve front e back juntos.
 
 ---
@@ -102,8 +103,8 @@ Cardápio digital, comanda do garçom e KDS, avaliações, relatórios e métric
 | Módulo | Back-end | Front |
 |---|---|---|
 | auth (cadastro, login, refresh, logout, `/me`, recuperação de senha) | Completo | Login e recuperação feitos; falta o cadastro |
-| users e administration | Completo | Equipe do OWNER feita; falta o SUPER_ADMIN |
-| restaurants | Completo | Falta a tela do SUPER_ADMIN |
+| users e administration | Completo | Equipe do OWNER e tela do SUPER_ADMIN feitas |
+| restaurants | Completo | Feito (`/admin/restaurantes`) |
 | tables (CRUD, QR, exclusão) | Completo | Feito (`/admin/mesas`) |
 | sessions (scan, abrir, estender, encerrar, expiração, histórico paginado) | Completo | Feito (balcão) |
 | calls (chamar, listar, finalizar) | Completo | Feito (mesa e balcão) |

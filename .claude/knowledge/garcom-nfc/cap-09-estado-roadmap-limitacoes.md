@@ -9,7 +9,7 @@ Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-en
 |---|---|---|---|
 | Infraestrutura da API (main.ts, server.ts, routes.ts) | Completo | Express 5, prefixo `/api/v1`, 27 rotas, servidor HTTP próprio com Socket.IO, CORS por `FRONTEND_URL`, rate limits, `trust proxy` por `TRUST_PROXY`, `/docs` fora de produção, exigência de `JWT_SECRET` forte em produção, injeção de dependência, tratador de erros | Testar o deploy (o `TRUST_PROXY=1` já está no compose de produção) |
 | auth | Completo | Register fluxo B (OWNER + restaurante em transação, slug automático), login com hash falso e bloqueio de inativos, JWT HS256 de 15 min, refresh token de uso único com rotação, logout, `/auth/me`, recuperação de senha por e-mail, troca de senha logado, limites de tentativa | Tela de cadastro de restaurante |
-| users + administration | Completo | SUPER_ADMIN: `/admin/restaurants` e usuários de qualquer restaurante. OWNER: `/staff`. Último OWNER ativo protegido; DEC-13 (restaurante desativado) | Tela do SUPER_ADMIN no front |
+| users + administration | Completo | SUPER_ADMIN: `/admin/restaurants` e usuários de qualquer restaurante. OWNER: `/staff`. Último OWNER ativo protegido; DEC-13 (restaurante desativado) | |
 | restaurants | Completo | Repository, slug automático | Sem exclusão por desenho (desativa-se) |
 | shared (container, Prisma, erros, validação, jwt, password, cache, utils) | Completo | Container, `DbClient` e `runInTransaction`, erros com `code`, validadores de corpo, query e UUID, `AuthCache`, utilitários de token e de URL pública | Redis só para multi-instância |
 | Middlewares | Completo | `ensureAuthenticated` (banco + cache), `ensureRole`, `tenantOf`, `userOf`, `ensureTableToken`, limiters | |
@@ -19,7 +19,7 @@ Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-en
 | Tempo real (shared/realtime) | Completo (instância única) | `INotifier`/`SocketNotifier`, JWT no handshake, sala `restaurant:<id>`, eventos `call:created`, `call:done`, `session:opened`, `session:extended`, `session:closed`, `disconnectUser` e `disconnectRestaurant` | Adapter Redis e lock do job para várias instâncias |
 | Jobs | Completo (instância única) | `shared/jobs/session-expiry.job.ts` (60 s, motivo TIMEOUT) e `token-cleanup.job.ts` (de hora em hora, apaga refresh tokens e links de redefinição vencidos) | |
 | Banco (Prisma) | Completo | 8 tabelas (6 do domínio, `refresh_tokens` e `password_resets`), enums, 9 migrations, CHECKs, índices parciais `table_sessions_one_active` e `calls_one_open_per_type`, índices de consulta, seeds (OWNER demo e SUPER_ADMIN) | Data de cancelamento dos chamados |
-| Front-end Next.js 16 | Parcial | `/login`, `/admin/waiter` (balcão em tempo real), `/admin/mesas` (CRUD e QR), `/admin/equipe`, `/admin/senha` (trocar a senha), `/esqueci-senha` e `/redefinir-senha`, `/m/[code]` (cliente), cliente da API com `ApiError`, `code` e renovação do token, sessão no `localStorage` | Tela do SUPER_ADMIN; cadastro de restaurante (`/cadastro`) |
+| Front-end Next.js 16 | Parcial | `/login`, `/admin/waiter` (balcão em tempo real), `/admin/mesas` (CRUD e QR), `/admin/equipe`, `/admin/restaurantes` (SUPER_ADMIN: restaurantes e seus usuários), `/admin/senha` (trocar a senha), `/esqueci-senha` e `/redefinir-senha`, `/m/[code]` (cliente), cliente da API com `ApiError`, `code` e renovação do token, sessão no `localStorage` | Cadastro de restaurante (`/cadastro`) |
 | Docker Compose, .env.example, CI | Parcial | `docker-compose.yml` na raiz (db, api, web, painel, banco de teste), `.env.example`, GitHub Actions (typecheck, lint, testes) | Testar `docker-compose.prod.yml` num servidor real (os arquivos existem, mas ainda não foram executados) |
 | Testes | Completo para o MVP | vitest + supertest contra PostgreSQL real, cerca de 100 testes: auth, staff, tables, sessions, calls, realtime, session-expiry, tenant-isolation, hardening, api-v1, índices | Mais testes de concorrência e de ponta a ponta no front |
 
@@ -93,6 +93,6 @@ Todos decididos em 13–14/11/2026 (ver 2.7.1): alerta sonoro (sim, DEC-10), reg
 - **Segurança de produção:** decisão sobre cookie httpOnly (o `TRUST_PROXY` já vem definido no compose de produção). 
 - **Infra:** testar o compose de produção (`docker-compose.prod.yml`) num servidor; mesclar a `dev` na `main`. 
 - **Back-end:** timestamps nos chamados cancelados. 
-- **Front:** tela do SUPER_ADMIN (restaurantes e usuários); tela de cadastro (`/cadastro`). 
+- **Front:** tela de cadastro (`/cadastro`). 
 - **Qualidade:** rodar `docker compose up` e `npm test` no ambiente do desenvolvedor (a suíte foi validada com um PostgreSQL local); mais testes de concorrência. 
 - **Documentação:** regerar o PDF consolidado quando o código mudar de forma relevante. 
