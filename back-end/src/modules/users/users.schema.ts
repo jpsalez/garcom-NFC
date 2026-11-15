@@ -3,9 +3,9 @@ import { z } from "zod";
 const category = z.enum(["WAITER", "MANAGER", "CLEANING", "KITCHEN", "OTHER"]);
 
 const newUser = {
-  name: z.string().min(1),
+  name: z.string().min(1).max(100),
   email: z.email().trim().toLowerCase(),
-  password: z.string().min(8),
+  password: z.string().min(8).max(128),
 };
 
 // OWNER cria sempre STAFF do próprio restaurante
@@ -22,7 +22,7 @@ export const createRestaurantUserSchema = z
 export type createRestaurantUserInput = z.infer<typeof createRestaurantUserSchema>;
 
 export const updateUserSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().min(1).max(100).optional(),
   category: category.nullable().optional(),
   active: z.boolean().optional(),
 });

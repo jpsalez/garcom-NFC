@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { createRestaurantSchema, setActiveSchema } from "../modules/administration/administration.schema.ts";
-import { createUserSchema, loginUserSchema } from "../modules/auth/auth.schema.ts";
+import { forgotPasswordSchema, resetPasswordSchema } from "../modules/auth/password-reset.schema.ts";
+import { createUserSchema, loginUserSchema, refreshSchema } from "../modules/auth/auth.schema.ts";
+import { createCallSchema } from "../modules/calls/calls.schemas.ts";
 import { createTableSchema, updateTableSchema } from "../modules/tables/tables.schemas.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "../modules/users/users.schema.ts";
 
@@ -17,7 +19,8 @@ const uuidParam = (name: string) => ({
   name,
   in: "path",
   required: true,
-  schema: { type: "string", format: "uuid" },
+  // "code" é o public_code da mesa (12 caracteres); os demais parâmetros são ids
+  schema: name === "code" ? { type: "string" } : { type: "string", format: "uuid" },
 });
 
 // Corpo vem do próprio schema Zod: a documentação não sai de sincronia com a validação
@@ -49,6 +52,7 @@ const restaurantUsers = "/admin/restaurants/{restaurantId}/users";
 
 export const openApiSpec = {
   openapi: "3.0.3",
+  servers: [{ url: "/api/v1" }],
   info: {
     title: "garcom-NFC API",
     version: "1.0.0",
@@ -65,7 +69,22 @@ export const openApiSpec = {
       post: operation({ tag: "Auth", summary: "Cadastra restaurante e dono", success: 201, body: createUserSchema, auth: false }),
     },
     "/auth/login": {
-      post: operation({ tag: "Auth", summary: "Login (retorna token e usuário)", body: loginUserSchema, auth: false }),
+      post: operation({ tag: "Auth", summary: "Login (retorna token de acesso, refresh token e usuário)", body: loginUserSchema, auth: false }),
+    },
+    "/auth/refresh": {
+      post: operation({ tag: "Auth", summary: "Troca o refresh token por um par novo (o antigo deixa de valer)", body: refreshSchema, auth: false }),
+    },
+    "/auth/logout": {
+      post: operation({ tag: "Auth", summary: "Revoga o refresh token", success: 204, body: refreshSchema, auth: false }),
+    },
+    "/auth/forgot-password": {
+      post: operation({ tag: "Auth", summary: "Envia o link de redefinição de senha por e-mail (responde 202 para qualquer e-mail)", success: 202, body: forgotPasswordSchema, auth: false }),
+    },
+    "/auth/reset-password": {
+      post: operation({ tag: "Auth", summary: "Define a nova senha com o token do link (vale uma vez, 1 hora); encerra as sessões", success: 204, body: resetPasswordSchema, auth: false }),
+    },
+    "/auth/me": {
+      get: operation({ tag: "Auth", summary: "Dados do usuário logado" }),
     },
     "/admin/restaurants": {
       get: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Lista restaurantes" }),
@@ -76,7 +95,7 @@ export const openApiSpec = {
     },
     [restaurantUsers]: {
       get: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Lista usuários do restaurante", params: ["restaurantId"] }),
-      post: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Cria usuário (OWNER ou STAFF)", success: 201, body: createRestaurantUserSchema, params: ["restaurantId"] }),
+      post: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Cria usuário (OWNER ou STAFF); 409 se o restaurante estiver desativado", success: 201, body: createRestaurantUserSchema, params: ["restaurantId"] }),
     },
     [`${restaurantUsers}/{id}`]: {
       patch: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Atualiza usuário", body: updateUserSchema, params: ["restaurantId", "id"] }),
@@ -97,6 +116,30 @@ export const openApiSpec = {
     "/tables/{id}": {
       patch: operation({ tag: "Mesas", summary: "Atualiza mesa (OWNER)", body: updateTableSchema, params: ["id"] }),
       delete: operation({ tag: "Mesas", summary: "Exclui mesa sem atendimentos; com histórico dá 409 (OWNER)", success: 204, params: ["id"] }),
+    },
+    "/public/tables/{code}/scan": {
+      post: operation({ tag: "Atendimentos", summary: "Cliente escaneia o QR: abre ou reaproveita o atendimento e recebe o token do aparelho", success: 201, auth: false, params: ["code"] }),
+    },
+    "/sessions": {
+      get: operation({ tag: "Atendimentos", summary: "Lista atendimentos, mais recentes primeiro; ?status=ACTIVE (padrão) ou CLOSED, ?limit= (1 a 200, padrão 100) e ?offset= (OWNER ou STAFF)" }),
+    },
+    "/tables/{id}/session": {
+      post: operation({ tag: "Atendimentos", summary: "Abre o atendimento pelo balcão; 409 se já houver um ativo (OWNER ou STAFF)", success: 201, params: ["id"] }),
+    },
+    "/sessions/{id}/close": {
+      post: operation({ tag: "Atendimentos", summary: "Encerra: revoga tokens e cancela chamados abertos (OWNER ou STAFF)", params: ["id"] }),
+    },
+    "/sessions/{id}/extend": {
+      post: operation({ tag: "Atendimentos", summary: "Estende o atendimento em mais 4 h (OWNER ou STAFF)", params: ["id"] }),
+    },
+    "/public/calls": {
+      post: operation({ tag: "Chamados", summary: "Cliente chama o garçom ou pede a conta (cabeçalho X-Table-Token); 201 novo, 200 se já havia um aberto do tipo", success: 201, body: createCallSchema, auth: false }),
+    },
+    "/calls": {
+      get: operation({ tag: "Chamados", summary: "Lista chamados e serverTime; ?status=OPEN (padrão), DONE ou CANCELLED e ?since=data (OWNER ou STAFF)" }),
+    },
+    "/calls/{id}/done": {
+      patch: operation({ tag: "Chamados", summary: "Finaliza o chamado; 409 CALL_NOT_OPEN se não estiver mais aberto (OWNER ou STAFF)", params: ["id"] }),
     },
     "/tables/{id}/qrcode": {
       get: operation({ tag: "Mesas", summary: "QR Code da mesa em SVG; reativa a mesa se estiver inativa (OWNER)", params: ["id"] }),

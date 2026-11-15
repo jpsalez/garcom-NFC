@@ -23,7 +23,7 @@ export class TableRepository implements ITableRepository {
   findByPublicCode(publicCode: string) {
     return this.db.tables.findUnique({
       where: { public_code: publicCode },
-      include: { restaurant: { select: { id: true, name: true, slug: true } } },
+      include: { restaurant: { select: { id: true, name: true, slug: true, active: true } } },
     });
   }
 

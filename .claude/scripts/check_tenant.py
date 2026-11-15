@@ -6,7 +6,7 @@ import re
 from _common import SRC, rel
 
 # Métodos que, por desenho, não recebem restaurantId (confirme se ainda faz sentido)
-OK = {"create", "findByPublicCode", "findByEmail", "findBySlug", "findByHash", "constructor"}
+OK = {"create", "findByPublicCode", "findByEmail", "findBySlug", "findByHash", "constructor", "revokeIfActive", "revokeAllByUser", "setPassword", "useIfValid", "useAllByUser"}
 METHOD = re.compile(r"^\s{2}(?:async\s+)?(\w+)\(([^)]*)\)[^{]*\{", re.M)
 
 flags = []

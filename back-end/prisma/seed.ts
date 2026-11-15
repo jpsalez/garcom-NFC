@@ -2,6 +2,7 @@ import "reflect-metadata";
 import "dotenv/config";
 import { prisma } from "../src/shared/providers/prisma.ts";
 import { passwordHash } from "../src/shared/utils/password.ts";
+import { generatePublicCode, isPublicCode } from "../src/shared/utils/token.ts";
 import { role } from "../generated/prisma/enums.ts";
 
 // Dados de desenvolvimento: um restaurante, um OWNER e 5 mesas. Seguro rodar mais de uma vez.
@@ -26,13 +27,16 @@ await prisma.users.upsert({
   },
 });
 
+// O public_code é gerado pelo sistema (mesmo formato do POST /tables); rodar de novo não duplica as mesas
 for (let i = 1; i <= 5; i++) {
-  await prisma.tables.upsert({
-    where: { public_code: `demo-mesa-${i}` },
-    update: {},
-    create: { restaurant_id: restaurant.id, label: `Mesa ${i}`, public_code: `demo-mesa-${i}` },
-  });
+  const label = `Mesa ${i}`;
+  const exists = await prisma.tables.findFirst({ where: { restaurant_id: restaurant.id, label } });
+  if (!exists) await prisma.tables.create({ data: { restaurant_id: restaurant.id, label, public_code: generatePublicCode() } });
+  // Bancos semeados antes tinham códigos como "demo-mesa-1", que o scan recusa pelo formato
+  else if (!isPublicCode(exists.public_code)) await prisma.tables.update({ where: { id: exists.id }, data: { public_code: generatePublicCode() } });
 }
 
-console.log("Seed ok: OWNER admin@demo.com / admin123, 5 mesas (public_code demo-mesa-1..5)");
+const tables = await prisma.tables.findMany({ where: { restaurant_id: restaurant.id }, orderBy: { label: "asc" } });
+console.log("Seed ok: OWNER admin@demo.com / admin123");
+for (const t of tables) console.log(`  ${t.label}: /m/${t.public_code}`);
 await prisma.$disconnect();

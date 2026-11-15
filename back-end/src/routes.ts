@@ -1,33 +1,48 @@
 import express from "express";
 import type { Router, Request, Response } from "express";
 import { container } from "./shared/container/container.ts";
-import { validateSchema, validateUuidParams } from "./shared/middlewares/validator.middleware.ts";
+import { ensureTableToken } from "./shared/middlewares/table-token.middleware.ts";
+import { validateQuery, validateSchema, validateUuidParams } from "./shared/middlewares/validator.middleware.ts";
 import { AuthController } from "./modules/auth/auth.controller.ts";
 import { AdministrationController } from "./modules/administration/administration.controller.ts";
 import { createRestaurantSchema, setActiveSchema } from "./modules/administration/administration.schema.ts";
+import { CallsController } from "./modules/calls/calls.controller.ts";
+import { createCallSchema, listCallsQuery } from "./modules/calls/calls.schemas.ts";
+import { listSessionsQuery } from "./modules/sessions/sessions.schemas.ts";
+import { SessionsController } from "./modules/sessions/sessions.controller.ts";
 import { TablesController } from "./modules/tables/tables.controller.ts";
 import { createTableSchema, updateTableSchema } from "./modules/tables/tables.schemas.ts";
 import { StaffController } from "./modules/users/staff.controller.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "./modules/users/users.schema.ts";
-import { loginLimiter, registerLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
+import { PasswordResetController } from "./modules/auth/password-reset.controller.ts";
+import { forgotPasswordSchema, resetPasswordSchema } from "./modules/auth/password-reset.schema.ts";
+import { callLimiter, forgotPasswordLimiter, loginIpLimiter, loginLimiter, refreshLimiter, registerLimiter, resetPasswordLimiter, scanLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
 import { ensureAuthenticated, ensureRole } from "./shared/middlewares/auth.middleware.ts";
 import { role } from "../generated/prisma/enums.ts";
-import { createUserSchema, loginUserSchema } from "./modules/auth/auth.schema.ts";
+import { createUserSchema, loginUserSchema, refreshSchema } from "./modules/auth/auth.schema.ts";
 
 export function SetupRoutes(){
     const router: Router = express.Router();
 
     const authController = container.resolve(AuthController);
+    const passwordResetController = container.resolve(PasswordResetController);
     const administrationController = container.resolve(AdministrationController);
     const staffController = container.resolve(StaffController);
     const tablesController = container.resolve(TablesController);
+    const sessionsController = container.resolve(SessionsController);
+    const callsController = container.resolve(CallsController);
 
-    router.get('/health', (req: Request, res: Response) => {
+    router.get('/health', (_req: Request, res: Response) => {
         res.send({ message: 'API Healthy' })
     })
 
     router.post('/auth/register', registerLimiter, validateSchema(createUserSchema), authController.register);
-    router.post('/auth/login', loginLimiter, validateSchema(loginUserSchema), authController.login);
+    router.post('/auth/login', loginIpLimiter, loginLimiter, validateSchema(loginUserSchema), authController.login);
+    router.post('/auth/refresh', refreshLimiter, validateSchema(refreshSchema), authController.refresh);
+    router.post('/auth/logout', refreshLimiter, validateSchema(refreshSchema), authController.logout);
+    router.get('/auth/me', ensureAuthenticated, authController.me);
+    router.post('/auth/forgot-password', forgotPasswordLimiter, validateSchema(forgotPasswordSchema), passwordResetController.forgot);
+    router.post('/auth/reset-password', resetPasswordLimiter, validateSchema(resetPasswordSchema), passwordResetController.reset);
 
     // SUPER_ADMIN: plataforma
     const superAdmin = [ensureAuthenticated, ensureRole(role.SUPER_ADMIN)];
@@ -55,6 +70,18 @@ export function SetupRoutes(){
     router.patch('/tables/:id', ...owner, validateUuidParams('id'), validateSchema(updateTableSchema), tablesController.update);
     router.get('/tables/:id/qrcode', ...owner, validateUuidParams('id'), tablesController.qrCode);
     router.delete('/tables/:id', ...owner, validateUuidParams('id'), tablesController.remove);
+
+    // Atendimentos: o cliente abre pelo scan (público); o balcão abre, encerra e estende
+    router.post('/public/tables/:code/scan', scanLimiter, sessionsController.scan);
+    router.get('/sessions', ...staffOrOwner, validateQuery(listSessionsQuery), sessionsController.list);
+    router.post('/tables/:id/session', ...staffOrOwner, validateUuidParams('id'), sessionsController.open);
+    router.post('/sessions/:id/close', ...staffOrOwner, validateUuidParams('id'), sessionsController.close);
+    router.post('/sessions/:id/extend', ...staffOrOwner, validateUuidParams('id'), sessionsController.extend);
+
+    // Chamados: o cliente chama com o token do aparelho; o balcão lista e finaliza
+    router.post('/public/calls', ensureTableToken, callLimiter, validateSchema(createCallSchema), callsController.create);
+    router.get('/calls', ...staffOrOwner, validateQuery(listCallsQuery), callsController.list);
+    router.patch('/calls/:id/done', ...staffOrOwner, validateUuidParams('id'), callsController.done);
 
     return router;
 }

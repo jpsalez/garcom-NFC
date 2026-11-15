@@ -1,5 +1,5 @@
 import { inject, injectable } from "tsyringe";
-import { tableStatus, type Prisma } from "../../../generated/prisma/client.ts";
+import { tableStatus } from "../../../generated/prisma/client.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type {
   CreateSessionTokenData,
@@ -25,15 +25,19 @@ export class TableSessionRepository implements ITableSessionRepository {
     return this.db.table_sessions.findUnique({ where: { id, restaurant_id: restaurantId } });
   }
 
-  findActiveByTable(tableId: string) {
+  findActiveByTable(restaurantId: string, tableId: string) {
     return this.db.table_sessions.findFirst({
-      where: { table_id: tableId, status: tableStatus.ACTIVE },
+      where: { restaurant_id: restaurantId, table_id: tableId, status: tableStatus.ACTIVE },
     });
   }
 
-  findMany(restaurantId: string, filter: { status?: tableStatus } = {}) {
+  findMany(restaurantId: string, filter: { status?: tableStatus; limit?: number; offset?: number } = {}) {
     return this.db.table_sessions.findMany({
       where: { restaurant_id: restaurantId, status: filter.status },
+      // Mais recentes primeiro; o id desempata para a paginação não repetir nem pular linhas
+      orderBy: [{ created_at: "desc" }, { id: "desc" }],
+      take: filter.limit,
+      skip: filter.offset,
       include: {
         table: { select: { id: true, label: true } },
         _count: { select: { session_tokens: { where: { revoked_at: null } } } },
@@ -52,8 +56,19 @@ export class TableSessionRepository implements ITableSessionRepository {
     return this.db.table_sessions.update({ where: { id, restaurant_id: restaurantId }, data });
   }
 
-  delete(restaurantId: string, id: string) {
-    return this.db.table_sessions.delete({ where: { id, restaurant_id: restaurantId } });
+  // Trava a linha enquanto a transação durar, se a sessão ainda estiver ACTIVE: um encerramento simultâneo espera
+  async lockActive(restaurantId: string, id: string) {
+    const rows = await this.db.$queryRaw<{ id: string }[]>`
+      SELECT id FROM table_sessions WHERE id = ${id} AND restaurant_id = ${restaurantId} AND status = 'ACTIVE' FOR SHARE`;
+    return rows.length > 0;
+  }
+
+  // Só atualiza se ainda estiver ACTIVE: dois encerramentos simultâneos não se sobrescrevem ({ count: 0 } = perdeu)
+  closeIfActive(restaurantId: string, id: string, data: UpdateTableSessionData) {
+    return this.db.table_sessions.updateMany({
+      where: { id, restaurant_id: restaurantId, status: tableStatus.ACTIVE },
+      data: { ...data, status: tableStatus.CLOSED, closed_at: new Date() },
+    });
   }
 }
 
@@ -70,25 +85,11 @@ export class SessionTokenRepository implements ISessionTokenRepository {
     return this.db.session_tokens.create({ data });
   }
 
-  findById(id: string) {
-    return this.db.session_tokens.findUnique({ where: { id } });
-  }
-
   findByHash(tokenHash: string) {
     return this.db.session_tokens.findUnique({
       where: { token_hash: tokenHash },
-      include: { table_session: true },
+      include: { table_session: { include: { table: { select: { label: true } } } } },
     });
-  }
-
-  findManyBySession(restaurantId: string, sessionId: string) {
-    return this.db.session_tokens.findMany({
-      where: { session_id: sessionId, table_session: { restaurant_id: restaurantId } },
-    });
-  }
-
-  update(id: string, data: Prisma.session_tokensUpdateInput) {
-    return this.db.session_tokens.update({ where: { id }, data });
   }
 
   // Retorna { count } com a quantidade de tokens revogados
@@ -97,9 +98,5 @@ export class SessionTokenRepository implements ISessionTokenRepository {
       where: { session_id: sessionId, revoked_at: null },
       data: { revoked_at: revokedAt },
     });
-  }
-
-  delete(id: string) {
-    return this.db.session_tokens.delete({ where: { id } });
   }
 }

@@ -9,12 +9,17 @@ export type RegisterResult = {
   restaurant: restaurants;
 };
 
+// token: JWT de acesso (curto); refreshToken: troca por um par novo em POST /auth/refresh
 export type LoginResult = {
   token: string;
+  refreshToken: string;
   user: PublicUser;
 };
 
 export interface IAuthService {
   register(createUser: createUserInput): Promise<RegisterResult>;
   login(credentials: loginUserInput): Promise<LoginResult>;
+  refresh(refreshToken: string): Promise<LoginResult>;
+  logout(refreshToken: string): Promise<void>;
+  me(userId: string): Promise<PublicUser>;
 }

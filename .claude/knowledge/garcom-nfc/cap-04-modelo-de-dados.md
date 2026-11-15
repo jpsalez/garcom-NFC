@@ -1,6 +1,6 @@
 # 4. Modelo de dados 
 
-O modelo de dados é a parte mais completa do repositório: as seis tabelas previstas na v0.3 existem no schema do Prisma e na migration inicial. Este capítulo descreve cada tabela, campo e enum, as relações, os índices, as regras de integridade e as diferenças entre a documentação e o schema real. Convenções: [Especificado] vem de v0.2/v0.3; [Implementado] vem de `schema.prisma` e da migration `20261111232558_init`. 
+O modelo de dados é a parte mais estável do repositório: as seis tabelas previstas na v0.3 existem no schema do Prisma, mais `refresh_tokens` (renovação do login) e `password_resets` (recuperação de senha), em nove migrations (a inicial, mais ajustes de papéis, categorias, CHECKs, o índice parcial de chamados e índices de consulta). Este capítulo descreve cada tabela, campo e enum, as relações, os índices, as regras de integridade e as diferenças entre a documentação e o schema real. Convenções: [Especificado] vem de v0.2/v0.3; [Implementado] vem de `schema.prisma` e das migrations (conferido em 14/11/2026). 
 
 ## 4.1 Visão geral 
 
@@ -57,11 +57,13 @@ O atendimento: período em que uma mesa está ocupada. [Implementado]
 | table_id | texto | Obrigatório; chave estrangeira para tables | Mesa do atendimento. | ``````````
 | status | enum tableStatus | Padrão ACTIVE | ACTIVE ou CLOSED. | ``
 | keep_open | booleano | Padrão: falso | Se verdadeiro, o atendimento não expira por tempo (RF11). | ``
-| expires_at | data/hora | Obrigatório | Limite de validade (4 h após a abertura, segundo a v0.3). | ````````
+| expires_at | data/hora | Obrigatório | Limite de validade (4 h após a abertura, segundo a v0.3). |
+| created_at | data/hora | Padrão: instante atual | Abertura do atendimento (migration `20261114140000_sessions_created_at_closed_at`; os antigos receberam a data da migration). |
+| closed_at | data/hora | Opcional | Preenchido no encerramento (manual, por expiração ou por desativação); nulo enquanto ACTIVE e nos atendimentos anteriores à migration. | ````````
 | closed_reason | enum reason | Opcional | STAFF (encerrado no balcão) ou TIMEOUT (expirou). | ````
 | closed_by | texto | Opcional; chave estrangeira para users (nula ao excluir o usuário) | Quem encerrou; nulo na expiração. |   
 
-A tabela não possui campo de criação ou abertura (por exemplo `created_at`). Ver DV-25. 
+`created_at` e `closed_at` permitem calcular a duração real do atendimento (DV-25 resolvida em 14/11/2026). Há índices em `(restaurant_id, status)` e em `table_id` (migration `indexes_consultas_e_fks`). 
 
 ### 4.2.5 session_tokens 
 
@@ -90,12 +92,40 @@ Os chamados (Garçom ou Conta). [Implementado]
 | done_at | data/hora | Opcional | Quando foi finalizado. | ````
 | done_by | texto | Opcional; chave estrangeira para users (nula ao excluir o usuário) | Quem finalizou. Depende da decisão em aberto sobre login individual do garçom. |   
 
+### 4.2.7 refresh_tokens 
+
+Renovação do login da equipe (auxiliar, fora do domínio de mesas e chamados). [Implementado, 14/11/2026]  
+| Campo | Tipo | Restrições | Descrição |
+|---|---|---|---|
+| id | texto | Chave primária | Identificador. |
+| user_id | texto | Obrigatório; chave estrangeira para users (exclusão em cascata) | Dono do token; excluir o usuário apaga os tokens. |
+| token_hash | texto | Obrigatório, único | SHA-256 do refresh token; o valor existe só no aparelho do usuário. |
+| expires_at | data/hora | Obrigatório | Validade (30 dias, `REFRESH_TOKEN_TTL_DAYS`). |
+| revoked_at | data/hora | Opcional | Preenchido ao trocar, no logout ou na detecção de reuso. |
+| created_at | data/hora | Padrão: instante atual | Criação. |
+
+Índice em `user_id`. Não tem `restaurant_id`: o restaurante do usuário é conferido no banco a cada renovação. 
+
+### 4.2.8 password_resets 
+
+Link de redefinição de senha enviado por e-mail. [Implementado, 14/11/2026]  
+| Campo | Tipo | Restrições | Descrição |
+|---|---|---|---|
+| id | texto | Chave primária | Identificador. |
+| user_id | texto | Obrigatório; chave estrangeira para users (exclusão em cascata) | Dono do link. |
+| token_hash | texto | Obrigatório, único | SHA-256 do token que vai no link. |
+| expires_at | data/hora | Obrigatório | Validade de 1 hora. |
+| used_at | data/hora | Opcional | Preenchido ao usar o link (ou ao usar outro do mesmo usuário). |
+| created_at | data/hora | Padrão: instante atual | Criação. |
+
+Índice em `user_id`; sem `restaurant_id`. 
+
 ## 4.3 Enums 
 
 [Implementado] O schema define cinco enums, criados como tipos enumerados do PostgreSQL pela migration.  
 | Enum (nome no banco) | Valores | Usado em | Significado |
 |---|---|---|---|  ````````
-| role | SUPER_ADMIN, OWNER, STAFF (antes ADMIN/STAFF) | users.role | Super admin: plataforma. Owner: dono do restaurante. Staff: funcionário. |
+| role | SUPER_ADMIN, OWNER, STAFF (antes ADMIN/STAFF) | users.role | Super admin: plataforma (sem restaurante). Owner: dono do restaurante. Staff: funcionário. |
 | staff_category | WAITER, MANAGER, CLEANING, KITCHEN, OTHER | users.category | Só para STAFF [Implementado]. | ````````
 | tableStatus | ACTIVE, CLOSED | table_sessions.status | Atendimento em curso ou encerrado (por balcão ou por tempo). | ````````
 | reason | STAFF, TIMEOUT | table_sessions.closed_reason | Motivo do encerramento. | ````````
@@ -130,28 +160,28 @@ Diferenças em relação à v0.2 [Especificado, histórico]: papéis `ADMIN`, `W
 | users_email_key | users.email | Único global | Login por e-mail; duplicidade vira 409. | [Implementado] | ````
 | tables_public_code_key | tables.public_code | Único global | Código público de cada mesa (RN02). | [Implementado] | ````
 | session_tokens_token_hash_key | session_tokens.token_hash | Único | Busca do token pelo hash. | [Implementado] | ````
-| calls_restaurant_id_status_idx | calls (restaurant_id, status) | Composto, não único | Carregar rapidamente os cards abertos do balcão. | [Implementado] | ````````****
+| calls_restaurant_id_status_idx | calls (restaurant_id, status) | Composto, não único | Carregar rapidamente os cards abertos do balcão. | [Implementado] |
 | table_sessions_one_active | table_sessions (table_id) onde status é ACTIVE | Único parcial | No máximo um atendimento ativo por mesa. | [Implementado] só na migration | ````````****
-| calls_one_open_per_type | calls (session_id, type) onde status é OPEN | Único parcial (proposto) | Impedir dois chamados abertos do mesmo tipo no mesmo atendimento. | [Planejado/Não implementado]; ausente da migration |   
+| calls_one_open_per_type | calls (session_id, type) onde status é OPEN | Único parcial | Impedir dois chamados abertos do mesmo tipo no mesmo atendimento (DEC-03). | [Implementado] na migration `20261114120000_calls_one_open_per_type` |
 
 ### 4.5.1 Índice parcial table_sessions_one_active 
 
 [Implementado] Este índice é criado manualmente ao final da migration inicial (a migration foi editada, pois o schema do Prisma não expressa índices parciais). Ele faz o próprio banco garantir que só exista uma linha com status ativo por mesa; atendimentos encerrados não contam, de modo que o histórico é ilimitado. O comentário no `schema.prisma` registra a existência do índice. A função dele é fechar a condição de corrida do tipo "verificar e depois agir": dois pedidos simultâneos podem ambos constatar que não há atendimento ativo e tentar criar um; o banco aceita apenas um e rejeita o outro com violação de unicidade (código Prisma P2002), que o tratador global converte em resposta 409. A verificação no código (`findActiveByTable`) serve para dar uma mensagem clara; a garantia é do índice. 
 Cuidado de manutenção: uma nova geração de migration em modo de desenvolvimento do Prisma, baseada apenas no schema pode tentar remover um índice que o schema desconhece. Por isso o fluxo recomendado é criar a migration em modo "somente criar", editar o SQL e só então aplicá-la. 
 
-### 4.5.2 Índice calls_one_open_per_type (ausente) 
+### 4.5.2 Índice calls_one_open_per_type 
 
-[Planejado/Não implementado] O guia de estudos e o documento de módulos propõem um índice único parcial análogo para chamados: no máximo um chamado aberto por tipo em cada atendimento, de modo que um toque duplo gere violação de unicidade e resposta 409, enquanto `WAITER` e `BILL` possam coexistir abertos. Esse índice **não existe** na migration nem é mencionado no schema. Ele só faz sentido se a regra "bloquear chamado repetido do mesmo tipo" for adotada; porém a v0.3 afirma em RN08 que "cada novo chamado gera um novo card" e deixa RN12 (novo card ou agrupar) e o ponto a validar 3 em aberto. Portanto o índice proposto conflita com a regra definida RN08 se for aplicado sem decisão de negócio. Requer validação (DV-02). 
+[Implementado, 14/11/2026] Índice único parcial em `calls (session_id, type)` onde o status é `OPEN`, criado à mão na migration `20261114120000_calls_one_open_per_type`. Aplica a DEC-03: no máximo um chamado aberto por tipo em cada atendimento, enquanto `WAITER` e `BILL` podem coexistir abertos. Diferente do que o guia propunha, o service não devolve 409: ele procura o chamado aberto e, se existe, devolve-o com 200 (sem reiniciar o `created_at`); o índice garante a regra mesmo numa corrida entre dois toques simultâneos, e a violação (P2002) é tratada relendo o chamado aberto. Um chamado só nasce em atendimento ativo: o `create` trava a linha da sessão (`FOR SHARE`) numa transação. 
 
-### 4.5.3 Observações sobre índices ausentes 
+### 4.5.3 Demais índices 
 
-Requer validação (otimização, sem impacto funcional no MVP): o PostgreSQL não cria índice automático para colunas de chave estrangeira, e o modelo só declara os índices acima. Consultas previstas, como a busca de chamados por `session_id` (cancelamento de abertos ao encerrar), a de tokens por `session_id` (contagem de aparelhos e revogação) e a de atendimentos vencidos (`findExpired`, que filtra por status, `keep_open` e `expires_at`), não têm índice dedicado. Com volumes pequenos isso é aceitável. 
+[Implementado] A migration `20261114130000_indexes_consultas_e_fks` (revisão geral de 14/11/2026) acrescentou índices em `tables(restaurant_id)`, `table_sessions(restaurant_id, status)`, `table_sessions(table_id)`, `session_tokens(session_id)` e `calls(token_id)`, porque o PostgreSQL não cria índice automático para chaves estrangeiras. O job de expiração (`findExpired`, que filtra por status, `keep_open` e `expires_at`) ainda não tem índice dedicado; com volumes pequenos isso é aceitável. 
 
 ## 4.6 Migration 
 
-[Implementado] Existe uma única migration, `20261111232558_init`, mais o arquivo de trava de provedor (PostgreSQL). Ela cria, nesta ordem: os cinco tipos enumerados; as seis tabelas; os índices únicos de `slug`, `email`, `public_code` e `token_hash`; o índice composto de `calls`; as chaves estrangeiras; e, por último, o índice parcial de atendimento ativo (com um comentário "Uma sessão ACTIVE por mesa"). O `prisma.config.ts` define a pasta de migrations e a fonte da URL do banco. O fluxo de trabalho: alterar o schema, gerar a migration, aplicar; o client é regenerado em `generated/prisma`. Na implantação planejada, as migrations seriam aplicadas por a aplicação de migrations em modo de implantação do Prisma. 
+[Implementado] Existem nove migrations, mais o arquivo de trava de provedor (PostgreSQL): `20261111232558_init` (enums, seis tabelas, índices únicos, chaves estrangeiras e o índice parcial de atendimento ativo, com o comentário "Uma sessão ACTIVE por mesa"); `20261112193624_roles_and_staff_category` (papéis SUPER_ADMIN/OWNER/STAFF, `staff_category`, `active`); `20261112193904_staff_category_and_checks` e `20261112200521_users_restaurant_by_role` (CHECKs `users_category_only_staff` e `users_restaurant_by_role`); `20261114120000_calls_one_open_per_type` (índice parcial de chamados); `20261114130000_indexes_consultas_e_fks` (índices das chaves estrangeiras) e `20261114140000_sessions_created_at_closed_at` (`created_at` e `closed_at` em `table_sessions`) `20261114150000_refresh_tokens` (tabela `refresh_tokens`) e `20261114160000_password_resets` (tabela `password_resets`). O `prisma.config.ts` define a pasta de migrations e a fonte da URL do banco. O fluxo de trabalho: alterar o schema, gerar a migration, aplicar; o client é regenerado em `generated/prisma`. No compose, a API aplica as migrations com `prisma migrate deploy` ao subir. 
 
-A migration é da versão do schema vigente; quaisquer ajustes futuros previstos (índice de chamados, campos de data de abertura, colunas de restaurante em usuários obrigatórias) exigirão novas migrations. 
+Regra de manutenção: os índices parciais e os CHECKs são escritos à mão no SQL das migrations; nunca aceitar um `migrate dev` que os remova. Ajustes futuros exigirão novas migrations. 
 
 ## 4.7 Regras de integridade e tenant 
 
@@ -163,16 +193,16 @@ A migration é da versão do schema vigente; quaisquer ajustes futuros previstos
 - Valores restritos pelos enums (papel, status, tipo e motivo). 
 - Padrões: status do atendimento `ACTIVE`, status do chamado `OPEN`, `keep_open` falso, mesa ativa.  
 
-### 4.7.2 Regras que dependem do código (hoje não implementadas em fluxo) 
- 
-- Prazo de 4 horas (`expires_at` calculado na abertura), expiração por job e `closed_reason` igual a `TIMEOUT` com `closed_by` nulo. 
-- Encerramento atômico: atendimento fechado, `revoked_at` preenchido em todos os tokens ainda não revogados e chamados abertos cancelados, numa única transação. Os blocos existem nos repositories (`revokeAllBySession`, `cancelOpenBySession`), prontos para uso dentro de `$transaction` por meio do `DbClient`; falta o service. 
-- Token guardado só como hash: o gerador e o validador não existem; a coluna está pronta. 
-- Papel do usuário fixado pelo service (hoje `ADMIN` no registro).  
+### 4.7.2 Regras garantidas pelo código [Implementado]
+
+- Prazo de 4 horas (`expires_at` calculado na abertura por `TABLE_SESSION_TTL`), expiração pelo job de 60 s e `closed_reason` igual a `TIMEOUT` com `closed_by` nulo. 
+- Encerramento atômico: atendimento fechado, `revoked_at` preenchido em todos os tokens ainda não revogados e chamados abertos cancelados, numa única transação (`SessionsService.close`, com os repositories criados sobre o `tx`). 
+- Token guardado só como hash: `generateSessionToken` gera o token e `hashToken` (SHA-256) o hash; o `ensureTableToken` calcula o hash do que chega e busca a linha. 
+- Papel do usuário fixado pelo service: `OWNER` no register; `STAFF` nas rotas `/staff`; o cliente nunca envia `role` nem `restaurant_id`. 
 
 ### 4.7.3 Tenant no modelo 
 
-[Implementado] `tables`, `table_sessions` e `calls` possuem `restaurant_id` obrigatório; `users` tem opcional; `session_tokens` não tem. Os filtros por tenant são aplicados nos repositories, não por regra do banco (não há segurança em nível de linha). O banco também **não** garante que o `restaurant_id` de um atendimento ou chamado seja o mesmo da mesa ou do atendimento a que se ligam, pois as chaves estrangeiras são simples (não compostas); a consistência depende de os services preencherem o tenant a partir da sessão. Requer validação (DV-32). 
+[Implementado] `tables`, `table_sessions` e `calls` possuem `restaurant_id` obrigatório; `users` tem opcional, mas o CHECK `users_restaurant_by_role` exige nulo só para SUPER_ADMIN; `session_tokens` não tem. Os filtros por tenant são aplicados nos repositories, não por regra do banco (não há segurança em nível de linha). O banco também **não** garante que o `restaurant_id` de um atendimento ou chamado seja o mesmo da mesa ou do atendimento a que se ligam, pois as chaves estrangeiras são simples (não compostas); a consistência depende de os services preencherem o tenant a partir da sessão. Requer validação (DV-32). 
 
 ## 4.8 Diferenças entre a documentação e o schema real  
 | Item | v0.2 | v0.3 | Schema/migration real |
@@ -180,8 +210,8 @@ A migration é da versão do schema vigente; quaisquer ajustes futuros previstos
 | Número de tabelas | 13 (7 + 3 + 3) | 6 | 6 | 
 | Tipo do identificador | uuid | uuid | Texto gerado pela aplicação | ``
 | users.name | Ausente | Presente | Presente | ````````````````
-| users.role | ADMIN, WAITER, KITCHEN | ADMIN, STAFF | ADMIN, STAFF | ``
-| users.restaurant_id | Chave estrangeira | Chave estrangeira | Opcional | 
+| users.role | ADMIN, WAITER, KITCHEN | ADMIN, STAFF | SUPER_ADMIN, OWNER, STAFF (+ `users.category` e `active`) |
+| users.restaurant_id | Chave estrangeira | Chave estrangeira | Opcional, nulo só para SUPER_ADMIN (CHECK) |
 | Setores e vínculo garçom-setor | Previstos | Removidos | Ausentes | 
 | Cardápio, comandas, pedidos, avaliações | Previstos | Futuro | Ausentes | ````````````
 | tables | Com sector_id, sem restaurant_id | Com restaurant_id | Com restaurant_id e active (campo não listado nos diagramas) | ``````
@@ -191,8 +221,8 @@ A migration é da versão do schema vigente; quaisquer ajustes futuros previstos
 | calls.restaurant_id | Ausente (mas índice previsto) | Ausente no diagrama (mas índice previsto) | Presente | ``````````````````````
 | calls.status | OPEN, ACCEPTED, DONE, EXPIRED | OPEN, DONE, CANCELLED | OPEN, DONE, CANCELLED | ````````````
 | Quem trata o chamado | accepted_by, accepted_at | done_by, done_at | done_by, done_at | 
-| Índice parcial de atendimento ativo | Previsto | Previsto | Implementado | ``
-| Índice composto em calls | Previsto | Previsto | Implementado | 
-| Índice parcial de chamado aberto por tipo | Não previsto | Não previsto | Ausente (só proposto nos guias) |   
+| Índice parcial de atendimento ativo | Previsto | Previsto | Implementado |
+| Índice composto em calls | Previsto | Previsto | Implementado |
+| Índice parcial de chamado aberto por tipo | Não previsto | Não previsto | Implementado (14/11/2026, DEC-03) |
 
 Esses pontos são consolidados abaixo e no Apêndice A.

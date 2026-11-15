@@ -18,3 +18,10 @@
 !.claude/painel/recipes.json
 !.claude/painel/AUDITORIA.md
 **/__pycache__/
+
+# Variáveis locais e de produção (nunca no git)
+/.env
+/.env.prod
+
+# Dependências (cada projeto também ignora a sua; este vale para a raiz)
+node_modules/

@@ -8,7 +8,7 @@ O produto é documentado em duas versões de arquitetura, ambas marcadas como "E
 
 ### 1.1.1 Pilha e equipe 
 
-[Especificado] Front-end em Next.js; API em Node.js, Express e TypeScript; PostgreSQL; ambiente com Docker Compose. A equipe prevista é de duas pessoas: um desenvolvedor de front-end e um de back-end. [Implementado] Apenas o back-end existe no repositório (Express 5, Prisma 6, Zod 4, jsonwebtoken, tsyringe); não há front-end, Docker Compose, Dockerfile nem testes (ver capítulo 9). 
+[Especificado] Front-end em Next.js; API em Node.js, Express e TypeScript; PostgreSQL; ambiente com Docker Compose. A equipe prevista é de duas pessoas: um desenvolvedor de front-end e um de back-end. [Implementado, 14/11/2026] Back-end (Express 5, Prisma 6, Zod 4, jsonwebtoken, tsyringe, Socket.IO, vitest, supertest), front-end Next.js 16 (App Router, React 19) integrado à API, `docker-compose.yml` na raiz (PostgreSQL 16, API, front e painel de desenvolvimento), CI no GitHub Actions e cerca de 100 testes automatizados no back-end (ver capítulo 9).
 
 ## 1.2 Objetivo e problema resolvido 
 
@@ -22,23 +22,24 @@ O objetivo do MVP (v0.3) é eliminar a espera "no aceno": o cliente que precisa 
 
 ## 1.3 Atores 
 
-[Especificado, 12/11/2026, não implementado] Decisão do usuário: papéis SUPER_ADMIN (dono da plataforma), OWNER (substitui o ADMIN; dono de um restaurante) e STAFF; onde este capítulo diz Admin/ADMIN, leia OWNER como alvo (DV-48; `decisoes.md`). Hoje o código tem ADMIN/STAFF.
+[Implementado, 12/11/2026] Decisão do usuário: papéis SUPER_ADMIN (dono da plataforma), OWNER (substitui o ADMIN; dono de um restaurante) e STAFF; onde os documentos de origem dizem Admin/ADMIN, leia OWNER (DV-48; `decisoes.md`). O enum do código é `SUPER_ADMIN | OWNER | STAFF`.
 
-A v0.3 define três perfis de usuário humanos e um ator sistêmico. A v0.2 define quatro perfis (Cliente, Garçom, Cozinha/Bar, Admin) com papéis de banco ADMIN, WAITER e KITCHEN; a v0.3 e o código usam apenas ADMIN e STAFF (ver divergência DV-13).  
+A v0.3 define três perfis de usuário humanos e um ator sistêmico. A v0.2 define quatro perfis (Cliente, Garçom, Cozinha/Bar, Admin) com papéis de banco ADMIN, WAITER e KITCHEN; a v0.3 usa ADMIN e STAFF e o código usa SUPER_ADMIN, OWNER e STAFF (ver divergência DV-13 e DV-48).
 | Ator | Autenticação | Papel (enum) | O que pode fazer no MVP v0.3 | Observações |
 |---|---|---|---|---|  
-| Cliente | Nenhuma (sem login). Recebe um token opaco por aparelho ao entrar na mesa | Não é usuário do banco | Abrir a tela da mesa por QR Code ou NFC; chamar garçom; pedir a conta; ver a confirmação do chamado | [Especificado]. Anônimo (LGPD, RNF08) | 
-| Balcão (garçons) | Login com JWT, usuário criado pelo Admin | STAFF | Ver cards dos chamados abertos; finalizar chamado; encerrar o atendimento de uma mesa; manter o atendimento aberto | [Especificado]. Tela única num computador do balcão, usada por todos os garçons; ainda não decidido se cada garçom terá login próprio (ponto a validar 2) | 
-| Admin | Login com JWT | ADMIN | Autocadastrar o restaurante (quem cadastra vira Admin); cadastrar mesas e imprimir QR Codes; criar o acesso do balcão | [Implementado] só o registro de usuário ADMIN e o login (sem restaurante vinculado, ver DV-15) | 
-| Sistema (job) | Interno | Não se aplica | Expirar atendimentos após 4 h quando não estiverem em "manter aberto"; cancelar chamados abertos | [Especificado]; [Não implementado] (só existe a consulta de sessões vencidas no repositório) | 
-| Garçom do setor (somente v0.2) | JWT | WAITER (v0.2) | Receber chamados do setor, aceitar (primeiro vence), concluir; abrir comanda, lançar itens, fechar comanda; encerrar a sessão | [Especificado] na v0.2; removido do MVP v0.3 (papel substituído pelo balcão STAFF); app do garçom e setores são o item APP do futuro | 
-| Cozinha/Bar (somente v0.2) | JWT | KITCHEN (v0.2) | Operar o KDS: ver fila, marcar preparando e pronto | [Especificado] na v0.2; fora do MVP (item KDS do futuro) |   
+| Cliente | Nenhuma (sem login). Recebe um token opaco por aparelho ao entrar na mesa (`POST /public/tables/:code/scan`) | Não é usuário do banco | Abrir a tela da mesa por QR Code ou NFC; chamar garçom; pedir a conta; ver a confirmação do chamado | [Implementado 14/11/2026]. Anônimo (LGPD, RNF08). Não usa tempo real (DEC-08) |
+| Balcão (garçons) | Login com JWT; cada garçom tem o próprio usuário (DEC-06) | STAFF | Ver cards dos chamados abertos em tempo real; finalizar chamado; abrir, encerrar e estender o atendimento de uma mesa | [Implementado]. Tela em `/admin/waiter`; `done_by` e `closed_by` guardam o garçom que agiu |
+| Owner (dono do restaurante) | Login com JWT | OWNER | Autocadastrar o restaurante e virar OWNER; cadastrar mesas, gerar e baixar o QR Code; criar, editar, desativar e excluir a equipe STAFF; tudo o que o STAFF faz | [Implementado]: register fluxo B, gestão de mesas (`/admin/mesas`) e de equipe (`/admin/equipe`) |
+| SUPER_ADMIN (plataforma) | Login com JWT; criado por seed | SUPER_ADMIN | Criar, ativar e desativar restaurantes; gerir usuários de qualquer restaurante | [Implementado] no back-end (`/admin/...`); dashboard e telas no front são [Planejado] |
+| Sistema (job) | Interno | Não se aplica | Expirar atendimentos vencidos que não estejam em "manter aberto"; cancelar os chamados abertos deles | [Implementado 14/11/2026]: job de 60 s (`session-expiry.job.ts`) com motivo TIMEOUT, mais a expiração no momento do uso |
+| Garçom do setor (somente v0.2) | JWT | WAITER (v0.2) | Receber chamados do setor, aceitar (primeiro vence), concluir; abrir comanda, lançar itens, fechar comanda; encerrar a sessão | [Especificado] na v0.2; removido do MVP v0.3 (papel substituído pelo balcão STAFF); app do garçom e setores são o item APP do futuro |
+| Cozinha/Bar (somente v0.2) | JWT | KITCHEN (v0.2) | Operar o KDS: ver fila, marcar preparando e pronto | [Especificado] na v0.2; fora do MVP (item KDS do futuro) |
 
 _Figura: **Figura 1.1** – Mapa de atores e casos de uso do MVP (v0.3). (Ver seção 1.3)_ 
 
 ### 1.3.1 Observações sobre os atores 
 
-O Admin da v0.3 acumula o papel de dono do restaurante: é o único que cria mesas e o acesso do balcão. O "acesso do balcão" é, no desenho atual, um usuário STAFF criado pelo Admin (rota prevista `POST /staff`); não há ainda modelo de login por garçom, e por isso os campos `calls.done_by` e `table_sessions.closed_by` existem no banco, mas dependem da decisão do ponto a validar 2. O Cliente não existe como registro: seu "estado" é o token do aparelho, gravado em `session_tokens` apenas como hash. 
+O OWNER da v0.3 (antes chamado Admin) acumula o papel de dono do restaurante: é o único que cria mesas e gerencia a equipe. O "acesso do balcão" é um usuário STAFF criado pelo OWNER (`POST /staff`); cada garçom tem login próprio (DEC-06), e por isso `calls.done_by` e `table_sessions.closed_by` registram quem agiu. O Cliente não existe como registro: seu "estado" é o token do aparelho, gravado em `session_tokens` apenas como hash.
 
 ## 1.4 Escopo: MVP versus futuro 
 
@@ -57,10 +58,9 @@ _Figura: **Figura 1.2** – Escopo por fase: roadmap do MVP e itens posteriores,
 
 ### 1.4.3 Estado do escopo MVP no código  
 | Fase (v0.3) | Entregas | Marco | Estado no código |
-|---|---|---|---|  ``
-| 1 Fundação | BE-01 setup; BE-02 autocadastro, login JWT, middlewares auth e tenant; BE-03 mesas, QR Code, acesso do balcão; FE-01..FE-03 | Restaurante com mesas e QR Codes impressos | Parcial: BE-01 sem Docker Compose; BE-02 com login e ensureAuthenticated, mas registro sem restaurante e sem tenant; BE-03 e FE-01..03 não iniciados | 
-| 2 Chamado | BE-04 atendimento e token por aparelho; BE-05 chamados e Socket.IO; FE-04, FE-05 | Cliente chama; card aparece e some no balcão | Não iniciada: só repositórios de sessões, tokens e chamados | ``````
-| 3 Encerramento | BE-06 encerrar e revogar; BE-07 manter aberto, job de 4 h, limite; FE-06, FE-07 | MVP completo rodando via Docker | Não iniciada: existem apenas blocos de repositório (revokeAllBySession, cancelOpenBySession, findExpired) |   
+| 1 Fundação | BE-01 setup; BE-02 autocadastro, login JWT, middlewares auth e tenant; BE-03 mesas, QR Code, acesso do balcão; FE-01..FE-03 | Restaurante com mesas e QR Codes impressos | [Implementado 14/11/2026] Docker Compose e CI; register com restaurante (fluxo B); login, `ensureAuthenticated`, `ensureRole`, `tenantOf`; mesas com QR Code (SVG) e exclusão; gestão de equipe; front com login, `/admin/mesas` e `/admin/equipe` |
+| 2 Chamado | BE-04 atendimento e token por aparelho; BE-05 chamados e Socket.IO; FE-04, FE-05 | Cliente chama; card aparece e some no balcão | [Implementado 14/11/2026] scan e token por aparelho, `POST /public/calls`, `GET /calls`, `PATCH /calls/:id/done`, Socket.IO na sala `restaurant:<id>`; tela da mesa `/m/[code]` e balcão `/admin/waiter` em tempo real |
+| 3 Encerramento | BE-06 encerrar e revogar; BE-07 manter aberto, job de 4 h, limite; FE-06, FE-07 | MVP completo rodando via Docker | [Implementado 14/11/2026] encerrar (transação: revoga tokens e cancela chamados), estender (+4 h), job de expiração de 60 s, limite de chamados por token; `docker compose up` sobe tudo. Pendências não bloqueantes no capítulo 9 |
 
 O detalhamento do estado de implementação e do roadmap está no capítulo 9. 
 
@@ -70,7 +70,7 @@ Os dois mecanismos são apenas formas físicas de entregar ao celular a mesma UR
 | Aspecto | QR Code | NFC |
 |---|---|---|  
 | Papel no produto | Mecanismo principal do MVP; gerado pelo sistema | Alternativa equivalente; v0.3 RF13 Definido, v0.2 RF22 Futuro | ``````
-| Como é gerado | [Especificado] GET /tables/:id/qrcode (SVG ou PNG) para o Admin imprimir; URL composta por PUBLIC_WEB_URL (v0.3) e o public_code. [Não implementado] (sem biblioteca de QR no projeto) | Gravado fora do sistema, num aplicativo de NFC, com a mesma URL. O sistema só precisa servir a rota | 
+| Como é gerado | [Implementado 14/11/2026] `GET /tables/:id/qrcode` devolve SVG (só OWNER); URL formada por `PUBLIC_APP_URL` e o `public_code` (`<PUBLIC_APP_URL>/m/<código>`, DEC-05). O front mostra, copia o link e baixa o SVG para imprimir | Gravado fora do sistema, num aplicativo de NFC, com a mesma URL. O sistema só precisa servir a rota |
 | Interação do cliente | Aponta a câmera | Encosta o celular; abre no navegador sem app (iPhone XS ou mais novo, ou Android com NFC ativo e tela desbloqueada, segundo o guia) | 
 | Cuidados | Sem restrições especiais além de imprimir com margem | Tags NTAG213 bastam (cerca de 40 caracteres de URL); travar a tag (lock) é permanente e deve ser feito só após testes e com o domínio definitivo; sem travar, qualquer um pode regravar a tag com um link falso | 
 | Recomendação do guia | Manter o QR Code junto da tag NFC na plaquinha | Usar tags de teste antes de gravar as definitivas |   
@@ -79,15 +79,15 @@ Observação: a v0.3 inclui NFC em RF04, RF13 e nos perfis, mas o quadro "No MVP
 ## 1.6 Visão de funcionalidades  
 | Funcionalidade | v0.2 | v0.3 | Estado atual |
 |---|---|---|---|  
-| Autocadastro do restaurante (dono vira Admin) | Definida (RF01) | MVP (RF01) | Parcial: registro cria usuário ADMIN sem restaurante | 
-| Login da equipe com JWT | Definida (RNF05) | MVP | Implementado | 
-| Cadastro de mesas e QR Code | Definida (RF04) | MVP (RF02) | Não implementado (só repositório de mesas) | 
-| Acesso do balcão / gestão de equipe | Definida (RF02, equipe completa) | MVP (RF03, acesso único do balcão) | Não implementado | 
-| Setores e vínculo garçom-setor | Definida (RF03) | Fora (item APP) | Não existe no schema | 
-| Página da mesa por QR/NFC sem login | Definida (RF06) | MVP (RF04) | Não implementado | 
-| Chamar garçom / pedir a conta | Definida (RF08, RF09) | MVP (RF05, RF06) | Não implementado (só repositório de chamados) | 
-| Cards de chamados em tempo real no balcão | Equivalente: lista do garçom por setor (RF12) | MVP (RF08, RF09) | Não implementado (sem Socket.IO) | 
-| Atendimento (sessão) de 4 h, manter aberto, encerrar, revogar tokens | Definida (RF07, RF15, RF16); token único por sessão | MVP (RF10, RF11, RF12); token por aparelho | Parcial: schema e repositórios; sem service, rotas, job | 
+| Autocadastro do restaurante (dono vira OWNER) | Definida (RF01) | MVP (RF01) | Implementado (fluxo B: OWNER + restaurante em transação) |
+| Login da equipe com JWT | Definida (RNF05) | MVP | Implementado (rate limit, bloqueio de usuário e restaurante inativos) |
+| Cadastro de mesas e QR Code | Definida (RF04) | MVP (RF02) | Implementado (CRUD, QR em SVG, exclusão; tela `/admin/mesas`) |
+| Acesso do balcão / gestão de equipe | Definida (RF02, equipe completa) | MVP (RF03, acesso único do balcão) | Implementado (`/staff`; tela `/admin/equipe`) |
+| Setores e vínculo garçom-setor | Definida (RF03) | Fora (item APP) | Não existe no schema |
+| Página da mesa por QR/NFC sem login | Definida (RF06) | MVP (RF04) | Implementado (`/m/[code]` + scan) |
+| Chamar garçom / pedir a conta | Definida (RF08, RF09) | MVP (RF05, RF06) | Implementado (`POST /public/calls`) |
+| Cards de chamados em tempo real no balcão | Equivalente: lista do garçom por setor (RF12) | MVP (RF08, RF09) | Implementado (Socket.IO + tela `/admin/waiter`) |
+| Atendimento (sessão) de 4 h, manter aberto, encerrar, revogar tokens | Definida (RF07, RF15, RF16); token único por sessão | MVP (RF10, RF11, RF12); token por aparelho | Implementado (scan, abrir, estender, encerrar em transação, job de 60 s) |
 | Cardápio digital | Definida (RF05, RF06) | Futuro (RF14) | Não existe | 
 | Comanda do garçom, KDS, consumo do cliente | Definida (RF10, RF13, RF14, RF18) | Futuro (RF15) | Não existe | 
 | Avaliações | Definida (RF11) | Futuro (RF16) | Não existe | 
@@ -102,11 +102,11 @@ A v0.3 não é uma correção da v0.2, e sim um recorte deliberado do produto. O
  
 - **Escopo.** A v0.2 tinha 23 requisitos funcionais (18 definidos, 3 a validar, 2 futuros). A v0.3 tem 19: 13 no MVP (12 definidos e 1 proposto) e 6 futuros. Cardápio, comanda, KDS, avaliações e relatórios deixaram de ser requisitos do MVP. 
 - **Destinatário do chamado.** Na v0.2 o chamado ia aos garçons do setor da mesa e era assumido pelo primeiro que aceitasse (RN03, RN04). Na v0.3 não há setores nem aceite: todo chamado aparece como card na tela do balcão; o garçom só finaliza. 
-- **Papéis.** De ADMIN, WAITER e KITCHEN para ADMIN e STAFF (balcão). 
+- **Papéis.** De ADMIN, WAITER e KITCHEN para ADMIN e STAFF (balcão) na v0.3 e, no código, SUPER_ADMIN, OWNER e STAFF (12/11/2026). 
 - **Token.** De um token compartilhado por sessão (cabeçalho `X-Table-Session`) para um token por aparelho (cabeçalho `X-Table-Token`), armazenado como hash e revogável em lote. 
 - **Sessão.** Passa a ser chamada "atendimento" na v0.3 (tabela `table_sessions` inalterada no nome). Estados do chamado: de OPEN/ACCEPTED/DONE/EXPIRED para OPEN/DONE/CANCELLED. 
 - **Modelo de dados.** De 13 tabelas (v0.2) para 6 (v0.3): restaurants, users, tables, table_sessions, session_tokens, calls. As tabelas de setores, cardápio, comanda, pedidos e avaliações saíram do MVP. O schema do código segue a v0.3. 
-- **Eventos em tempo real.** De call.created/accepted, order.*, tab.*, session.closed por salas de setor, KDS e sessão para call.created, call.done, session.updated, session.closed por salas `balcao:{restaurantId}` e `session:{id}`. 
+- **Eventos em tempo real.** De call.created/accepted, order.*, tab.*, session.closed por salas de setor, KDS e sessão para eventos do balcão por restaurante. No código (14/11/2026): `call:created`, `call:done`, `session:opened`, `session:extended` e `session:closed`, todos na sala `restaurant:<id>` e emitidos só depois do commit; o cliente da mesa não usa tempo real (DEC-08). 
 - **Roadmap.** De 4 fases (Fundação, Atendimento, Comanda e cozinha, Avaliação e relatórios) para 3 fases (Fundação, Chamado, Encerramento). 
 - **NFC.** De futuro (RF22) para definido (RF13), com a observação de que é só uma segunda forma de entregar a mesma URL.  
 
@@ -116,7 +116,7 @@ As informações foram obtidas de quatro documentos (v0.2, v0.3, módulos do bac
  
 - **[Especificado]**: consta nos documentos de arquitetura ou nos guias, sem confirmação no código. 
 - **[Implementado]**: confirmado no código do back-end. 
-- **[Não implementado]** ou **[Planejado]**: previsto, mas inexistente no código. 
+- **[Não implementado]** ou **[Planejado]**: previsto, mas inexistente no código. Em 14/11/2026 isso vale, em essência, só para o que está fora do MVP e para as pendências do capítulo 9. 
 - **Requer validação**: divergência entre fontes ou ponto declaradamente em aberto; consolidada no apêndice A.  
 
 Em conflito entre fontes, vale a ordem: código (comportamento atual), depois v0.3, depois v0.2. Os guias (módulos e estudo) são tratados como planejamento de implementação, não como requisito: onde eles contradizem a v0.3 (por exemplo, o garçom "abrir a mesa" antes do cliente poder entrar), a divergência é registrada, mas a v0.3 prevalece como especificação de produto.

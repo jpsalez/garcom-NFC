@@ -7,6 +7,13 @@ import { RestaurantRepository } from "../../modules/restaurants/restaurants.repo
 import type { IUserRepository } from "../../modules/users/users.repository.interface.ts";
 import { UserRepository } from "../../modules/users/users.repository.ts";
 import { AuthService } from "../../modules/auth/auth.service.ts";
+import type { IRefreshTokenRepository } from "../../modules/auth/refresh-tokens.repository.interface.ts";
+import { RefreshTokenRepository } from "../../modules/auth/refresh-tokens.repository.ts";
+import type { IPasswordResetRepository } from "../../modules/auth/password-reset.repository.interface.ts";
+import { PasswordResetRepository } from "../../modules/auth/password-reset.repository.ts";
+import type { IPasswordResetService } from "../../modules/auth/password-reset.interfaces.ts";
+import { PasswordResetService } from "../../modules/auth/password-reset.service.ts";
+import { createMailer, type IMailer } from "../mail/mailer.ts";
 import type { IAuthCache } from "../cache/auth-cache.ts";
 import { AuthCache } from "../cache/auth-cache.ts";
 import type { IUsersService } from "../../modules/users/users.interfaces.ts";
@@ -22,6 +29,12 @@ import type {
   ITableSessionRepository,
 } from "../../modules/sessions/sessions.repository.interface.ts";
 import { SessionTokenRepository, TableSessionRepository } from "../../modules/sessions/sessions.repository.ts";
+import type { ISessionsService } from "../../modules/sessions/sessions.interfaces.ts";
+import { SessionsService } from "../../modules/sessions/sessions.service.ts";
+import type { ICallsService } from "../../modules/calls/calls.interfaces.ts";
+import { CallsService } from "../../modules/calls/calls.service.ts";
+import type { INotifier } from "../realtime/notifier.ts";
+import { SocketNotifier } from "../realtime/socket-notifier.ts";
 import type { ICallRepository } from "../../modules/calls/calls.repository.interface.ts";
 import { CallRepository } from "../../modules/calls/calls.repository.ts";
 
@@ -37,15 +50,22 @@ export function registerDependencies() {
   container.registerSingleton<ITableSessionRepository>("TableSessionRepository", TableSessionRepository);
   container.registerSingleton<ISessionTokenRepository>("SessionTokenRepository", SessionTokenRepository);
   container.registerSingleton<ICallRepository>("CallRepository", CallRepository);
+  container.registerSingleton<IRefreshTokenRepository>("RefreshTokenRepository", RefreshTokenRepository);
+  container.registerSingleton<IPasswordResetRepository>("PasswordResetRepository", PasswordResetRepository);
 
   
   container.registerSingleton<IAuthCache>("AuthCache", AuthCache);
+  container.registerSingleton<INotifier>("Notifier", SocketNotifier);
+  container.register<IMailer>("Mailer", { useValue: createMailer() });
 
   // Services
   container.registerSingleton<IAuthService>("AuthService", AuthService);
+  container.registerSingleton<IPasswordResetService>("PasswordResetService", PasswordResetService);
   container.registerSingleton<IUsersService>("UsersService", UsersService);
   container.registerSingleton<IAdministrationService>("AdministrationService", AdministrationService);
   container.registerSingleton<ITablesService>("TablesService", TablesService);
+  container.registerSingleton<ISessionsService>("SessionsService", SessionsService);
+  container.registerSingleton<ICallsService>("CallsService", CallsService);
 }
 
 export { container };

@@ -7,12 +7,6 @@ export type CreateCallData = {
   type: type_call;
 };
 
-export type UpdateCallData = {
-  status?: call_state;
-  done_at?: Date;
-  done_by?: string;
-};
-
 export type CallWithTable = Prisma.callsGetPayload<{
   include: {
     table_session: { select: { id: true; table: { select: { id: true; label: true } } } };
@@ -22,13 +16,8 @@ export type CallWithTable = Prisma.callsGetPayload<{
 export interface ICallRepository {
   create(data: CreateCallData): Promise<calls>;
   findById(restaurantId: string, id: string): Promise<calls | null>;
-  findMany(restaurantId: string, filter?: { status?: call_state }): Promise<CallWithTable[]>;
-  findManyBySession(
-    restaurantId: string,
-    sessionId: string,
-    filter?: { status?: call_state },
-  ): Promise<calls[]>;
-  update(restaurantId: string, id: string, data: UpdateCallData): Promise<calls>;
+  findOpen(restaurantId: string, sessionId: string, type: type_call): Promise<calls | null>;
+  findMany(restaurantId: string, filter?: { status?: call_state; since?: Date }): Promise<CallWithTable[]>;
+  markDone(restaurantId: string, id: string, doneBy: string): Promise<Prisma.BatchPayload>;
   cancelOpenBySession(sessionId: string): Promise<Prisma.BatchPayload>;
-  delete(restaurantId: string, id: string): Promise<calls>;
 }

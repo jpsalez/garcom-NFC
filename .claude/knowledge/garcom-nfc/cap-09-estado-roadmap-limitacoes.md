@@ -1,83 +1,98 @@
 # 9. Estado de implementação, roadmap e limitações 
 
+Conferido com o código em 14/11/2026 (branch `dev`). O MVP do chamado está completo no back-end e integrado ao front; restam as pendências listadas em 9.5, nenhuma bloqueante.
+
 ## 9.1 Estado por módulo 
 
-Legenda: Completo, Parcial, Esqueleto, Vazio, Ausente. Fonte: conferência com o código do back-end (`/home/jpsalez/Projects/garcom-NFC/back-end`); o front-end não existe no repositório e não foi verificado.  
+Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-end/` e `front-end/`).  
 | Módulo / área | Estado | O que existe | O que falta |
-|---|---|---|---|  ``````````
-| Infraestrutura da API (main.ts, server.ts, routes.ts) [atualizado 12/11/2026] | Parcial | Express 5, JSON, CORS por FRONTEND_URL (pacote cors), rate limit (login 10/15 min por IP+e-mail; register 5/h por IP; desligado com NODE_ENV=test; sem trust proxy), injeção de dependência, /health, tratador de erros; porta 3000; app separado em server.ts, listen no main.ts | Prefixo /api/v1, porta 4000, servidor HTTP para Socket.IO, trust proxy (decisões pendentes) |
-| auth [Implementado] | Completo para o escopo atual | Register fluxo B (OWNER + restaurante em runInTransaction, slug automático com sufixo, resposta { user, restaurant }, erro genérico de e-mail duplicado), login com hash falso (DUMMY_PASSWORD_HASH) e bloqueio de usuário/restaurante inativo, JWT HS256 fixo, e-mail normalizado, senha mínima 8 | /auth/me, refresh |
-| users + administration [Implementado] | Completo para o escopo atual | SUPER_ADMIN: POST/GET /admin/restaurants, PATCH /admin/restaurants/:restaurantId (active), GET/POST /admin/restaurants/:restaurantId/users, PATCH/DELETE .../users/:id. OWNER: GET/POST /staff, PATCH/DELETE /staff/:id (só STAFF, restaurantId do token). Último OWNER ativo protegido (409) | Criar usuário em restaurante inativo (pendente) |
-| shared (container, Prisma, erros, validação, jwt, password, cache) | Completo para o escopo atual | Container, DbClient, hierarquia de erros, validateSchema (grava req.body = dados do schema), validateUuidParams, utilitários, auth-cache | Registrar novos services; notifier; Redis só para multi-instância |
-| Middlewares de segurança [Implementado] | Parcial | ensureAuthenticated consulta o banco (findForAuth) com cache em memória (shared/cache/auth-cache.ts, TTL 30 s, AUTH_CACHE_TTL_SECONDS; invalidação em UsersService.update/remove e AdministrationService.setRestaurantActive; contador de versão contra corrida); req.user {id, restaurantId, role} vem do banco; ensureRole; tenantOf | Token da mesa, middleware da mesa |
-| tables [atualizado 14/11/2026] | Implementado | Repository, service, controller, schemas; list/create/update com public_url; GET /tables/:id/qrcode (SVG); DELETE /tables/:id; 19 testes em back-end/tests/tables.test.ts | Rotas /deactivate, /activate, /regenerate-code (se mantidas) | ````
-| sessions | Parcial (só dados) | Repositórios de sessão e token, índice parcial na migration | Service, controller, schemas, middleware da mesa, encerramento transacional, job de expiração, renomear pasta | ````
-| calls | Parcial (só dados) | Repositório e cancelOpenBySession | Service, controller, rotas, atualização condicional de finalização, índice parcial por tipo, limite | ``
-| Tempo real (shared/realtime) | Vazio | Pasta vazia | Socket.IO, salas, autenticação, eventos | 
-| Banco (Prisma) | Completo para o MVP | 6 tabelas, enums (role SUPER_ADMIN/OWNER/STAFF, staff_category), 4 migrations (init + roles_and_staff_category + staff_category_and_checks + users_restaurant_by_role), CHECKs users_category_only_staff e users_restaurant_by_role, active em users e restaurants, índice table_sessions_one_active preservado, índices únicos e índice (restaurante, status) em chamados | Timestamps de sessão, índice parcial de chamados, campos citados em divergências | ``````````
-| Front-end Next.js (/m/[code], /balcao, /admin, /login, /cadastro) | Ausente | Nada no repositório | Todas as áreas | ``
-| Docker Compose, .env.example, CI [Implementado] | Parcial | back-end/docker-compose.yml, .env.example, .env.test, .github/workflows/ci.yml; seeds prisma/seed.ts (OWNER demo) e prisma/seed-super-admin.ts (SUPER_ADMIN por SUPER_ADMIN_EMAIL/SUPER_ADMIN_PASSWORD, 12+ caracteres) | Conferir Dockerfile e fluxo completo (RNF07) |
-| Testes [atualizado 14/11/2026] | Parcial | Modo IA ligado; suíte vitest em back-end/tests (19 testes, módulo tables) | Testes de auth, staff, admin, isolamento, concorrência, transições |   
+|---|---|---|---|
+| Infraestrutura da API (main.ts, server.ts, routes.ts) | Completo | Express 5, prefixo `/api/v1`, 27 rotas, servidor HTTP próprio com Socket.IO, CORS por `FRONTEND_URL`, rate limits, `trust proxy` por `TRUST_PROXY`, `/docs` fora de produção, exigência de `JWT_SECRET` forte em produção, injeção de dependência, tratador de erros | Testar o deploy (o `TRUST_PROXY=1` já está no compose de produção) |
+| auth | Completo | Register fluxo B (OWNER + restaurante em transação, slug automático), login com hash falso e bloqueio de inativos, JWT HS256 de 15 min, refresh token de uso único com rotação, logout, `/auth/me`, recuperação de senha por e-mail, limites de tentativa | Troca de senha com o usuário logado |
+| users + administration | Completo | SUPER_ADMIN: `/admin/restaurants` e usuários de qualquer restaurante. OWNER: `/staff`. Último OWNER ativo protegido; DEC-13 (restaurante desativado) | Tela do SUPER_ADMIN no front |
+| restaurants | Completo | Repository, slug automático | Sem exclusão por desenho (desativa-se) |
+| shared (container, Prisma, erros, validação, jwt, password, cache, utils) | Completo | Container, `DbClient` e `runInTransaction`, erros com `code`, validadores de corpo, query e UUID, `AuthCache`, utilitários de token e de URL pública | Redis só para multi-instância |
+| Middlewares | Completo | `ensureAuthenticated` (banco + cache), `ensureRole`, `tenantOf`, `userOf`, `ensureTableToken`, limiters | |
+| tables | Completo | CRUD, `public_url`, QR Code em SVG, exclusão, encerramento do atendimento ao desativar | Rotas `/deactivate`, `/activate` e `/regenerate-code` (não feitas; desativar é um PATCH) |
+| sessions | Completo | Scan público, abrir pelo balcão, listar, encerrar (transação), estender, token por aparelho (SHA-256), expiração no uso | `keep_open` nunca é escrito (virou estender, DEC-09) |
+| calls | Completo | Criar com trava de sessão, repetir devolve o aberto (DEC-03), listar (`status`, `since`, `serverTime`), finalizar condicional, índice `calls_one_open_per_type`, limite 10/5 min por token | `/me/calls` (fora do MVP, DEC-08) |
+| Tempo real (shared/realtime) | Completo (instância única) | `INotifier`/`SocketNotifier`, JWT no handshake, sala `restaurant:<id>`, eventos `call:created`, `call:done`, `session:opened`, `session:extended`, `session:closed`, `disconnectUser` e `disconnectRestaurant` | Adapter Redis e lock do job para várias instâncias |
+| Job de expiração | Completo (instância única) | `shared/jobs/session-expiry.job.ts`, 60 s, motivo TIMEOUT | |
+| Banco (Prisma) | Completo | 8 tabelas (6 do domínio, `refresh_tokens` e `password_resets`), enums, 9 migrations, CHECKs, índices parciais `table_sessions_one_active` e `calls_one_open_per_type`, índices de consulta, seeds (OWNER demo e SUPER_ADMIN) | Data de cancelamento dos chamados |
+| Front-end Next.js 16 | Parcial | `/login`, `/admin/waiter` (balcão em tempo real), `/admin/mesas` (CRUD e QR), `/admin/equipe`, `/m/[code]` (cliente), cliente da API com `ApiError` e `code`, sessão no `localStorage` | Tela do SUPER_ADMIN; cadastro de restaurante (`/cadastro`); recuperação de senha |
+| Docker Compose, .env.example, CI | Parcial | `docker-compose.yml` na raiz (db, api, web, painel, banco de teste), `.env.example`, GitHub Actions (typecheck, lint, testes) | Testar `docker-compose.prod.yml` num servidor real (os arquivos existem, mas ainda não foram executados) |
+| Testes | Completo para o MVP | vitest + supertest contra PostgreSQL real, cerca de 100 testes: auth, staff, tables, sessions, calls, realtime, session-expiry, tenant-isolation, hardening, api-v1, índices | Mais testes de concorrência e de ponta a ponta no front |
 
 ## 9.2 Estado por requisito (v0.3)  
 | Requisito | Status no documento | Estado no código |
-|---|---|---|  
-| RF01 Autocadastro (restaurante + Owner) | Definido | [Implementado] fluxo B: OWNER + restaurante em transação | 
-| RF02 Mesas e QR Code | Definido | Não implementado (repositório pronto) | 
-| RF03 Acesso do balcão | Definido | Não implementado | 
-| RF04 Tela da mesa sem login | Definido | Não implementado | 
-| RF05, RF06 Chamar garçom, pedir conta | Definido | Não implementado (repositório de chamados) | 
-| RF07 Confirmação de envio | Proposto | Não implementado | 
-| RF08 Cards em tempo real | Definido | Não implementado | 
-| RF09 Finalizar chamado | Definido | Não implementado | 
-| RF10 Encerrar atendimento e revogar tokens | Definido | Só blocos de repositório | 
-| RF11 Manter aberto | Definido | Só coluna e consulta | ``
-| RF12 Expiração em 4 h | Definido | Só findExpired; sem job | 
-| RF13 NFC (mesma URL do QR) | Definido | Sem endpoint específico, conforme o desenho; depende de RF02/RF04 | 
-| RF14 a RF19 (cardápio, comanda/KDS, avaliação, app do garçom, relatórios, integração) | Futuro | Fora do escopo; não há tabelas | 
-| RNF01 a RNF08 | Definidos/propostos | RNF01 e RNF05 parciais; RNF02 a RNF04, RNF06 e RNF07 ausentes; RNF08 compatível com o modelo |   
+|---|---|---|
+| RF01 Autocadastro (restaurante + Owner) | Definido | Implementado (fluxo B) |
+| RF02 Mesas e QR Code | Definido | Implementado (`/tables`, QR em SVG, tela `/admin/mesas`) |
+| RF03 Acesso do balcão | Definido | Implementado (`/staff`, tela `/admin/equipe`; login individual, DEC-06) |
+| RF04 Tela da mesa sem login | Definido | Implementado (`/m/[code]` e scan) |
+| RF05, RF06 Chamar garçom, pedir conta | Definido | Implementado (`POST /public/calls`) |
+| RF07 Confirmação de envio | Proposto | Implementado (201 ou 200 e mensagem na tela) |
+| RF08 Cards em tempo real | Definido | Implementado (`GET /calls`, Socket.IO, tela `/admin/waiter`) |
+| RF09 Finalizar chamado | Definido | Implementado (`PATCH /calls/:id/done`) |
+| RF10 Encerrar atendimento e revogar tokens | Definido | Implementado (`POST /sessions/:id/close`, transação) |
+| RF11 Manter aberto | Definido | Implementado como estender (`POST /sessions/:id/extend`, DEC-09) |
+| RF12 Expiração em 4 h | Definido | Implementado (job de 60 s e expiração no uso) |
+| RF13 NFC (mesma URL do QR) | Definido | Sem endpoint específico, conforme o desenho; depende só da gravação da tag |
+| RF14 a RF19 (cardápio, comanda/KDS, avaliação, app do garçom, relatórios, integração) | Futuro | Fora do escopo; não há tabelas |
+| RNF01 Isolamento por restaurante | Definido | Implementado (filtros, `tenantOf`, CHECK, teste de isolamento) |
+| RNF02 Card em até 2 s | Proposto | Implementado; a meta de 2 s ainda não foi medida |
+| RNF03 Balcão reconecta e recarrega | Definido | Implementado no front (recarga a cada `connect`) |
+| RNF04 Mesa em um toque | Definido | Implementado (tela mobile sem login) |
+| RNF05 Tokens revogáveis | Definido | Implementado (SHA-256, `revoked_at`) |
+| RNF06 Limite de chamados | Proposto | Implementado (10 por 5 min por token) |
+| RNF07 Docker Compose | Definido | Implementado para desenvolvimento; produção pendente |
+| RNF08 Cliente anônimo | Definido | Implementado por desenho (sem dado pessoal do cliente) |
 
 ## 9.3 Roadmap por fase 
 
-O backend entrega a API de cada fase primeiro; o frontend começa pelo layout e liga nos endpoints quando prontos. Equipe: 1 back-end e 1 front-end. Dependências entre parênteses.  
+O back-end entregou a API de cada fase primeiro; o front ligou nos endpoints depois. Equipe: 1 back-end e 1 front-end. Dependências entre parênteses.  
 | Fase | Itens de back-end | Itens de front-end | Marco | Estado |
-|---|---|---|---|---|  
-| 1 Fundação | BE-01 Express, TypeScript, Prisma, Docker Compose; BE-02 autocadastro, login JWT, middlewares auth e tenant (BE-01); BE-03 mesas, QR Code, acesso do balcão (BE-02) | FE-01 setup Next.js e layouts das 3 áreas; FE-02 cadastro e login (BE-02); FE-03 Admin: mesas, QR Codes, acesso do balcão (BE-03) | Restaurante com mesas e QR Codes impressos | BE-01 implementado (Compose e CI existem; atualizado 12/11/2026); BE-02 implementado (register com restaurante, login, ensureAuthenticated/ensureRole/tenantOf, papéis, gestão de equipe); BE-03 não iniciado; FE não iniciado | 
-| 2 Chamado | BE-04 atendimento da mesa e token por aparelho (BE-03); BE-05 chamados e Socket.IO na sala do balcão, finalizar (BE-04) | FE-04 tela da mesa (BE-04, BE-05); FE-05 tela do balcão em tempo real e Finalizar (BE-05) | Cliente chama e o card aparece e some no balcão | Só repositórios e schema | 
-| 3 Encerramento | BE-06 encerrar: revogar tokens e cancelar chamados (BE-05); BE-07 manter aberto, job de 4 h, limite de chamados (BE-06) | FE-06 balcão: mesas em atendimento, Encerrar, Manter aberto (BE-06, BE-07); FE-07 mesa: estado encerrado, reconexão do balcão (BE-06) | MVP completo rodando via Docker, pronto para piloto | Não iniciado | 
+|---|---|---|---|---|
+| 1 Fundação | BE-01 Express, TypeScript, Prisma, Docker Compose; BE-02 autocadastro, login JWT, middlewares auth e tenant (BE-01); BE-03 mesas, QR Code, acesso do balcão (BE-02) | FE-01 setup Next.js e layouts das áreas; FE-02 login (BE-02); FE-03 mesas, QR Codes e equipe (BE-03) | Restaurante com mesas e QR Codes impressos | **Concluída (14/11/2026).** Falta a tela de cadastro de restaurante (`/cadastro`) |
+| 2 Chamado | BE-04 atendimento da mesa e token por aparelho (BE-03); BE-05 chamados e Socket.IO na sala do balcão, finalizar (BE-04) | FE-04 tela da mesa (BE-04, BE-05); FE-05 tela do balcão em tempo real e Finalizar (BE-05) | Cliente chama e o card aparece e some no balcão | **Concluída (14/11/2026)** |
+| 3 Encerramento | BE-06 encerrar: revogar tokens e cancelar chamados (BE-05); BE-07 estender, job de 4 h, limite de chamados (BE-06) | FE-06 balcão: mesas em atendimento, Encerrar, Estender (BE-06, BE-07); FE-07 mesa: reconexão (BE-06) | MVP completo rodando via Docker, pronto para piloto | **Concluída (14/11/2026)** para desenvolvimento; produção depende de Dockerfile e `TRUST_PROXY` |
 | Depois do MVP | KDS e comanda; avaliações; app do garçom e setores; relatórios; integração com gestão/PDV | Cardápio digital e telas correspondentes | Fora do escopo do MVP | Não iniciado |   
 
-O documento de módulos propõe uma ordem de implementação própria: (1) preparação (~~renomear `seassions`~~ feito em 12/11/2026, `req.restaurantId` e `req.role`, `ensureRole`, register cria restaurante); (2) tabelas; (3) sessões do lado do garçom; (4) sessões do lado do cliente (token, entrar, middleware da mesa); (5) chamados; (6) notificador e job; (7) Socket.IO. A ordem é compatível com as fases BE-02 a BE-07 acima. A v0.2 trazia quatro fases (fundação, atendimento, comanda e cozinha, avaliação e relatórios) para o produto ampliado; foi substituída pelo roadmap da v0.3. 
+O documento de módulos propunha uma ordem própria: (1) preparação; (2) tabelas; (3) sessões do lado do garçom; (4) sessões do lado do cliente; (5) chamados; (6) notificador e job; (7) Socket.IO. A ordem executada foi compatível com BE-02 a BE-07. A v0.2 trazia quatro fases (fundação, atendimento, comanda e cozinha, avaliação e relatórios) para o produto ampliado; foi substituída pelo roadmap da v0.3. 
 
 ## 9.4 Limitações e riscos 
 
 ### 9.4.1 Limitações do MVP (por decisão) 
  
 - Sem cardápio, comanda, KDS, avaliações, relatórios, setores, app do garçom no celular nem integração com PDV. 
-- O balcão é um acesso compartilhado em um computador; o registro do garçom individual que finalizou depende de decisão em aberto. 
+- O cliente não acompanha o chamado nem recebe eventos em tempo real (DEC-08); só a confirmação de envio. 
+- Cada garçom entra com o próprio usuário (DEC-06), mas a tela do balcão é única num computador. 
 - Sem pagamento, sem aviso de pedido pronto, sem estações de cozinha. 
-- Uma única instância da API; com mais de uma é preciso um adapter Redis para o Socket.IO e coordenar o job de expiração.  
+- Uma única instância da API: com mais de uma é preciso um adapter Redis para o Socket.IO e coordenar o job de expiração. 
 
 ### 9.4.2 Riscos técnicos 
  
-- **Vazamento entre restaurantes** [parcialmente mitigado em 12/11/2026]: CHECK users_restaurant_by_role (OWNER e STAFF sempre com restaurante) e req.user vindo do banco reduzem o risco; ainda depende de disciplina em cada consulta e faltam testes de isolamento. 
-- **Concorrência:** abrir atendimento e finalizar chamado exigem garantia no banco; só o primeiro índice existe. 
-- **Estado parcial no encerramento:** sem transação, é possível fechar a sessão sem revogar tokens. O encerramento deve ser sempre transacional. 
-- **Expiração dependente de job:** mitigada pela verificação em cada requisição. 
-- **Tempo real:** perda de eventos em quedas de rede; mitigada por recarga REST na reconexão; meta de 2 s não validada. 
-- **Abuso da rota pública:** abrir atendimento no primeiro scan permite uso por quem tem apenas a foto do QR; limitação de taxa, limite de chamados, expiração e revogação são as defesas, todas planejadas. 
-- **Falta de timestamps:** sessão sem criação/fechamento e chamado cancelado sem data dificultam auditoria e relatórios futuros. 
-- **Servidor escuta ao importar** [resolvido]: hoje `server.ts` só cria o app; a escuta fica no `main.ts` após rotas e errorHandler. Ainda não há testes. 
-- **NFC:** travar a etiqueta é irreversível; domínio e formato da URL devem estar definidos antes. 
-- **Inconsistências de documentação:** as quatro fontes divergem em pontos importantes (Apêndice A), com risco de implementar o desenho errado. 
-- **Operação:** sem Compose, sem testes e sem front, a verificação ponta a ponta ainda não é possível.  
+- **Vazamento entre restaurantes** [mitigado]: filtros nos repositories, `tenantOf`, CHECK `users_restaurant_by_role`, `req.user` vindo do banco, teste de isolamento e o script `check_tenant.py`; ainda depende de disciplina em cada consulta nova. 
+- **Concorrência** [tratada]: índices `table_sessions_one_active` e `calls_one_open_per_type`, `closeIfActive` e `markDone` condicionais, trava `FOR SHARE` da sessão ao criar chamado e encerramento transacional. Ficam abertos: `extend` não condicional e "último OWNER" não atômico. 
+- **Perda de evento entre o commit e a emissão** [aceito]: sem outbox; o balcão recarrega por REST a cada reconexão. 
+- **Tempo real:** o JWT só é conferido na conexão (desativar ou excluir derruba o socket); a meta de 2 s não foi medida. 
+- **Abuso da rota pública:** o primeiro scan abre atendimento, então quem tem a foto do QR pode abri-lo; defesas: limite de scan, limite de chamados, expiração em 4 h e revogação. Um valor errado de `TRUST_PROXY` enfraquece os limites por IP. 
+- **Token no `localStorage`** (balcão e aparelho do cliente): risco de XSS; alternativa futura é cookie httpOnly. 
+- **Timestamps:** a sessão tem `created_at` e `closed_at` desde 14/11/2026 (os antigos ficaram sem `closed_at`); o chamado cancelado ainda não tem data, o que dificulta auditoria e relatórios. 
+- **Dependências:** `npm audit` do back-end aponta 3 vulnerabilidades altas na cadeia do CLI do Prisma; a correção exige `--force` e pula versão. 
+- **NFC:** travar a etiqueta é irreversível; domínio e formato da URL (`PUBLIC_APP_URL`) devem estar definidos antes. 
+- **E-mail duplicado** revela a existência do usuário na criação por OWNER ou SUPER_ADMIN (o autocadastro responde de forma genérica). 
+- **Operação:** o compose de produção existe (`docker-compose.prod.yml`, com `TRUST_PROXY=1` atrás do Caddy), mas ainda não foi testado num servidor; exige `DOMAIN`, `POSTGRES_PASSWORD` e `JWT_SECRET` próprios. 
 
 ### 9.4.3 Pontos a validar do MVP (v0.3) 
+
+Todos decididos em 13–14/11/2026 (ver 2.7.1): alerta sonoro (sim, DEC-10), registrar o garçom (sim, DEC-06), um card por tipo e sessão (DEC-03), novo scan abre atendimento na hora (DEC-07), cliente vê só a confirmação de envio (DEC-08) e estender só no balcão (DEC-09). Em aberto: nome definitivo do produto e cobrança (planos). 
+
+## 9.5 Pendências e próximos passos (não bloqueantes) 
  
-- Alerta sonoro no balcão ao chegar um card. 
-- Registrar qual garçom finalizou, ou basta um acesso único. 
-- Vários clientes chamando: um card por chamado ou por mesa e tipo. 
-- Após encerrar, um novo scan abre atendimento imediatamente. 
-- O cliente vê se o chamado foi finalizado ou só a confirmação de envio. 
-- "Manter aberto" só no balcão ou também pelo cliente. 
-- Nome definitivo do produto e cobrança (planos).
+- **Segurança de produção:** decisão sobre cookie httpOnly (o `TRUST_PROXY` já vem definido no compose de produção). 
+- **Infra:** testar o compose de produção (`docker-compose.prod.yml`) num servidor; mesclar a `dev` na `main`. 
+- **Back-end:** troca de senha com o usuário logado; `extend` condicional; timestamps nos chamados cancelados. 
+- **Front:** tela do SUPER_ADMIN (restaurantes e usuários); tela de cadastro (`/cadastro`). 
+- **Qualidade:** rodar `docker compose up` e `npm test` no ambiente do desenvolvedor (a suíte foi validada com um PostgreSQL local); mais testes de concorrência. 
+- **Documentação:** regerar o PDF consolidado quando o código mudar de forma relevante. 

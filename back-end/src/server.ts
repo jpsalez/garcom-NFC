@@ -1,11 +1,18 @@
 import cors from "cors";
 import express from "express";
+import helmet from "helmet";
 import type { Application } from "express";
 
 const app: Application = express();
 
+// Cabeçalhos de segurança (já remove o x-powered-by). Sem CSP: a API só devolve JSON e o Swagger de /docs usa scripts inline
+app.use(helmet({ contentSecurityPolicy: false }));
+// Atrás de proxy reverso: quantos proxies ficam à frente da API (sem isso, o IP dos limites seria o do proxy)
+const proxyHops = Number(process.env.TRUST_PROXY);
+if (proxyHops > 0) app.set("trust proxy", proxyHops);
+
 // FRONTEND_URL: endereço(s) do front, separados por vírgula. Sem ela, nenhuma origem de navegador é liberada.
-const allowedOrigins = (process.env.FRONTEND_URL ?? "")
+export const allowedOrigins = (process.env.FRONTEND_URL ?? "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);

@@ -26,6 +26,11 @@ export class UserRepository implements IUserRepository {
     return this.db.users.findUnique({ where: { id }, include: { restaurant: { select: { active: true } } } });
   }
 
+  // Troca de senha pelo próprio dono do e-mail (link por e-mail): não há restaurante no contexto
+  setPassword(id: string, passwordHash: string) {
+    return this.db.users.update({ where: { id }, data: { password_hash: passwordHash } });
+  }
+
   findById(restaurantId: string, id: string) {
     return this.db.users.findUnique({ where: { id, restaurant_id: restaurantId } });
   }

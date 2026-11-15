@@ -1,6 +1,8 @@
 ## C.4 Desenho proposto no documento de módulos para as peças não implementadas 
 
-Esta seção descreve, em prosa, o desenho que o documento de módulos (MOD, seções 12 a 20) propõe para o que ainda não existe: utilitário de token, extensão de tipos e middlewares, notificador de tempo real, serviço de mesas, serviço de sessões, middleware de sessão da mesa, serviço de chamados, tarefa de expiração, relação entre services e rotas. Tudo é **[Proposto] (MOD)** e **[Planejado]**; a duração padrão de sessão do exemplo (3 horas) diverge da v0.2 e v0.3 (4 horas), registrada em DV-03. 
+> **Histórico (atualização 14/11/2026).** Todas as peças abaixo foram implementadas (utilitário de token, middlewares, notificador, services de mesas, sessões e chamados, job de expiração), com diferenças registradas nos capítulos 5 a 8 e nas decisões DEC-01 a DEC-13 (rotas `POST /public/tables/:code/scan` e `POST /sessions/:id/extend`, eventos com dois pontos, 4 h de duração, chamado repetido devolve 200 em vez de 409). O texto a seguir é o desenho original.
+
+Esta seção descreve, em prosa, o desenho que o documento de módulos (MOD, seções 12 a 20) propunha para o que ainda não existia: utilitário de token, extensão de tipos e middlewares, notificador de tempo real, serviço de mesas, serviço de sessões, middleware de sessão da mesa, serviço de chamados, tarefa de expiração, relação entre services e rotas. Tudo é **[Proposto] (MOD)** e **[Planejado]**; a duração padrão de sessão do exemplo (3 horas) diverge da v0.2 e v0.3 (4 horas), registrada em DV-03. 
 **Antes de implementar.** Os nomes de rotas e de eventos do MOD diferem da v0.3 (DV-37 e DV-38). Os nomes abaixo são os do MOD; a escolha final precisa ser validada. 
 
 _Figura: **Figura C.2** – Ordem de implementação proposta pelo documento de módulos (sete etapas). (Ver seção C.4.9)_ 
@@ -18,7 +20,7 @@ A extensão do tipo de requisição ganharia quatro campos: identificador do usu
 
 ### C.4.3 Notificador de tempo real (MOD seção 13.4) 
 
-Interface com duas operações: enviar para o restaurante inteiro e enviar para a sessão. A primeira implementação, que apenas escreve no console, é registrada no contêiner como "Notifier", permitindo desenvolver services e testes sem Socket.IO; a implementação final emitiria para as salas do restaurante e da sessão, e o service continuaria idêntico. Regra importante (MOD e GUIA): **emitir somente depois do commit**. 
+[Implementado em 14/11/2026 com um método só, `toRestaurant`, e `SocketNotifier`; o cliente não usa tempo real, DEC-08.] Desenho original: interface com duas operações: enviar para o restaurante inteiro e enviar para a sessão. A primeira implementação, que apenas escreve no console, é registrada no contêiner como "Notifier", permitindo desenvolver services e testes sem Socket.IO; a implementação final emitiria para as salas do restaurante e da sessão, e o service continuaria idêntico. Regra importante (MOD e GUIA): **emitir somente depois do commit**. 
 
 ### C.4.4 Serviço de mesas, perfil ADMIN (MOD seção 14) 
 
