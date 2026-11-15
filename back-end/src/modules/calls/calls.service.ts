@@ -59,8 +59,8 @@ export class CallsService implements ICallsService {
     return { call: view, created: true };
   }
 
-  async list(restaurantId: string, status: call_state, since?: Date) {
-    const calls = await this.callRepository.findMany(restaurantId, { status, since });
+  async list(restaurantId: string, status: call_state, page: { since?: Date; limit: number; offset: number }) {
+    const calls = await this.callRepository.findMany(restaurantId, { status, ...page });
     // serverTime deixa o balcão corrigir o relógio do cronômetro (DEC-03)
     return { serverTime: new Date(), calls: calls.map((c) => toView(c, c.table_session.table.label)) };
   }

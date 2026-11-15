@@ -20,8 +20,8 @@ export class CallsController {
   };
 
   list = async (req: Request, res: Response) => {
-    const { status, since } = listCallsQuery.parse(req.query);
-    return res.status(200).json(await this.callsService.list(tenantOf(req), status, since));
+    const { status, ...page } = listCallsQuery.parse(req.query);
+    return res.status(200).json(await this.callsService.list(tenantOf(req), status, page));
   };
 
   done = async (req: Request, res: Response) => {

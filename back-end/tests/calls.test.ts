@@ -173,6 +173,19 @@ describe("GET /calls?since=", () => {
   });
 });
 
+describe("GET /calls?limit=&offset=", () => {
+  it("pagina em ordem de chegada e recusa limit acima de 1000", async () => {
+    const { token, restaurantId } = await ownerOf("a");
+    for (const label of ["M1", "M2", "M3"]) await callAs((await tableWithDevice(restaurantId, label)).deviceToken);
+    const labels = async (query: string) =>
+      (await api().get(`/api/v1/calls?${query}`).set(auth(token))).body.calls.map((c: { table: { label: string } }) => c.table.label);
+
+    expect(await labels("limit=2")).toEqual(["M1", "M2"]);
+    expect(await labels("limit=2&offset=2")).toEqual(["M3"]);
+    expect((await api().get("/api/v1/calls?limit=1001").set(auth(token))).status).toBe(400);
+  });
+});
+
 describe("PATCH /calls/:id/done", () => {
   it("STAFF finaliza e done_by recebe o id dele (DEC-06)", async () => {
     const { token, restaurantId } = await ownerOf("a");
