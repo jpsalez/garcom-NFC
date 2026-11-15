@@ -16,10 +16,23 @@ export function scanTable(code: string) {
 }
 
 // Gestão das mesas (OWNER). Desativar encerra o atendimento aberto; excluir só vale sem histórico (409 TABLE_HAS_SESSIONS).
-export const listTables = () => api<Table[]>("/tables");
-export const createTable = (label: string) => api<Table>("/tables", { method: "POST", body: { label } });
-export const updateTable = (id: string, body: { label?: string; active?: boolean }) =>
-  api<Table>(`/tables/${id}`, { method: "PATCH", body });
-export const removeTable = (id: string) => api<void>(`/tables/${id}`, { method: "DELETE" });
+export function listTables() {
+  return api<Table[]>("/tables");
+}
+
+export function createTable(label: string) {
+  return api<Table>("/tables", { method: "POST", body: { label } });
+}
+
+export function updateTable(id: string, body: { label?: string; active?: boolean }) {
+  return api<Table>(`/tables/${id}`, { method: "PATCH", body });
+}
+
+export function removeTable(id: string) {
+  return api<void>(`/tables/${id}`, { method: "DELETE" });
+}
+
 // SVG do QR Code; gerar o QR de uma mesa inativa a reativa
-export const tableQrCode = (id: string) => api<string>(`/tables/${id}/qrcode`, { text: true });
+export function tableQrCode(id: string) {
+  return api<string>(`/tables/${id}/qrcode`, { text: true });
+}
