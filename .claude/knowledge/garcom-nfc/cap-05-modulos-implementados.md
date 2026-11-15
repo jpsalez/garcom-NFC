@@ -97,7 +97,7 @@ _Figura: **Figura 5.1** – Passo a passo do cadastro (POST /auth/register). (Ve
 - **Busca.** `userRepository.findByEmail` localiza o usuário pelo e-mail (sem tenant). 
 - **Comparação de senha.** `comparePassword` recalcula o scrypt com o sal armazenado e compara em tempo constante. Se o usuário não existe, compara contra `DUMMY_PASSWORD_HASH`, de modo que o tempo de resposta não revela se o e-mail existe (DV-19 resolvida). 
 - **Decisão.** Se o usuário não existe, a senha está errada, o usuário está desativado ou o restaurante dele está desativado, lança `UnauthorizedError` com a mesma mensagem "E-mail ou senha inválidos", para não revelar a causa. 
-- **Emissão do token.** `signToken` assina um JWT HS256 com `sub` (id do usuário), `restaurantId` (nulo só para o SUPER_ADMIN) e `role`; validade lida de `JWT_EXPIRES_IN` (padrão 1 dia). 
+- **Emissão do token.** `signToken` assina um JWT HS256 com `sub` (id do usuário), `restaurantId` (nulo só para o SUPER_ADMIN) e `role`; validade lida de `JWT_EXPIRES_IN` (padrão 15 minutos); junto com ele o login entrega um refresh token (ver 5.2.7). 
 - **Saída.** Devolve token e usuário público (sem hash).  
 
 _Figura: **Figura 5.2** – Passo a passo do login (POST /auth/login). (Ver seção 5.2.5)_  
@@ -110,13 +110,24 @@ _Figura: **Figura 5.2** – Passo a passo do login (POST /auth/login). (Ver seç
 | Tentativas em excesso | 429 (limiter) | 
 | Hash armazenado em formato inesperado (sem separador) | comparação devolve falso, portanto 401 | ``
 | JWT_SECRET ausente no ambiente | exceção comum ao assinar, resultando em 500 (erro de configuração) |   
-**Ausências de segurança [Planejado/Não implementado].** Não há renovação de token (refresh), recuperação de senha nem `/auth/me`. O JWT vale até expirar, mas, como `ensureAuthenticated` consulta o banco (com cache de 30 s), desativar ou excluir o usuário corta o acesso na hora (ver 5.3.2). 
+**Ausências de segurança [Planejado/Não implementado].** Não há recuperação de senha. O JWT de acesso dura pouco e é renovado pelo refresh token (5.2.8); como `ensureAuthenticated` consulta o banco (com cache de 30 s), desativar ou excluir o usuário corta o acesso na hora (ver 5.3.2). 
 
 ### 5.2.6 Controller (`auth.controller.ts`) 
 
 Classe injetável cuja dependência é o service, obtida pelo nome "AuthService" (o controller depende da interface, não da classe concreta). Os dois métodos são funções-seta (atributos de instância) para que o valor de `this` não se perca quando o Express os usa como callbacks nas rotas. Cada método tem três linhas: ler o corpo (convertido por afirmação de tipo, já validado pelo middleware), chamar o service e responder. Não há regra de negócio nem tratamento de exceções. 
 
-### 5.2.7 Tabela de códigos HTTP do módulo  
+### 5.2.7 Renovação do login (refresh token), logout e `/auth/me` 
+
+**[Implementado, 14/11/2026]** O login (e cada renovação) devolve `{ token, refreshToken, user }`: `token` é o JWT de acesso (padrão 15 min, `JWT_EXPIRES_IN`) e `refreshToken` é um valor opaco de 32 bytes que vale 30 dias (`REFRESH_TOKEN_TTL_DAYS`); no banco (`refresh_tokens`) fica só o hash SHA-256. 
+ 
+- **`POST /auth/refresh`** `{ refreshToken }`: se o token existe, não foi usado e não venceu, ele é revogado (atualização condicional, de modo que dois pedidos simultâneos não passam os dois) e o service confere o usuário e o restaurante no banco (desativados não renovam); devolve um par novo. Token desconhecido, vencido ou de usuário inativo dá 401 "Sessão expirada. Entre novamente". 
+- **Rotação com detecção de reuso:** se chega um token que já foi trocado, todas as sessões do usuário são revogadas e a resposta é 401, porque o valor pode ter sido copiado. 
+- **`POST /auth/logout`** `{ refreshToken }`: revoga o token e responde 204 (token desconhecido também dá 204). 
+- **`GET /auth/me`** (JWT): devolve o usuário logado, lido do banco, sem o hash. 
+- Limite de 60 renovações ou logouts por 15 min por IP (`refreshLimiter`). Os arquivos são `refresh-tokens.repository.ts` e `refresh-tokens.repository.interface.ts`, em `modules/auth`. Testes em `tests/auth.test.ts`. 
+- **Front:** o `lib/api.ts` renova uma vez ao receber 401 com token do balcão e repete o pedido (pedidos simultâneos compartilham uma só renovação); o socket relê o token a cada conexão; sair chama `/auth/logout`. 
+
+### 5.2.8 Tabela de códigos HTTP do módulo  
 | Código | Quando | Origem |
 |---|---|---|  ``
 | 200 | Login bem-sucedido; /health | controller / rota | 

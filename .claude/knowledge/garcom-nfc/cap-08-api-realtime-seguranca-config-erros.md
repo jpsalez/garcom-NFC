@@ -15,7 +15,10 @@ Todas as rotas abaixo estão implementadas (27 no total) e montadas sob `/api/v1
 |---|---|---|---|
 | GET /health | Verificar se a API responde | Sem entrada; 200 `{ message: "API Healthy" }` | Healthcheck do compose |
 | POST /auth/register | Autocadastro: restaurante + OWNER (RF01) | Entrada: name, email, password (8 a 128), restaurantName; 201 `{ user, restaurant }` | Fluxo B em transação; e-mail duplicado com erro genérico; 5 por hora por IP |
-| POST /auth/login | Obter JWT | Entrada: email, password; 200 `{ token, user }`; 401 "E-mail ou senha inválidos" | 10 por 15 min por IP+e-mail e 30 por 15 min por IP |
+| POST /auth/login | Obter JWT e refresh token | Entrada: email, password; 200 `{ token, refreshToken, user }`; 401 "E-mail ou senha inválidos" | 10 por 15 min por IP+e-mail e 30 por 15 min por IP |
+| POST /auth/refresh | Trocar o refresh token por um par novo | Entrada: refreshToken; 200 `{ token, refreshToken, user }`; 401 se desconhecido, usado, vencido ou usuário inativo | O token antigo deixa de valer; reuso de um já trocado encerra todas as sessões do usuário; 60 por 15 min por IP |
+| POST /auth/logout | Revogar o refresh token | Entrada: refreshToken; 204 (também para token desconhecido) | Mesmo limite do refresh |
+| GET /auth/me | Usuário logado | JWT; 200 com o usuário sem o hash | |
 | POST /public/tables/:code/scan | Entrar no atendimento ativo ou abrir; devolve o token do aparelho | 200 `{ token, expires_at, table: { label }, restaurant: { name } }`; 404 se a mesa não existe, está inativa ou o restaurante está desativado | POST por ter efeito colateral; 30 por 15 min por IP+mesa; substitui `GET /public/tables/:code` e `POST /public/tables/:code/token` da v0.3 |
 
 ### 8.2.2 Da mesa (token de aparelho)  
@@ -74,7 +77,7 @@ O documento de módulos previa `PATCH /sessions/:id` (keepOpen) e `POST /tables/
 
 ### 8.4.1 Autenticação 
  
-- **Usuários (OWNER e STAFF; SUPER_ADMIN na API):** JWT HS256 assinado com `JWT_SECRET`, contendo `sub`, `restaurantId` e `role`; validade por `JWT_EXPIRES_IN` (padrão 1 dia). **[Implementado]**. Senha com scrypt (salt aleatório de 16 bytes, chave de 64 bytes, formato `salt:hash`), de 8 a 128 caracteres, e comparação em tempo constante; a documentação cita argon2 ou bcrypt (RNF05; DV-22). 
+- **Usuários (OWNER e STAFF; SUPER_ADMIN na API):** JWT HS256 assinado com `JWT_SECRET`, contendo `sub`, `restaurantId` e `role`; validade por `JWT_EXPIRES_IN` (padrão 15 minutos, renovado pelo refresh token). **[Implementado]**. Senha com scrypt (salt aleatório de 16 bytes, chave de 64 bytes, formato `salt:hash`), de 8 a 128 caracteres, e comparação em tempo constante; a documentação cita argon2 ou bcrypt (RNF05; DV-22). 
 - **Mensagens anti-enumeração [Implementado]:** o login devolve a mesma mensagem para e-mail inexistente, senha errada e usuário ou restaurante desativado, e compara contra `DUMMY_PASSWORD_HASH` quando o usuário não existe (tempo uniforme); o cadastro responde com erro genérico para e-mail duplicado. 
 - **CORS e rate limit [Implementado]:** CORS por `FRONTEND_URL` (lista separada por vírgula; sem ela nenhuma origem de navegador). Rate limit em memória (`express-rate-limit`), desligado com `NODE_ENV=test`: login 10 por 15 min por IP+e-mail e 30 por 15 min só por IP; cadastro 5 por hora por IP; scan 30 por 15 min por IP+mesa; chamados 10 por 5 min por token do aparelho. Resposta 429. Atrás de proxy reverso é preciso `TRUST_PROXY` (número de proxies), senão o IP dos limites é o do proxy; um valor maior que o real deixa o IP forjável por `X-Forwarded-For`. 
 - **Aparelho da mesa [Implementado]:** token opaco por aparelho, hash SHA-256 no banco, cabeçalho `X-Table-Token` (seção 7.4). 
@@ -123,7 +126,8 @@ Classe base `AppError` (mensagem, status, detalhes opcionais e `code`) e subclas
 |---|---|---|---|  ````
 | DATABASE_URL | api | String de conexão PostgreSQL (também lida por prisma.config.ts) | Usada |
 | JWT_SECRET | api | Segredo do JWT; ausência provoca erro; em produção a API não sobe com menos de 32 caracteres ou com o padrão de desenvolvimento | Usada |
-| JWT_EXPIRES_IN | api | Validade do JWT; padrão 1d; não consta na documentação v0.3 | Usada |
+| JWT_EXPIRES_IN | api | Validade do JWT de acesso; padrão 15m; não consta na documentação v0.3 | Usada |
+| REFRESH_TOKEN_TTL_DAYS | api | Validade do refresh token, em dias; padrão 30 | Usada |
 | PORT | api | Porta da API (padrão 4000) | Usada |
 | FRONTEND_URL (substitui CORS_ORIGIN) | api | Origem(ns) do front, separadas por vírgula; alimenta o CORS e o Socket.IO | Usada |
 | PUBLIC_APP_URL (era PUBLIC_WEB_URL) | api | Base da URL pública da mesa e do QR Code (`/m/<código>`); obrigatória na subida; padrão `http://localhost:3000` no `.env.example` e no compose (DV-43 resolvida) | Usada |
@@ -154,4 +158,4 @@ Classe base `AppError` (mensagem, status, detalhes opcionais e `code`) e subclas
 | LGPD (RNF08) | Cliente anônimo; nenhum dado pessoal coletado | Consistente com o modelo (sem dados do cliente) | 
 | Validação de entrada | Zod em corpo, query e parâmetros | Impl.; o resultado validado substitui `req.body` | 
 | Vazamento de erros | 500 genérico sem detalhes; log de erro do Prisma só com nome e código | Impl. | 
-| Sessão do usuário | Sem refresh nem recuperação de senha | [Pendente] |
+| Sessão do usuário | JWT curto (15 min) e refresh token de uso único com rotação e detecção de reuso | Impl.; recuperação de senha [Pendente] |

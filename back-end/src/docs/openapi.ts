@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createRestaurantSchema, setActiveSchema } from "../modules/administration/administration.schema.ts";
-import { createUserSchema, loginUserSchema } from "../modules/auth/auth.schema.ts";
+import { createUserSchema, loginUserSchema, refreshSchema } from "../modules/auth/auth.schema.ts";
 import { createCallSchema } from "../modules/calls/calls.schemas.ts";
 import { createTableSchema, updateTableSchema } from "../modules/tables/tables.schemas.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "../modules/users/users.schema.ts";
@@ -68,7 +68,16 @@ export const openApiSpec = {
       post: operation({ tag: "Auth", summary: "Cadastra restaurante e dono", success: 201, body: createUserSchema, auth: false }),
     },
     "/auth/login": {
-      post: operation({ tag: "Auth", summary: "Login (retorna token e usuário)", body: loginUserSchema, auth: false }),
+      post: operation({ tag: "Auth", summary: "Login (retorna token de acesso, refresh token e usuário)", body: loginUserSchema, auth: false }),
+    },
+    "/auth/refresh": {
+      post: operation({ tag: "Auth", summary: "Troca o refresh token por um par novo (o antigo deixa de valer)", body: refreshSchema, auth: false }),
+    },
+    "/auth/logout": {
+      post: operation({ tag: "Auth", summary: "Revoga o refresh token", success: 204, body: refreshSchema, auth: false }),
+    },
+    "/auth/me": {
+      get: operation({ tag: "Auth", summary: "Dados do usuário logado" }),
     },
     "/admin/restaurants": {
       get: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Lista restaurantes" }),

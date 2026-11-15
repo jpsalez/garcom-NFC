@@ -1,7 +1,8 @@
 import type { Request , Response } from "express"
 import { inject, injectable } from "tsyringe"
 import type { IAuthService } from "./auth.interfaces.ts"
-import type { createUserInput, loginUserInput } from '../auth/auth.schema.ts';
+import type { createUserInput, loginUserInput, refreshInput } from '../auth/auth.schema.ts';
+import { userOf } from "../../shared/middlewares/auth.middleware.ts";
 
 // Sem try/catch: erros lançados pelo service vão para o errorHandler global
 @injectable()
@@ -26,5 +27,22 @@ export class AuthController {
         const result = await this.authService.login(credentials);
 
         return res.status(200).json(result);
+    }
+
+    refresh = async (req : Request, res : Response) => {
+        const { refreshToken } = req.body as refreshInput;
+
+        return res.status(200).json(await this.authService.refresh(refreshToken));
+    }
+
+    logout = async (req : Request, res : Response) => {
+        const { refreshToken } = req.body as refreshInput;
+
+        await this.authService.logout(refreshToken);
+        return res.status(204).send();
+    }
+
+    me = async (req : Request, res : Response) => {
+        return res.status(200).json(await this.authService.me(userOf(req)));
     }
 }

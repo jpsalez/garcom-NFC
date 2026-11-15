@@ -39,6 +39,7 @@ model users {
   active       Boolean          @default(true)
   tableSessions table_sessions[]
   calls         calls[]
+  refresh_tokens refresh_tokens[]
 }
 
 model tables {
@@ -137,4 +138,17 @@ enum staff_category {
   CLEANING
   KITCHEN
   OTHER
+}
+
+// Renovação do login: o valor existe só no aparelho do usuário; o banco guarda o hash. Cada uso gera um novo e revoga o anterior.
+model refresh_tokens {
+  id         String    @id @default(uuid())
+  user_id    String
+  user       users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  token_hash String    @unique
+  expires_at DateTime
+  revoked_at DateTime?
+  created_at DateTime  @default(now())
+
+  @@index([user_id])
 }

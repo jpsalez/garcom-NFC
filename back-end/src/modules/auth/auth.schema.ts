@@ -17,3 +17,7 @@ export const loginUserSchema = z.object({
     password: z.string()
 });
 export type loginUserInput = z.infer<typeof loginUserSchema>;
+
+// Refresh e logout recebem o refresh token que o login entregou
+export const refreshSchema = z.object({ refreshToken: z.string().min(1).max(200) });
+export type refreshInput = z.infer<typeof refreshSchema>;

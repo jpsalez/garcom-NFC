@@ -28,7 +28,7 @@ _Figura: **Figura 3.2** – Arquitetura implementada em 14/11/2026: front Next.j
 |---|---|---|---|  
 | Front-end Next.js | Quatro áreas (mesa, balcão, Admin, cadastro/login) | `/m/[code]` (cliente), `/login`, `/admin/waiter` (balcão), `/admin/mesas` e `/admin/equipe` (OWNER); sem tela do SUPER_ADMIN nem cadastro | Parcial |
 | API Express + TypeScript | Porta 4000, prefixo /api/v1 | Porta 4000 (`PORT`), prefixo `/api/v1`, 27 rotas, Swagger em `/docs` fora de produção | Implementado |
-| PostgreSQL + Prisma | 6 tabelas, migrations versionadas | 6 tabelas e 7 migrations (duas escritas à mão por causa dos índices parciais) | Implementado |
+| PostgreSQL + Prisma | 6 tabelas, migrations versionadas | 7 tabelas (6 do domínio e `refresh_tokens`) e 8 migrations (duas escritas à mão por causa dos índices parciais) | Implementado |
 | Camadas controller/service/repository | Sim, com Zod na entrada | Completa em auth, users/administration, tables, sessions e calls | Implementado |
 | Injeção de dependência | Não detalhada na v0.3; citada no guia e nos módulos | tsyringe com tokens de texto (repositories, serviços, `Notifier`, `AuthCache`) | Implementado |
 | Middleware de autenticação | JWT e token da mesa | `ensureAuthenticated` (JWT + consulta ao banco com cache), `ensureTableToken` (token do aparelho) | Implementado |
@@ -175,7 +175,7 @@ Há exceções deliberadas, todas documentadas no código ou nos guias:
 | Caminho (em back-end/) | Conteúdo e função |
 |---|---|  ``````````````````````
 | package.json, tsconfig.json, prisma.config.ts, .env | Dependências e scripts (dev, test, typecheck, lint, db:seed, db:seed:super-admin, test:db:up/down), configuração do compilador e do Prisma; .env (não versionado; modelo em `.env.example`). |
-| prisma/schema.prisma e prisma/migrations/ | Fonte da verdade do modelo de dados e histórico SQL: 7 migrations (init, roles_and_staff_category, staff_category_and_checks, users_restaurant_by_role, calls_one_open_per_type, indexes_consultas_e_fks, sessions_created_at_closed_at). Seeds: `seed.ts` (OWNER demo e 5 mesas) e `seed-super-admin.ts`. |
+| prisma/schema.prisma e prisma/migrations/ | Fonte da verdade do modelo de dados e histórico SQL: 8 migrations (init, roles_and_staff_category, staff_category_and_checks, users_restaurant_by_role, calls_one_open_per_type, indexes_consultas_e_fks, sessions_created_at_closed_at, refresh_tokens). Seeds: `seed.ts` (OWNER demo e 5 mesas) e `seed-super-admin.ts`. |
 | generated/prisma | Client gerado pelo Prisma; não deve ser editado nem versionado. |
 | src/main.ts, src/server.ts, src/routes.ts | Bootstrap (servidor HTTP, Socket.IO, job), criação do `app` (CORS, JSON, trust proxy) e definição das 27 rotas. |
 | src/docs/openapi.ts | Especificação OpenAPI servida em `/docs` fora de produção. |
@@ -231,7 +231,7 @@ Donos dos dados: `tables` pertence a `TablesService`; `table_sessions` e `sessio
 
 Execução: `docker compose up` na raiz; a API fica em `localhost:4000` (docs em `/docs`) e o front em `localhost:3000`. O compose passa à API `FRONTEND_URL`, `PUBLIC_APP_URL` e `JWT_SECRET`.
 
-Variáveis de ambiente usadas pelo código: `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN` (padrão `1d`), `PORT` (padrão 4000), `FRONTEND_URL` (CORS e Socket.IO), `PUBLIC_APP_URL` (obrigatória; forma a URL do QR Code), `TABLE_SESSION_TTL` (padrão 14400 s), `TRUST_PROXY`, `AUTH_CACHE_TTL_SECONDS` (padrão 30; 0 desliga), `NODE_ENV`, e, só para o seed, `SUPER_ADMIN_EMAIL` e `SUPER_ADMIN_PASSWORD`. No front: `NEXT_PUBLIC_API_URL` (padrão `http://localhost:4000/api/v1`). As variáveis `CORS_ORIGIN` e `PUBLIC_WEB_URL` da especificação foram substituídas por `FRONTEND_URL` e `PUBLIC_APP_URL` (DV-43). Detalhes de configuração aparecem na seção 8. 
+Variáveis de ambiente usadas pelo código: `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN` (padrão `15m`), `REFRESH_TOKEN_TTL_DAYS` (padrão 30), `PORT` (padrão 4000), `FRONTEND_URL` (CORS e Socket.IO), `PUBLIC_APP_URL` (obrigatória; forma a URL do QR Code), `TABLE_SESSION_TTL` (padrão 14400 s), `TRUST_PROXY`, `AUTH_CACHE_TTL_SECONDS` (padrão 30; 0 desliga), `NODE_ENV`, e, só para o seed, `SUPER_ADMIN_EMAIL` e `SUPER_ADMIN_PASSWORD`. No front: `NEXT_PUBLIC_API_URL` (padrão `http://localhost:4000/api/v1`). As variáveis `CORS_ORIGIN` e `PUBLIC_WEB_URL` da especificação foram substituídas por `FRONTEND_URL` e `PUBLIC_APP_URL` (DV-43). Detalhes de configuração aparecem na seção 8. 
 
 [Implementado, ainda não testado em servidor] Produção: `back-end/Dockerfile` (Node 22 slim com OpenSSL, `npm ci`, `prisma generate`, `prisma migrate deploy` e `tsx src/main.ts` na subida), `front-end/Dockerfile` (`next build` e `next start`; `NEXT_PUBLIC_API_URL` entra no build) e `docker-compose.prod.yml` na raiz com db (sem porta exposta), api, web e Caddy (TLS automático, portas 80 e 443, um só domínio: `/api` e `/socket.io` vão à API, o resto ao front). A API roda com `NODE_ENV=production` e `TRUST_PROXY=1` (o Caddy é o único proxy). Variáveis em `.env.prod` (modelo em `.env.prod.example`: `DOMAIN`, `POSTGRES_PASSWORD`, `JWT_SECRET`). 
 

@@ -1,4 +1,4 @@
-import { clearSession } from "@/lib/session";
+import { clearSession, readSession, saveSession, type Session } from "@/lib/session";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -25,7 +25,33 @@ type Options = {
   text?: boolean;
 };
 
-export async function api<T>(path: string, { method = "GET", body, token, deviceToken, text }: Options = {}): Promise<T> {
+let renewing: Promise<Session | null> | null = null;
+
+// Troca o refresh token por um par novo. Pedidos que falham juntos compartilham uma só renovação (o refresh token vale uma vez).
+// Devolve null se o login não pode ser renovado; falha de rede lança e não derruba a sessão.
+export function refreshSession() {
+  renewing ??= renew().finally(() => {
+    renewing = null;
+  });
+  return renewing;
+}
+
+async function renew(): Promise<Session | null> {
+  const current = readSession();
+  if (!current) return null;
+  const response = await fetch(`${API_URL}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken: current.refreshToken }),
+  });
+  if (!response.ok) return null;
+  const session = (await response.json()) as Session;
+  saveSession(session);
+  return session;
+}
+
+export async function api<T>(path: string, options: Options = {}, canRetry = true): Promise<T> {
+  const { method = "GET", body, token, deviceToken, text } = options;
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -42,8 +68,13 @@ export async function api<T>(path: string, { method = "GET", body, token, device
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    // Token do balcão vencido ou usuário desativado: limpar a sessão manda a tela de volta ao login (RequireAuth)
-    if (response.status === 401 && token) clearSession();
+    if (response.status === 401 && token) {
+      // JWT de acesso vencido: renova uma vez e repete o pedido
+      const fresh = canRetry ? await refreshSession() : null;
+      if (fresh) return api<T>(path, { ...options, token: fresh.token }, false);
+      // Sem renovação (usuário desativado ou refresh vencido): limpar a sessão manda a tela de volta ao login (RequireAuth)
+      clearSession();
+    }
     throw new ApiError(response.status, data.code ?? "ERROR", data.message ?? "Erro inesperado");
   }
   return data as T;

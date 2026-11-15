@@ -1,7 +1,8 @@
 'use client'
 import { useRouter } from "next/navigation";
 import { FaRegUser } from "react-icons/fa";
-import { clearSession, useSession } from "@/lib/session";
+import { useSession } from "@/lib/session";
+import { logout } from "@/services/auth";
 
 export default function Header() {
 
@@ -32,7 +33,7 @@ export default function Header() {
                 <div className="flex items-center justify-center gap-3">
                     {session && (
                         <button
-                        onClick={() => { clearSession(); router.push('/login') }}
+                        onClick={() => { void logout(); router.push('/login') }}
                         className="w-auto p-0 text-sm underline cursor-pointer"
                         >Sair</button>
                     )}

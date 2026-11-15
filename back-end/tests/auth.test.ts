@@ -46,3 +46,75 @@ describe("POST /auth/login", () => {
     expect(unknownEmail.body.message).toBe(wrongPassword.body.message);
   });
 });
+
+async function loginAsOwner() {
+  await api().post("/api/v1/auth/register").send(user);
+  return (await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password })).body as {
+    token: string;
+    refreshToken: string;
+  };
+}
+
+const refresh = (refreshToken: string) => api().post("/api/v1/auth/refresh").send({ refreshToken });
+
+describe("POST /auth/refresh", () => {
+  it("troca o refresh token por um par novo e o antigo deixa de valer", async () => {
+    const first = await loginAsOwner();
+
+    const res = await refresh(first.refreshToken);
+
+    expect(res.status).toBe(200);
+    expect(res.body.refreshToken).not.toBe(first.refreshToken);
+    expect(res.body.user.password_hash).toBeUndefined();
+    expect((await api().get("/api/v1/auth/me").set("Authorization", `Bearer ${res.body.token}`)).status).toBe(200);
+    expect((await refresh(first.refreshToken)).status).toBe(401);
+  });
+
+  it("reusar um token já trocado encerra todas as sessões do usuário", async () => {
+    const first = await loginAsOwner();
+    const second = (await refresh(first.refreshToken)).body;
+
+    expect((await refresh(first.refreshToken)).status).toBe(401);
+
+    expect((await refresh(second.refreshToken)).status).toBe(401);
+  });
+
+  it("recusa token desconhecido, expirado e de usuário desativado", async () => {
+    const { refreshToken } = await loginAsOwner();
+    expect((await refresh("token-que-nao-existe")).status).toBe(401);
+
+    await prisma.refresh_tokens.updateMany({ data: { expires_at: new Date(Date.now() - 1000) } });
+    expect((await refresh(refreshToken)).status).toBe(401);
+
+    const again = (await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password })).body;
+    await prisma.users.updateMany({ data: { active: false } });
+    expect((await refresh(again.refreshToken)).status).toBe(401);
+  });
+
+  it("recusa corpo sem refreshToken com 400", async () => {
+    expect((await api().post("/api/v1/auth/refresh").send({})).status).toBe(400);
+  });
+});
+
+describe("POST /auth/logout", () => {
+  it("revoga o refresh token; token desconhecido também dá 204", async () => {
+    const { refreshToken } = await loginAsOwner();
+
+    expect((await api().post("/api/v1/auth/logout").send({ refreshToken })).status).toBe(204);
+    expect((await refresh(refreshToken)).status).toBe(401);
+    expect((await api().post("/api/v1/auth/logout").send({ refreshToken: "desconhecido" })).status).toBe(204);
+  });
+});
+
+describe("GET /auth/me", () => {
+  it("devolve o usuário logado sem o hash da senha e exige token", async () => {
+    const { token } = await loginAsOwner();
+
+    const res = await api().get("/api/v1/auth/me").set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.email).toBe(user.email);
+    expect(res.body.password_hash).toBeUndefined();
+    expect((await api().get("/api/v1/auth/me")).status).toBe(401);
+  });
+});

@@ -2,7 +2,8 @@ import { useMemo, useSyncExternalStore } from "react";
 
 export type Role = "SUPER_ADMIN" | "OWNER" | "STAFF";
 export type User = { id: string; name: string; email: string; role: Role; restaurant_id: string | null };
-export type Session = { token: string; user: User };
+// token: JWT de acesso (curto); refreshToken: renova o login sem pedir a senha (vale uma vez)
+export type Session = { token: string; refreshToken: string; user: User };
 
 const KEY = "psiu.session";
 const EVENT = "psiu:session";
@@ -37,6 +38,9 @@ function parse(raw: string | null): Session | null {
     return null;
   }
 }
+
+// Leitura fora do React (renovação do token e reconexão do socket)
+export const readSession = () => parse(localStorage.getItem(KEY));
 
 // undefined = ainda no servidor ou carregando; null = sem login (ou sessão corrompida)
 export function useSession(): Session | null | undefined {

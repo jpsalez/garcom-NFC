@@ -1,8 +1,8 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
-import { API_URL } from "@/lib/api";
-import { clearSession } from "@/lib/session";
+import { API_URL, refreshSession } from "@/lib/api";
+import { clearSession, readSession } from "@/lib/session";
 import { playAlert } from "@/lib/sound";
 import type { ActiveSession, Call } from "@/lib/types";
 import { listCalls } from "@/services/calls";
@@ -50,12 +50,17 @@ export function useBalcao(token: string, soundOn: boolean) {
   }, [token])
 
   useEffect(() => {
-    const socket = io(new URL(API_URL).origin, { auth: { token } })
+    // O token é lido a cada (re)conexão: depois de uma renovação o socket não reaproveita o vencido
+    const socket = io(new URL(API_URL).origin, { auth: (cb) => cb({ token: readSession()?.token ?? token }) })
 
     socket.on('connect', () => { setLive(true); void load() })
     socket.on('disconnect', () => setLive(false))
-    // Token recusado (usuário desativado, JWT vencido): volta ao login
-    socket.on('connect_error', (err) => { setLive(false); if (err.message === 'Não autorizado') clearSession() })
+    // Token recusado: tenta renovar o login e reconectar; se não der (usuário desativado, refresh vencido), volta ao login
+    socket.on('connect_error', (err) => {
+      setLive(false)
+      if (err.message !== 'Não autorizado') return
+      refreshSession().then((session) => (session ? socket.connect() : clearSession())).catch(() => {})
+    })
 
     socket.on('call:created', (call: Call) => {
       events.current++

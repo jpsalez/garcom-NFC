@@ -7,6 +7,8 @@ import { RestaurantRepository } from "../../modules/restaurants/restaurants.repo
 import type { IUserRepository } from "../../modules/users/users.repository.interface.ts";
 import { UserRepository } from "../../modules/users/users.repository.ts";
 import { AuthService } from "../../modules/auth/auth.service.ts";
+import type { IRefreshTokenRepository } from "../../modules/auth/refresh-tokens.repository.interface.ts";
+import { RefreshTokenRepository } from "../../modules/auth/refresh-tokens.repository.ts";
 import type { IAuthCache } from "../cache/auth-cache.ts";
 import { AuthCache } from "../cache/auth-cache.ts";
 import type { IUsersService } from "../../modules/users/users.interfaces.ts";
@@ -43,6 +45,7 @@ export function registerDependencies() {
   container.registerSingleton<ITableSessionRepository>("TableSessionRepository", TableSessionRepository);
   container.registerSingleton<ISessionTokenRepository>("SessionTokenRepository", SessionTokenRepository);
   container.registerSingleton<ICallRepository>("CallRepository", CallRepository);
+  container.registerSingleton<IRefreshTokenRepository>("RefreshTokenRepository", RefreshTokenRepository);
 
   
   container.registerSingleton<IAuthCache>("AuthCache", AuthCache);
