@@ -43,7 +43,7 @@ Todas as rotas abaixo estão implementadas (27 no total) e montadas sob `/api/v1
 |---|---|---|
 | GET /calls | Cards em ordem de chegada | `?status=` OPEN (padrão), DONE ou CANCELLED e `?since=<data>` (400 se inválida); resposta `{ serverTime, calls[] }` com `table.label` |
 | PATCH /calls/:id/done | Finalizar chamado | `done_by` = usuário logado; 404; 409 `CALL_NOT_OPEN` |
-| GET /sessions | Mesas em atendimento, com a contagem de aparelhos | `?status=ACTIVE` (padrão) ou `CLOSED`; status inválido dá 400; sem paginação ainda |
+| GET /sessions | Mesas em atendimento, com a contagem de aparelhos | `?status=ACTIVE` (padrão) ou `CLOSED`; mais recentes primeiro; paginação por `?limit=` (1 a 200, padrão 100) e `?offset=`; valores inválidos dão 400; a resposta continua sendo uma lista |
 | POST /tables/:id/session | Abrir o atendimento de uma mesa | 409 `TABLE_INACTIVE` ou `SESSION_ALREADY_ACTIVE` |
 | POST /sessions/:id/close | Encerrar | 409 `SESSION_CLOSED` se já encerrado; revoga tokens e cancela chamados |
 | POST /sessions/:id/extend | Estender (+`TABLE_SESSION_TTL`, 4 h; é o "manter aberto") | 409 `SESSION_CLOSED` se encerrado |

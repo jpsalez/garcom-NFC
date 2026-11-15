@@ -49,7 +49,7 @@ _Figura: **Figura 6.2** – Métodos dos repositories de sessões, tokens e cham
 - **`open`** (balcão): 404 se a mesa não é do restaurante; 409 `TABLE_INACTIVE` se inativa; 409 `SESSION_ALREADY_ACTIVE` se já há atendimento ativo. Emite `session:opened`. 
 - **`close`**: 404 se não é do restaurante; 409 `SESSION_CLOSED` se já encerrado. Faz o fechamento atômico (ver 6.3.4). 
 - **`extend`** (também é o "manter aberto", DEC-09): acrescenta `TABLE_SESSION_TTL` (4 h) a partir do maior entre o vencimento atual e agora; emite `session:extended`. 
-- **`list`**: `GET /sessions?status=` (ACTIVE por padrão), com o rótulo da mesa e a contagem de tokens não revogados. 
+- **`list`**: `GET /sessions?status=&limit=&offset=` (ACTIVE por padrão), com o rótulo da mesa e a contagem de tokens não revogados. 
 - **`expireDue`** (job): busca as vencidas de todos os restaurantes e encerra cada uma com TIMEOUT, uma por vez; a falha de uma não derruba as demais. 
 - **`closeActiveOfTable` e `closeAllActive`**: usados ao desativar mesa ou restaurante. 
 - **Segunda camada da expiração:** `findActive` encerra com TIMEOUT a sessão vencida no primeiro uso, mesmo que o job ainda não tenha rodado. 
@@ -86,7 +86,7 @@ O fechamento (`finish`, usado por encerrar, expirar e desativar) é uma única t
 - `extend` não é condicional: um `close` simultâneo pode gerar `session:extended` depois de `session:closed` (baixo risco, registrado na revisão geral). 
 - O job de expiração roda no processo da API (instância única); com mais de uma instância seria preciso coordenar. 
 - O aviso de 15 min antes de vencer (DEC-02) é calculado no front a partir de `expires_at`; a API não o emite. 
-- Paginação do histórico de sessões [Planejado]. 
+- A listagem usa `limit` e `offset` (resposta continua sendo uma lista); não há contagem total nem cursor. 
 
 ## 6.4 Módulos `restaurants`, `users` e `administration` 
 
@@ -152,6 +152,6 @@ Arquivos: `administration.service.ts`, `administration.schema.ts` (criar restaur
 | users e administration | Completo | tela do SUPER_ADMIN no front |
 | restaurants | Completo | não há exclusão (por desenho) |
 | tables | Completo | `/deactivate`, `/activate` e `/regenerate-code` não foram feitos (desativar é um PATCH) |
-| sessions | Completo | paginação do histórico; aviso de 15 min só no front |
+| sessions | Completo | aviso de 15 min só no front |
 | calls | Completo | `/me/calls` fora do MVP |
 | realtime e job | Completo (instância única) | Redis adapter e lock do job para várias instâncias |

@@ -160,7 +160,7 @@ _Figura: **Figura 7.4** – Máquina de estados do atendimento (sessão de mesa)
 | ACTIVE | Primeiro scan ou abertura pelo balcão | CLOSED por expiração (TIMEOUT), encerramento (STAFF) ou desativação da mesa ou do restaurante (STAFF) | No máximo um por mesa (índice parcial). Estender acrescenta 4 h. |
 | CLOSED | Fim do atendimento | Nenhuma (final) | Tokens revogados; chamados OPEN cancelados. Novo scan cria outro atendimento (linha nova). Reativar mesa ou restaurante não reabre. |
 
-Os rótulos em português do diagrama original (ATIVO e ENCERRADO) correspondem aos valores ACTIVE e CLOSED do banco. O schema não tem `created_at` nem `closed_at` em `table_sessions`, o que impede, por exemplo, calcular a duração real de um atendimento (DV-25). 
+Os rótulos em português do diagrama original (ATIVO e ENCERRADO) correspondem aos valores ACTIVE e CLOSED do banco. `table_sessions` tem `created_at` e `closed_at` (14/11/2026), então a duração real de um atendimento pode ser calculada (DV-25 resolvida). 
 
 ### 7.12.2 Chamado (`calls.status`) 
 

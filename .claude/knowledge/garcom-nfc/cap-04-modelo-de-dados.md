@@ -57,11 +57,13 @@ O atendimento: período em que uma mesa está ocupada. [Implementado]
 | table_id | texto | Obrigatório; chave estrangeira para tables | Mesa do atendimento. | ``````````
 | status | enum tableStatus | Padrão ACTIVE | ACTIVE ou CLOSED. | ``
 | keep_open | booleano | Padrão: falso | Se verdadeiro, o atendimento não expira por tempo (RF11). | ``
-| expires_at | data/hora | Obrigatório | Limite de validade (4 h após a abertura, segundo a v0.3). | ````````
+| expires_at | data/hora | Obrigatório | Limite de validade (4 h após a abertura, segundo a v0.3). |
+| created_at | data/hora | Padrão: instante atual | Abertura do atendimento (migration `20261114140000_sessions_created_at_closed_at`; os antigos receberam a data da migration). |
+| closed_at | data/hora | Opcional | Preenchido no encerramento (manual, por expiração ou por desativação); nulo enquanto ACTIVE e nos atendimentos anteriores à migration. | ````````
 | closed_reason | enum reason | Opcional | STAFF (encerrado no balcão) ou TIMEOUT (expirou). | ````
 | closed_by | texto | Opcional; chave estrangeira para users (nula ao excluir o usuário) | Quem encerrou; nulo na expiração. |   
 
-A tabela não possui campo de criação ou abertura (por exemplo `created_at`); a abertura é `expires_at` menos a duração. Ver DV-25. Há índices em `(restaurant_id, status)` e em `table_id` (migration `indexes_consultas_e_fks`). 
+`created_at` e `closed_at` permitem calcular a duração real do atendimento (DV-25 resolvida em 14/11/2026). Há índices em `(restaurant_id, status)` e em `table_id` (migration `indexes_consultas_e_fks`). 
 
 ### 4.2.5 session_tokens 
 
@@ -149,9 +151,9 @@ Cuidado de manutenção: uma nova geração de migration em modo de desenvolvime
 
 ## 4.6 Migration 
 
-[Implementado] Existem seis migrations, mais o arquivo de trava de provedor (PostgreSQL): `20261111232558_init` (enums, seis tabelas, índices únicos, chaves estrangeiras e o índice parcial de atendimento ativo, com o comentário "Uma sessão ACTIVE por mesa"); `20261112193624_roles_and_staff_category` (papéis SUPER_ADMIN/OWNER/STAFF, `staff_category`, `active`); `20261112193904_staff_category_and_checks` e `20261112200521_users_restaurant_by_role` (CHECKs `users_category_only_staff` e `users_restaurant_by_role`); `20261114120000_calls_one_open_per_type` (índice parcial de chamados); e `20261114130000_indexes_consultas_e_fks` (índices das chaves estrangeiras). O `prisma.config.ts` define a pasta de migrations e a fonte da URL do banco. O fluxo de trabalho: alterar o schema, gerar a migration, aplicar; o client é regenerado em `generated/prisma`. No compose, a API aplica as migrations com `prisma migrate deploy` ao subir. 
+[Implementado] Existem sete migrations, mais o arquivo de trava de provedor (PostgreSQL): `20261111232558_init` (enums, seis tabelas, índices únicos, chaves estrangeiras e o índice parcial de atendimento ativo, com o comentário "Uma sessão ACTIVE por mesa"); `20261112193624_roles_and_staff_category` (papéis SUPER_ADMIN/OWNER/STAFF, `staff_category`, `active`); `20261112193904_staff_category_and_checks` e `20261112200521_users_restaurant_by_role` (CHECKs `users_category_only_staff` e `users_restaurant_by_role`); `20261114120000_calls_one_open_per_type` (índice parcial de chamados); `20261114130000_indexes_consultas_e_fks` (índices das chaves estrangeiras) e `20261114140000_sessions_created_at_closed_at` (`created_at` e `closed_at` em `table_sessions`). O `prisma.config.ts` define a pasta de migrations e a fonte da URL do banco. O fluxo de trabalho: alterar o schema, gerar a migration, aplicar; o client é regenerado em `generated/prisma`. No compose, a API aplica as migrations com `prisma migrate deploy` ao subir. 
 
-Regra de manutenção: os índices parciais e os CHECKs são escritos à mão no SQL das migrations; nunca aceitar um `migrate dev` que os remova. Ajustes futuros previstos (campo de abertura da sessão, por exemplo) exigirão novas migrations. 
+Regra de manutenção: os índices parciais e os CHECKs são escritos à mão no SQL das migrations; nunca aceitar um `migrate dev` que os remova. Ajustes futuros exigirão novas migrations. 
 
 ## 4.7 Regras de integridade e tenant 
 

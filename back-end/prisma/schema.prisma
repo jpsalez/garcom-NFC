@@ -64,6 +64,8 @@ model table_sessions {
   status         tableStatus      @default(ACTIVE)
   keep_open      Boolean          @default(false)
   expires_at     DateTime
+  created_at     DateTime         @default(now())
+  closed_at      DateTime?
   closed_reason  reason?
   closed_by      String?
   user           users?           @relation(fields: [closed_by], references: [id])

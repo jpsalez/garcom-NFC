@@ -145,6 +145,7 @@ describe("POST /sessions/:id/close", () => {
     expect(res.status).toBe(200);
     const closed = await prisma.table_sessions.findUniqueOrThrow({ where: { id: session.id } });
     expect([closed.status, closed.closed_reason, closed.closed_by]).toEqual(["CLOSED", "STAFF", user.id]);
+    expect(closed.closed_at).not.toBeNull();
     expect((await prisma.session_tokens.findUniqueOrThrow({ where: { id: savedToken.id } })).revoked_at).not.toBeNull();
     expect((await prisma.calls.findUniqueOrThrow({ where: { id: call.id } })).status).toBe("CANCELLED");
   });
@@ -215,6 +216,22 @@ describe("GET /sessions", () => {
 
     expect(res.body.map((s: { table: { label: string } }) => s.table.label)).toEqual(["A-2"]);
     expect((await api().get("/api/v1/sessions?status=QUALQUER").set(auth(a.token))).status).toBe(400);
+  });
+
+  it("pagina com limit e offset, dos mais recentes aos mais antigos, e recusa limit acima de 200", async () => {
+    const a = await ownerOf("a");
+    for (const [i, label] of ["M1", "M2", "M3"].entries()) {
+      const table = await createTable(a.restaurantId, label);
+      await prisma.table_sessions.create({
+        data: { restaurant_id: a.restaurantId, table_id: table.id, status: "CLOSED", expires_at: new Date(), created_at: new Date(2026, 0, 1 + i) },
+      });
+    }
+    const labels = async (query: string) =>
+      (await api().get(`/api/v1/sessions?status=CLOSED${query}`).set(auth(a.token))).body.map((s: { table: { label: string } }) => s.table.label);
+
+    expect(await labels("&limit=2")).toEqual(["M3", "M2"]);
+    expect(await labels("&limit=2&offset=2")).toEqual(["M1"]);
+    expect((await api().get("/api/v1/sessions?limit=201").set(auth(a.token))).status).toBe(400);
   });
 
   it("sem filtro, lista só os ativos do próprio restaurante", async () => {

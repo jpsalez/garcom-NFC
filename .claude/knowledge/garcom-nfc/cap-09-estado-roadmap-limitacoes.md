@@ -14,11 +14,11 @@ Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-en
 | shared (container, Prisma, erros, validação, jwt, password, cache, utils) | Completo | Container, `DbClient` e `runInTransaction`, erros com `code`, validadores de corpo, query e UUID, `AuthCache`, utilitários de token e de URL pública | Redis só para multi-instância |
 | Middlewares | Completo | `ensureAuthenticated` (banco + cache), `ensureRole`, `tenantOf`, `userOf`, `ensureTableToken`, limiters | |
 | tables | Completo | CRUD, `public_url`, QR Code em SVG, exclusão, encerramento do atendimento ao desativar | Rotas `/deactivate`, `/activate` e `/regenerate-code` (não feitas; desativar é um PATCH) |
-| sessions | Completo | Scan público, abrir pelo balcão, listar, encerrar (transação), estender, token por aparelho (SHA-256), expiração no uso | Paginação do histórico; `keep_open` nunca é escrito (virou estender, DEC-09) |
+| sessions | Completo | Scan público, abrir pelo balcão, listar, encerrar (transação), estender, token por aparelho (SHA-256), expiração no uso | `keep_open` nunca é escrito (virou estender, DEC-09) |
 | calls | Completo | Criar com trava de sessão, repetir devolve o aberto (DEC-03), listar (`status`, `since`, `serverTime`), finalizar condicional, índice `calls_one_open_per_type`, limite 10/5 min por token | `/me/calls` (fora do MVP, DEC-08) |
 | Tempo real (shared/realtime) | Completo (instância única) | `INotifier`/`SocketNotifier`, JWT no handshake, sala `restaurant:<id>`, eventos `call:created`, `call:done`, `session:opened`, `session:extended`, `session:closed`, `disconnectUser` e `disconnectRestaurant` | Adapter Redis e lock do job para várias instâncias |
 | Job de expiração | Completo (instância única) | `shared/jobs/session-expiry.job.ts`, 60 s, motivo TIMEOUT | |
-| Banco (Prisma) | Completo | 6 tabelas, enums, 6 migrations, CHECKs, índices parciais `table_sessions_one_active` e `calls_one_open_per_type`, índices de consulta, seeds (OWNER demo e SUPER_ADMIN) | Timestamps de abertura e fechamento da sessão |
+| Banco (Prisma) | Completo | 6 tabelas, enums, 7 migrations, CHECKs, índices parciais `table_sessions_one_active` e `calls_one_open_per_type`, índices de consulta, seeds (OWNER demo e SUPER_ADMIN) | Data de cancelamento dos chamados |
 | Front-end Next.js 16 | Parcial | `/login`, `/admin/waiter` (balcão em tempo real), `/admin/mesas` (CRUD e QR), `/admin/equipe`, `/m/[code]` (cliente), cliente da API com `ApiError` e `code`, sessão no `localStorage` | Tela do SUPER_ADMIN; cadastro de restaurante (`/cadastro`); recuperação de senha |
 | Docker Compose, .env.example, CI | Parcial | `docker-compose.yml` na raiz (db, api, web, painel, banco de teste), `.env.example`, GitHub Actions (typecheck, lint, testes) | Testar `docker-compose.prod.yml` num servidor real (os arquivos existem, mas ainda não foram executados) |
 | Testes | Completo para o MVP | vitest + supertest contra PostgreSQL real, cerca de 100 testes: auth, staff, tables, sessions, calls, realtime, session-expiry, tenant-isolation, hardening, api-v1, índices | Mais testes de concorrência e de ponta a ponta no front |
@@ -78,7 +78,7 @@ O documento de módulos propunha uma ordem própria: (1) preparação; (2) tabel
 - **Tempo real:** o JWT só é conferido na conexão (desativar ou excluir derruba o socket); a meta de 2 s não foi medida. 
 - **Abuso da rota pública:** o primeiro scan abre atendimento, então quem tem a foto do QR pode abri-lo; defesas: limite de scan, limite de chamados, expiração em 4 h e revogação. Um valor errado de `TRUST_PROXY` enfraquece os limites por IP. 
 - **Token no `localStorage`** (balcão e aparelho do cliente): risco de XSS; alternativa futura é cookie httpOnly. 
-- **Falta de timestamps:** a sessão não tem criação nem fechamento próprios e o chamado cancelado não tem data, o que dificulta auditoria e relatórios. 
+- **Timestamps:** a sessão tem `created_at` e `closed_at` desde 14/11/2026 (os antigos ficaram sem `closed_at`); o chamado cancelado ainda não tem data, o que dificulta auditoria e relatórios. 
 - **Dependências:** `npm audit` do back-end aponta 3 vulnerabilidades altas na cadeia do CLI do Prisma; a correção exige `--force` e pula versão. 
 - **NFC:** travar a etiqueta é irreversível; domínio e formato da URL (`PUBLIC_APP_URL`) devem estar definidos antes. 
 - **E-mail duplicado** revela a existência do usuário na criação por OWNER ou SUPER_ADMIN (o autocadastro responde de forma genérica). 
@@ -92,7 +92,7 @@ Todos decididos em 13–14/11/2026 (ver 2.7.1): alerta sonoro (sim, DEC-10), reg
  
 - **Segurança de produção:** decisão sobre cookie httpOnly (o `TRUST_PROXY` já vem definido no compose de produção). 
 - **Infra:** testar o compose de produção (`docker-compose.prod.yml`) num servidor; mesclar a `dev` na `main`. 
-- **Back-end:** paginação do histórico de sessões; refresh de token e recuperação de senha; timestamps de sessão; `extend` condicional. 
+- **Back-end:** refresh de token e recuperação de senha; `extend` condicional; timestamps nos chamados cancelados. 
 - **Front:** tela do SUPER_ADMIN (restaurantes e usuários); tela de cadastro (`/cadastro`). 
 - **Qualidade:** rodar `docker compose up` e `npm test` no ambiente do desenvolvedor (a suíte foi validada com um PostgreSQL local); mais testes de concorrência. 
 - **Documentação:** regerar o PDF consolidado quando o código mudar de forma relevante. 

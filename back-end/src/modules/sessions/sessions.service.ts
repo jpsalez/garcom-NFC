@@ -89,8 +89,8 @@ export class SessionsService implements ISessionsService {
     return closed;
   }
 
-  list(restaurantId: string, status: tableStatus) {
-    return this.sessionRepository.findMany(restaurantId, { status });
+  list(restaurantId: string, status: tableStatus, page: { limit: number; offset: number }) {
+    return this.sessionRepository.findMany(restaurantId, { status, ...page });
   }
 
   private async create(table: Pick<tables, "id" | "label" | "restaurant_id">) {

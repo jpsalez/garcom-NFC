@@ -28,7 +28,7 @@ _Figura: **Figura 3.2** – Arquitetura implementada em 14/11/2026: front Next.j
 |---|---|---|---|  
 | Front-end Next.js | Quatro áreas (mesa, balcão, Admin, cadastro/login) | `/m/[code]` (cliente), `/login`, `/admin/waiter` (balcão), `/admin/mesas` e `/admin/equipe` (OWNER); sem tela do SUPER_ADMIN nem cadastro | Parcial |
 | API Express + TypeScript | Porta 4000, prefixo /api/v1 | Porta 4000 (`PORT`), prefixo `/api/v1`, 27 rotas, Swagger em `/docs` fora de produção | Implementado |
-| PostgreSQL + Prisma | 6 tabelas, migrations versionadas | 6 tabelas e 6 migrations (duas escritas à mão por causa dos índices parciais) | Implementado |
+| PostgreSQL + Prisma | 6 tabelas, migrations versionadas | 6 tabelas e 7 migrations (duas escritas à mão por causa dos índices parciais) | Implementado |
 | Camadas controller/service/repository | Sim, com Zod na entrada | Completa em auth, users/administration, tables, sessions e calls | Implementado |
 | Injeção de dependência | Não detalhada na v0.3; citada no guia e nos módulos | tsyringe com tokens de texto (repositories, serviços, `Notifier`, `AuthCache`) | Implementado |
 | Middleware de autenticação | JWT e token da mesa | `ensureAuthenticated` (JWT + consulta ao banco com cache), `ensureTableToken` (token do aparelho) | Implementado |
@@ -175,7 +175,7 @@ Há exceções deliberadas, todas documentadas no código ou nos guias:
 | Caminho (em back-end/) | Conteúdo e função |
 |---|---|  ``````````````````````
 | package.json, tsconfig.json, prisma.config.ts, .env | Dependências e scripts (dev, test, typecheck, lint, db:seed, db:seed:super-admin, test:db:up/down), configuração do compilador e do Prisma; .env (não versionado; modelo em `.env.example`). |
-| prisma/schema.prisma e prisma/migrations/ | Fonte da verdade do modelo de dados e histórico SQL: 6 migrations (init, roles_and_staff_category, staff_category_and_checks, users_restaurant_by_role, calls_one_open_per_type, indexes_consultas_e_fks). Seeds: `seed.ts` (OWNER demo e 5 mesas) e `seed-super-admin.ts`. |
+| prisma/schema.prisma e prisma/migrations/ | Fonte da verdade do modelo de dados e histórico SQL: 7 migrations (init, roles_and_staff_category, staff_category_and_checks, users_restaurant_by_role, calls_one_open_per_type, indexes_consultas_e_fks, sessions_created_at_closed_at). Seeds: `seed.ts` (OWNER demo e 5 mesas) e `seed-super-admin.ts`. |
 | generated/prisma | Client gerado pelo Prisma; não deve ser editado nem versionado. |
 | src/main.ts, src/server.ts, src/routes.ts | Bootstrap (servidor HTTP, Socket.IO, job), criação do `app` (CORS, JSON, trust proxy) e definição das 27 rotas. |
 | src/docs/openapi.ts | Especificação OpenAPI servida em `/docs` fora de produção. |

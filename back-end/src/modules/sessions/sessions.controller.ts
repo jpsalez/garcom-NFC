@@ -30,7 +30,7 @@ export class SessionsController {
   };
 
   list = async (req: Request, res: Response) => {
-    const { status } = listSessionsQuery.parse(req.query);
-    return res.status(200).json(await this.sessionsService.list(tenantOf(req), status));
+    const { status, ...page } = listSessionsQuery.parse(req.query);
+    return res.status(200).json(await this.sessionsService.list(tenantOf(req), status, page));
   };
 }

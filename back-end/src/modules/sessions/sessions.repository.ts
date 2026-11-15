@@ -31,9 +31,13 @@ export class TableSessionRepository implements ITableSessionRepository {
     });
   }
 
-  findMany(restaurantId: string, filter: { status?: tableStatus } = {}) {
+  findMany(restaurantId: string, filter: { status?: tableStatus; limit?: number; offset?: number } = {}) {
     return this.db.table_sessions.findMany({
       where: { restaurant_id: restaurantId, status: filter.status },
+      // Mais recentes primeiro; o id desempata para a paginação não repetir nem pular linhas
+      orderBy: [{ created_at: "desc" }, { id: "desc" }],
+      take: filter.limit,
+      skip: filter.offset,
       include: {
         table: { select: { id: true, label: true } },
         _count: { select: { session_tokens: { where: { revoked_at: null } } } },
@@ -63,7 +67,7 @@ export class TableSessionRepository implements ITableSessionRepository {
   closeIfActive(restaurantId: string, id: string, data: UpdateTableSessionData) {
     return this.db.table_sessions.updateMany({
       where: { id, restaurant_id: restaurantId, status: tableStatus.ACTIVE },
-      data: { ...data, status: tableStatus.CLOSED },
+      data: { ...data, status: tableStatus.CLOSED, closed_at: new Date() },
     });
   }
 }
