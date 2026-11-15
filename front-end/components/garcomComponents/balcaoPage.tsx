@@ -35,7 +35,9 @@ export default function BalcaoPage() {
                 bills={calls.filter((c) => c.type === 'BILL').length}
                 doneToday={doneToday}
             />
+
             <TicketWaiterList calls={calls} now={now} onFinish={(id) => act(() => finishCall(token, id))}/>
+                
             <SessionList
                 sessions={sessions}
                 now={now}

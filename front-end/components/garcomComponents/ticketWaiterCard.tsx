@@ -19,7 +19,9 @@ export default function TicketWaiterCard({call, now, onFinish} : {call: Call, no
             aria-label={`${call.table.label}: ${TYPE_TEXT[call.type]}. Finalizar chamado`}
             onClick={() => setConfirmation(true)}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setConfirmation(true) } }}
+
             className="
+            kpi-card
             relative
             w-full h-full max-h-50 border p-5 rounded-lg shadow-lg cursor-pointer overflow-hidden
             transition-all duration-300
