@@ -19,7 +19,7 @@ Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-en
 | Tempo real (shared/realtime) | Completo (instância única) | `INotifier`/`SocketNotifier`, JWT no handshake, sala `restaurant:<id>`, eventos `call:created`, `call:done`, `session:opened`, `session:extended`, `session:closed`, `disconnectUser` e `disconnectRestaurant` | Adapter Redis e lock do job para várias instâncias |
 | Jobs | Completo (instância única) | `shared/jobs/session-expiry.job.ts` (60 s, motivo TIMEOUT) e `token-cleanup.job.ts` (de hora em hora, apaga refresh tokens e links de redefinição vencidos) | |
 | Banco (Prisma) | Completo | 8 tabelas (6 do domínio, `refresh_tokens` e `password_resets`), enums, 9 migrations, CHECKs, índices parciais `table_sessions_one_active` e `calls_one_open_per_type`, índices de consulta, seeds (OWNER demo e SUPER_ADMIN) | Data de cancelamento dos chamados |
-| Front-end Next.js 16 | Parcial | `/login`, `/admin/waiter` (balcão em tempo real), `/admin/mesas` (CRUD e QR), `/admin/equipe`, `/admin/restaurantes` (SUPER_ADMIN: restaurantes e seus usuários), `/admin/senha` (trocar a senha), `/esqueci-senha` e `/redefinir-senha`, `/m/[code]` (cliente), cliente da API com `ApiError`, `code` e renovação do token, sessão no `localStorage` | Cadastro de restaurante (`/cadastro`) |
+| Front-end Next.js 16 | Completo para o MVP | `/login`, `/cadastro` (autocadastro do restaurante e do OWNER), `/admin/waiter` (balcão em tempo real), `/admin/mesas` (CRUD e QR), `/admin/equipe`, `/admin/restaurantes` (SUPER_ADMIN: restaurantes e seus usuários), `/admin/senha` (trocar a senha), `/esqueci-senha` e `/redefinir-senha`, `/m/[code]` (cliente), cliente da API com `ApiError`, `code` e renovação do token, sessão no `localStorage` | Dashboard e métricas (pós-MVP); decisão sobre cookie httpOnly |
 | Docker Compose, .env.example, CI | Parcial | `docker-compose.yml` na raiz (db, api, web, painel, banco de teste), `.env.example`, GitHub Actions (typecheck, lint, testes) | Testar `docker-compose.prod.yml` num servidor real (os arquivos existem, mas ainda não foram executados) |
 | Testes | Completo para o MVP | vitest + supertest contra PostgreSQL real, cerca de 100 testes: auth, staff, tables, sessions, calls, realtime, session-expiry, tenant-isolation, hardening, api-v1, índices | Mais testes de concorrência e de ponta a ponta no front |
 
@@ -53,7 +53,7 @@ Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-en
 O back-end entregou a API de cada fase primeiro; o front ligou nos endpoints depois. Equipe: 1 back-end e 1 front-end. Dependências entre parênteses.  
 | Fase | Itens de back-end | Itens de front-end | Marco | Estado |
 |---|---|---|---|---|
-| 1 Fundação | BE-01 Express, TypeScript, Prisma, Docker Compose; BE-02 autocadastro, login JWT, middlewares auth e tenant (BE-01); BE-03 mesas, QR Code, acesso do balcão (BE-02) | FE-01 setup Next.js e layouts das áreas; FE-02 login (BE-02); FE-03 mesas, QR Codes e equipe (BE-03) | Restaurante com mesas e QR Codes impressos | **Concluída (14/11/2026).** Falta a tela de cadastro de restaurante (`/cadastro`) |
+| 1 Fundação | BE-01 Express, TypeScript, Prisma, Docker Compose; BE-02 autocadastro, login JWT, middlewares auth e tenant (BE-01); BE-03 mesas, QR Code, acesso do balcão (BE-02) | FE-01 setup Next.js e layouts das áreas; FE-02 login (BE-02); FE-03 mesas, QR Codes e equipe (BE-03) | Restaurante com mesas e QR Codes impressos | **Concluída (14/11/2026)** |
 | 2 Chamado | BE-04 atendimento da mesa e token por aparelho (BE-03); BE-05 chamados e Socket.IO na sala do balcão, finalizar (BE-04) | FE-04 tela da mesa (BE-04, BE-05); FE-05 tela do balcão em tempo real e Finalizar (BE-05) | Cliente chama e o card aparece e some no balcão | **Concluída (14/11/2026)** |
 | 3 Encerramento | BE-06 encerrar: revogar tokens e cancelar chamados (BE-05); BE-07 estender, job de 4 h, limite de chamados (BE-06) | FE-06 balcão: mesas em atendimento, Encerrar, Estender (BE-06, BE-07); FE-07 mesa: reconexão (BE-06) | MVP completo rodando via Docker, pronto para piloto | **Concluída (14/11/2026)** para desenvolvimento; produção depende de Dockerfile e `TRUST_PROXY` |
 | Depois do MVP | KDS e comanda; avaliações; app do garçom e setores; relatórios; integração com gestão/PDV | Cardápio digital e telas correspondentes | Fora do escopo do MVP | Não iniciado |   
@@ -93,6 +93,6 @@ Todos decididos em 13–14/11/2026 (ver 2.7.1): alerta sonoro (sim, DEC-10), reg
 - **Segurança de produção:** decisão sobre cookie httpOnly (o `TRUST_PROXY` já vem definido no compose de produção). 
 - **Infra:** testar o compose de produção (`docker-compose.prod.yml`) num servidor; mesclar a `dev` na `main`. 
 - **Back-end:** timestamps nos chamados cancelados. 
-- **Front:** tela de cadastro (`/cadastro`). 
+- **Front:** nada bloqueia o MVP; falta testar as telas no navegador. 
 - **Qualidade:** rodar `docker compose up` e `npm test` no ambiente do desenvolvedor (a suíte foi validada com um PostgreSQL local); mais testes de concorrência. 
 - **Documentação:** regerar o PDF consolidado quando o código mudar de forma relevante. 

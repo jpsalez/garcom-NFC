@@ -5,6 +5,11 @@ export function login(email: string, password: string) {
   return api<Session>("/auth/login", { method: "POST", body: { email, password } });
 }
 
+// Cadastra o restaurante e o OWNER; a API não devolve token, quem chama entra em seguida com login()
+export function register(body: { name: string; email: string; password: string; restaurantName: string }) {
+  return api<void>("/auth/register", { method: "POST", body });
+}
+
 // Sai na hora e avisa a API para revogar o refresh token (se o aviso falhar, ele expira sozinho)
 export async function logout() {
   const session = readSession();

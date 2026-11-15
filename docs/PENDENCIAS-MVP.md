@@ -35,7 +35,7 @@ Só depois dos itens 1.1 e 1.2. A `dev` continua sendo a branch de desenvolvimen
 
 ### 1.4 Testar o fluxo completo no navegador e no celular
 Ninguém rodou isso depois das mudanças de refresh token, tema escuro e recuperação de senha.
-- [ ] Cadastro de restaurante (`POST /auth/register`) e login.
+- [ ] Cadastro de restaurante em `/cadastro` (entra direto e vai para as mesas) e login.
 - [ ] Criar mesa, baixar o QR, abrir `/m/<código>` no celular.
 - [ ] Chamar garçom e pedir a conta; o card aparece no balcão em tempo real e com som.
 - [ ] Finalizar o chamado; estender e encerrar o atendimento; o cliente que toca de novo recebe um atendimento novo.
@@ -49,7 +49,7 @@ Ninguém rodou isso depois das mudanças de refresh token, tema escuro e recuper
 
 ## 2. Front-end que falta
 
-- [ ] **Tela de cadastro de restaurante** (`/cadastro`, RF01): a API existe, falta a tela. O Luan tem uma versão em `/admin/register` na `main`, mas como tela do SUPER_ADMIN.
+- [x] **Tela de cadastro de restaurante** (`/cadastro`, RF01, 14/11/2026): cadastra o restaurante e o OWNER, entra direto e leva às mesas. Há link no login. Falta testar no navegador.
 - [x] **Tela do SUPER_ADMIN** (`/admin/restaurantes`, 14/11/2026): criar, ativar e desativar restaurantes e gerir os usuários de cada um (criar OWNER ou STAFF, ativar, desativar e excluir). Falta testar no navegador. Dashboard e métricas ficam para depois do MVP.
 - [ ] Decidir a sessão do navegador: hoje o token fica no `localStorage` (risco de XSS). A alternativa é cookie httpOnly, que o Luan começou. Se for trocar, é uma mudança que envolve front e back juntos.
 
@@ -102,7 +102,7 @@ Cardápio digital, comanda do garçom e KDS, avaliações, relatórios e métric
 
 | Módulo | Back-end | Front |
 |---|---|---|
-| auth (cadastro, login, refresh, logout, `/me`, recuperação de senha) | Completo | Login e recuperação feitos; falta o cadastro |
+| auth (cadastro, login, refresh, logout, `/me`, recuperação e troca de senha) | Completo | Feito (`/cadastro`, `/login`, recuperação e troca de senha) |
 | users e administration | Completo | Equipe do OWNER e tela do SUPER_ADMIN feitas |
 | restaurants | Completo | Feito (`/admin/restaurantes`) |
 | tables (CRUD, QR, exclusão) | Completo | Feito (`/admin/mesas`) |
