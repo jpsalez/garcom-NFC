@@ -88,5 +88,3 @@ export function criarModelo(tasks, decisoes) {
   return { tasks, porId, aberta, pronta, bloqueada, motivoBloqueio, destrava, faseAtual, progressoFase, contagem, bloqueioPorDecisao, modulos, porTrabalho, decisoesPendentes, dependenciasPendentes };
 }
 
-/** Próximo status ao clicar na bolinha: a-fazer → fazendo → feita → a-fazer; bloqueada volta para a-fazer. @param {string} s */
-export const proximoStatus = s => ({ 'a-fazer': 'fazendo', fazendo: 'feita', feita: 'a-fazer', bloqueada: 'a-fazer' }[/** @type {'fazendo'} */ (s)] || 'a-fazer');

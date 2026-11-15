@@ -2,11 +2,13 @@
 import json
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import agentes
 import painel
 import monitor
 
@@ -22,7 +24,7 @@ class Activity(unittest.TestCase):
             return painel.activity()
 
     def test_prompt_origem_e_controle_sem_rastro(self):
-        r = painel.Run('r1', 'garcom-revisor')
+        r = agentes.Run('r1', 'garcom-revisor')
         r.status, r.source = 'rodando', 'orquestrar'
         r.proc = Mock()
         r.proc.poll.return_value = None
@@ -35,7 +37,7 @@ class Activity(unittest.TestCase):
         self.assertNotIn('events', result)
 
     def test_parado_com_sessao_pode_retomar_sem_promover_a_processo_ativo(self):
-        r = painel.Run('r1', 'garcom-revisor')
+        r = agentes.Run('r1', 'garcom-revisor')
         r.status, r.session = 'parado', 'sessao'
         result = self.snapshot({'r1': r})['agents'][0]
         self.assertFalse(result['controllable'])
@@ -49,21 +51,21 @@ class Activity(unittest.TestCase):
         self.assertFalse(result['resumable'])
 
     def test_falha_externa_preserva_agentes_do_painel(self):
-        r = painel.Run('r1', 'garcom-revisor')
+        r = agentes.Run('r1', 'garcom-revisor')
         with patch.object(painel, 'RUNS', {'r1': r}), patch.object(painel, 'PIPES', {}), patch.object(painel, 'live', side_effect=OSError('indisponível')):
             result = painel.activity()
         self.assertEqual(len(result['agents']), 1)
         self.assertTrue(result['external_error'])
 
     def test_timer_de_parada_nao_mata_uma_nova_execucao(self):
-        r = painel.Run('r1', 'garcom-revisor')
+        r = agentes.Run('r1', 'garcom-revisor')
         r.status = 'rodando'
         first, second = Mock(), Mock()
         first.poll.return_value = None
         first.pid = 123
         second.pid = 456
         r.proc = first
-        with patch.object(painel.os, 'killpg', create=True) as kill, patch.object(painel.signal, 'SIGKILL', 9, create=True), patch.object(painel.threading, 'Timer') as timer:
+        with patch.object(painel.os, 'killpg', create=True) as kill, patch.object(painel.signal, 'SIGKILL', 9, create=True), patch.object(threading, 'Timer') as timer:
             r.stop()
             callback = timer.call_args.args[1]
             r.proc = second

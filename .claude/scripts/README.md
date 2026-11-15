@@ -2,6 +2,19 @@
 
 O painel é uma ferramenta local de desenvolvimento. Seus arquivos, dependências e análises devem permanecer fora do código e dos bundles de `back-end` e `front-end`.
 
+## Mapa dos módulos Python
+
+| Arquivo | Papel |
+|---|---|
+| `painel.py` | Servidor HTTP: segurança (token, Host/Origin, CSP), gzip/ETag, arquivos, rotas de git/tarefas/decisões. Não sabe rodar agentes. |
+| `agentes.py` | Tudo que dispara `claude -p`: `Run` (uma conversa), `Pipeline` (receita em passos), roteador por palavras-chave (sem LLM), equipes, limite diário e as rotas `/api` desses assuntos. É o único lugar que gasta tokens. |
+| `gitinfo.py` · `ghapi.py` · `insights.py` | Leitura de git, GitHub (`gh`) e análises de histórico. Somente leitura. |
+| `monitor.py` · `analise.py` | Leem os transcripts da sua sessão do Claude Code (Ao vivo, Análise). |
+| `tarefas.py` · `quality.py` | `tasks.json` com validação; snapshot da Saúde do código. |
+| `realtime.py` | Servidor Socket.IO mínimo (aviso de "mudou" aos clientes). |
+| `verify` · `check_tenant` · `doc_drift` · `routes_inventory` · `repo_map` | Scripts de linha de comando do dia a dia (também rodáveis pelo painel). |
+| `ai_mode.py` | Liga/desliga o ambiente do modo Full IA. |
+
 ## Regras de implementação
 
 - Preservar as funções aprovadas e o visualizador de arquivos existente.

@@ -110,10 +110,7 @@ def carregar():
     if not TASKS.exists():
         return []
     dados = json.loads(TASKS.read_text(encoding="utf-8"))
-    lista = dados.get("tasks", []) if isinstance(dados, dict) else dados
-    if lista and "title" in lista[0]:
-        raise RuntimeError("tasks.json está no formato antigo: rode python3 .claude/scripts/migrar_tarefas.py --aplicar")
-    return lista
+    return dados.get("tasks", []) if isinstance(dados, dict) else dados
 
 
 def salvar(lista):
