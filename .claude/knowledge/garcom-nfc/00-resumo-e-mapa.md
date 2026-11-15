@@ -33,7 +33,7 @@ Código (comportamento atual) > v0.3 > v0.2 > módulos/guia (propostas).
 
 ## Mapa dos arquivos
 Veja `INDEX.md` (lista cada arquivo, tamanho e seções). Convenção: `cap-NN-*` = capítulos 1 a 9 do PDF consolidado; `apendice-a-divergencias` = DV-01 a DV-47; `apendice-b-glossario`; `apendice-c0..c5` = especificações complementares (modelo e endpoints da v0.2, desenho proposto dos services, propostas do guia).
-- PDF consolidado: docs/Documentacao-Tecnica-garcom-NFC.pdf (v1.1, 14/11/2026). Originais em /home/jpsalez/backup-pdfs-originais-2026-11-12/.
+- PDF consolidado: docs/Documentacao-Tecnica-garcom-NFC.pdf (v1.2, 14/11/2026). Originais em /home/jpsalez/backup-pdfs-originais-2026-11-12/.
 
 ## Regras de trabalho com o usuário
 Responder em português (BR). Por padrão GUIAR: explicar, dar passo a passo e trechos para o usuário aplicar. Implementar apenas quando ele pedir explicitamente, e só o que ele domina e acha repetitivo (ex.: autenticação, hash, JWT). Partes novas do domínio (multi-tenant e papéis, sessões de mesa, fluxo cliente NFC/QR, realtime) são o aprendizado do usuário: guiar. Ele prefere código mostrado no chat quando pede "como seria", sem alterar arquivos.

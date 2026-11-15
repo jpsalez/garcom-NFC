@@ -82,7 +82,7 @@ Pode fazer depois do piloto, nesta ordem de valor:
 
 ## 5. Documentação e repositório
 
-- [ ] **Regerar o PDF** (`docs/Documentacao-Tecnica-garcom-NFC.pdf` está na v1.1 e não tem refresh token, recuperação de senha, helmet, paginação nem os timestamps). O gerador (Python mais Chromium) está só na pasta temporária da sessão; vale guardá-lo em `.claude/scripts/` para não depender dela.
+- [x] PDF regerado em 14/11/2026 (v1.2, com refresh token, recuperação de senha, helmet, paginação e timestamps). Falta guardar o gerador (Python mais Chromium), que está só na pasta temporária da sessão: vale colocá-lo em `.claude/scripts/` para regerar sem depender dela.
 - [ ] Você tem alterações **não commitadas** de antes desta sessão (painel e scripts em `.claude/scripts/`, skill `monitor`, `agentes.py`, remoções em `.claude/painel` e `.claude/scripts`). Commitar ou descartar.
 - [ ] Formatação: `routes.ts` e os controllers usam 4 espaços e aspas simples, e o `biome.json` define 2 espaços e aspas duplas. `npm run format` mexe em muitos arquivos; faça num commit só, depois dos testes.
 - [ ] Rodar `python3 .claude/scripts/verify.py`, `check_tenant.py` e `doc_drift.py` antes de cada merge.
