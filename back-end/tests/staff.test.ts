@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { passwordHash } from "../src/shared/utils/password.ts";
 import { api } from "./helpers/app.ts";
-import { auth, ownerOf, staffToken } from "./helpers/auth.ts";
+import { auth, cookieOf, ownerOf, staffToken } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
 import { createSession, createTable } from "./helpers/factories.ts";
 
@@ -15,7 +15,7 @@ async function superAdminToken() {
   await prisma.users.create({
     data: { name: "Super", email: "super@teste.com", password_hash: await passwordHash("senha-forte-123"), role: "SUPER_ADMIN" },
   });
-  return (await login("super@teste.com")).body.token as string;
+  return cookieOf(await login("super@teste.com"), "access_token") as string;
 }
 
 describe("/staff (OWNER gerencia a equipe do próprio restaurante)", () => {
@@ -44,7 +44,7 @@ describe("/staff (OWNER gerencia a equipe do próprio restaurante)", () => {
     const duplicate = await api().post("/api/v1/staff").set(auth(token)).send(newStaff);
     expect([duplicate.status, duplicate.body.message]).toEqual([409, "Não foi possível criar o usuário"]);
 
-    const staff = (await login(newStaff.email)).body.token as string;
+    const staff = cookieOf(await login(newStaff.email), "access_token") as string;
     expect((await api().get("/api/v1/staff").set(auth(staff))).status).toBe(403);
     expect((await api().post("/api/v1/staff").set(auth(staff)).send({ ...newStaff, email: "x@teste.com" })).status).toBe(403);
   });
@@ -62,7 +62,7 @@ describe("/staff (OWNER gerencia a equipe do próprio restaurante)", () => {
   it("desativar o STAFF corta o acesso na hora, mesmo com o token em cache", async () => {
     const { token } = await ownerOf("a");
     const created = await api().post("/api/v1/staff").set(auth(token)).send(newStaff);
-    const staff = (await login(newStaff.email)).body.token as string;
+    const staff = cookieOf(await login(newStaff.email), "access_token") as string;
     expect((await api().get("/api/v1/tables").set(auth(staff))).status).toBe(200);
 
     await api().patch(`/api/v1/staff/${created.body.id}`).set(auth(token)).send({ active: false });

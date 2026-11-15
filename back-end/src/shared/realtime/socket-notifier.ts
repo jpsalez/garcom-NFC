@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import { injectable } from "tsyringe";
 import { Server } from "socket.io";
+import { ACCESS_COOKIE, readCookie } from "../utils/cookies.ts";
 import type { INotifier } from "./notifier.ts";
 
 type Authenticate = (token: string) => Promise<{ id: string; restaurantId: string | null }>;
@@ -13,13 +14,13 @@ const userRoomOf = (userId: string) => `user:${userId}`;
 export class SocketNotifier implements INotifier {
   private io?: Server;
 
-  // Só OWNER e STAFF entram (SUPER_ADMIN não tem restaurante); o JWT vem em handshake.auth.token, nunca na URL.
+  // Só OWNER e STAFF entram (SUPER_ADMIN não tem restaurante); o JWT vem do cookie httpOnly do handshake, nunca na URL.
   // authenticate e origins chegam de fora (main.ts) para o notifier não depender do HTTP.
   attach(httpServer: HttpServer, authenticate: Authenticate, origins: string[]) {
-    this.io = new Server(httpServer, { cors: { origin: origins } });
+    this.io = new Server(httpServer, { cors: { origin: origins, credentials: true } });
     this.io.use(async (socket, next) => {
       try {
-        const user = await authenticate(String(socket.handshake.auth.token ?? ""));
+        const user = await authenticate(readCookie(socket.handshake.headers.cookie, ACCESS_COOKIE) ?? "");
         if (!user.restaurantId) throw new Error("Usuário sem restaurante");
         socket.join([roomOf(user.restaurantId), userRoomOf(user.id)]);
         next();

@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { api } from "./helpers/app.ts";
+import { auth, cookieOf } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
 
 const user = { name: "Ana", email: "ana@teste.com", password: "senha-forte-123", restaurantName: "Bar do Teste" };
@@ -30,11 +31,12 @@ describe("POST /auth/register", () => {
 });
 
 describe("POST /auth/login", () => {
-  it("devolve token com credenciais corretas", async () => {
+  it("autentica com credenciais corretas e grava o cookie de acesso", async () => {
     await api().post("/api/v1/auth/register").send(user);
     const res = await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password });
     expect(res.status).toBe(200);
-    expect(typeof res.body.token).toBe("string");
+    expect(res.body.user.email).toBe(user.email);
+    expect(cookieOf(res, "access_token")).toBeTruthy();
   });
 
   it("dá a mesma resposta para senha errada e e-mail inexistente (não revela e-mails)", async () => {
@@ -47,15 +49,18 @@ describe("POST /auth/login", () => {
   });
 });
 
+const loginRes = () => api().post("/api/v1/auth/login").send({ email: user.email, password: user.password });
+const pairOf = (res: Parameters<typeof cookieOf>[0]) => ({
+  token: cookieOf(res, "access_token") as string,
+  refreshToken: cookieOf(res, "refresh_token") as string,
+});
+
 async function loginAsOwner() {
   await api().post("/api/v1/auth/register").send(user);
-  return (await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password })).body as {
-    token: string;
-    refreshToken: string;
-  };
+  return pairOf(await loginRes());
 }
 
-const refresh = (refreshToken: string) => api().post("/api/v1/auth/refresh").send({ refreshToken });
+const refresh = (refreshToken: string) => api().post("/api/v1/auth/refresh").set("Cookie", `refresh_token=${refreshToken}`);
 
 describe("POST /auth/refresh", () => {
   it("troca o refresh token por um par novo e o antigo deixa de valer", async () => {
@@ -64,15 +69,15 @@ describe("POST /auth/refresh", () => {
     const res = await refresh(first.refreshToken);
 
     expect(res.status).toBe(200);
-    expect(res.body.refreshToken).not.toBe(first.refreshToken);
+    expect(pairOf(res).refreshToken).not.toBe(first.refreshToken);
     expect(res.body.user.password_hash).toBeUndefined();
-    expect((await api().get("/api/v1/auth/me").set("Authorization", `Bearer ${res.body.token}`)).status).toBe(200);
+    expect((await api().get("/api/v1/auth/me").set(auth(pairOf(res).token))).status).toBe(200);
     expect((await refresh(first.refreshToken)).status).toBe(401);
   });
 
   it("reusar um token já trocado encerra todas as sessões do usuário", async () => {
     const first = await loginAsOwner();
-    const second = (await refresh(first.refreshToken)).body;
+    const second = pairOf(await refresh(first.refreshToken));
 
     expect((await refresh(first.refreshToken)).status).toBe(401);
 
@@ -86,13 +91,13 @@ describe("POST /auth/refresh", () => {
     await prisma.refresh_tokens.updateMany({ data: { expires_at: new Date(Date.now() - 1000) } });
     expect((await refresh(refreshToken)).status).toBe(401);
 
-    const again = (await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password })).body;
+    const again = pairOf(await loginRes());
     await prisma.users.updateMany({ data: { active: false } });
     expect((await refresh(again.refreshToken)).status).toBe(401);
   });
 
-  it("recusa corpo sem refreshToken com 400", async () => {
-    expect((await api().post("/api/v1/auth/refresh").send({})).status).toBe(400);
+  it("recusa pedido sem o cookie de refresh com 401", async () => {
+    expect((await api().post("/api/v1/auth/refresh").send({})).status).toBe(401);
   });
 });
 
@@ -100,9 +105,11 @@ describe("POST /auth/logout", () => {
   it("revoga o refresh token; token desconhecido também dá 204", async () => {
     const { refreshToken } = await loginAsOwner();
 
-    expect((await api().post("/api/v1/auth/logout").send({ refreshToken })).status).toBe(204);
+    const logout = (token: string) => api().post("/api/v1/auth/logout").set("Cookie", `refresh_token=${token}`);
+
+    expect((await logout(refreshToken)).status).toBe(204);
     expect((await refresh(refreshToken)).status).toBe(401);
-    expect((await api().post("/api/v1/auth/logout").send({ refreshToken: "desconhecido" })).status).toBe(204);
+    expect((await logout("desconhecido")).status).toBe(204);
   });
 });
 
@@ -110,7 +117,7 @@ describe("GET /auth/me", () => {
   it("devolve o usuário logado sem o hash da senha e exige token", async () => {
     const { token } = await loginAsOwner();
 
-    const res = await api().get("/api/v1/auth/me").set("Authorization", `Bearer ${token}`);
+    const res = await api().get("/api/v1/auth/me").set(auth(token));
 
     expect(res.status).toBe(200);
     expect(res.body.email).toBe(user.email);
@@ -122,11 +129,11 @@ describe("GET /auth/me", () => {
 describe("PATCH /auth/password", () => {
   const novaSenha = "outra-senha-forte-1";
   const change = (token: string, currentPassword: string, newPassword: string) =>
-    api().patch("/api/v1/auth/password").set("Authorization", `Bearer ${token}`).send({ currentPassword, newPassword });
+    api().patch("/api/v1/auth/password").set(auth(token)).send({ currentPassword, newPassword });
 
   it("troca a senha, derruba as outras sessões e devolve um par novo para este aparelho", async () => {
     const first = await loginAsOwner();
-    const other = (await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password })).body;
+    const other = pairOf(await loginRes());
 
     const res = await change(first.token, user.password, novaSenha);
 
@@ -135,7 +142,7 @@ describe("PATCH /auth/password", () => {
     expect((await api().post("/api/v1/auth/login").send({ email: user.email, password: novaSenha })).status).toBe(200);
     expect((await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password })).status).toBe(401);
     // o par novo primeiro: reusar um token revogado derruba todas as sessões, inclusive o novo
-    expect((await refresh(res.body.refreshToken)).status).toBe(200);
+    expect((await refresh(pairOf(res).refreshToken)).status).toBe(200);
     expect((await refresh(first.refreshToken)).status).toBe(401);
     expect((await refresh(other.refreshToken)).status).toBe(401);
   });

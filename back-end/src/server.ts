@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+import { blockForeignOrigin } from "./shared/middlewares/origin.middleware.ts";
 import type { Application } from "express";
 
 const app: Application = express();
@@ -17,7 +18,9 @@ export const allowedOrigins = (process.env.FRONTEND_URL ?? "")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-app.use(cors({ origin: allowedOrigins }));
+// credentials: o navegador envia os cookies de sessão; por isso a origem é sempre explícita, nunca "*"
+app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(blockForeignOrigin(allowedOrigins));
 app.use(express.json());
 
 export { app };
