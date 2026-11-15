@@ -3,13 +3,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "@/lib/session";
 
-// Menu do painel: STAFF só vê os chamados; OWNER também gerencia mesas e equipe
+// Menu do painel: STAFF só vê os chamados; OWNER também gerencia mesas e equipe; SUPER_ADMIN gerencia os restaurantes
 export default function AdminNav() {
     const session = useSession()
     const pathname = usePathname()
     if (!session) return null
 
-    const items = [{ href: '/admin/waiter', label: 'Chamados' }]
+    const items = session.user.role === 'SUPER_ADMIN' ? [{ href: '/admin/restaurantes', label: 'Restaurantes' }] : [{ href: '/admin/waiter', label: 'Chamados' }]
     if (session.user.role === 'OWNER') items.push({ href: '/admin/mesas', label: 'Mesas' }, { href: '/admin/equipe', label: 'Equipe' })
 
     items.push({ href: '/admin/senha', label: 'Senha' })

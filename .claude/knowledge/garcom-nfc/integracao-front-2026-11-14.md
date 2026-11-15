@@ -37,7 +37,7 @@ Feita em modo autônomo (usuário ausente), em branches `ia/integracao-*` a part
 ## Decisões tomadas sem o usuário (REVISAR)
 - Token do balcão no `localStorage` (não cookie httpOnly): mais simples e sem proxy no Next; o risco é XSS, e o JWT expira (padrão 1 dia). Alternativa futura: cookie httpOnly com rota de login no próprio Next.
 - "Atendimentos Concluídos" = chamados criados hoje e já finalizados (`since` filtra por `created_at`; foi preciso acrescentar `?since=` ao `GET /calls`).
-- SUPER_ADMIN, que não tem restaurante, ainda não tem tela: o login dele mostra um aviso.
+- SUPER_ADMIN, que não tem restaurante: ganhou a tela `/admin/restaurantes` em 14/11/2026 (ver cap. 9).
 
 ## Passos
 | Passo | Branch | Estado |

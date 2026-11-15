@@ -12,7 +12,7 @@ export default function RequireAuth({ roles, children }: { roles: Role[]; childr
 
     useEffect(() => {
         if (session === null) router.replace('/login')
-        else if (session && !allowed) router.replace('/admin/waiter') // logado, mas sem permissão para esta tela
+        else if (session && !allowed) router.replace(session.user.role === 'SUPER_ADMIN' ? '/admin/restaurantes' : '/admin/waiter') // logado, mas sem permissão para esta tela
     }, [session, allowed, router])
 
     return allowed ? <>{children}</> : null

@@ -26,7 +26,7 @@ _Figura: **Figura 3.2** – Arquitetura implementada em 14/11/2026: front Next.j
 ### 3.1.3 Comparação planejado versus implementado  
 | Aspecto | Especificado (v0.3) | Implementado (código) | Situação |
 |---|---|---|---|  
-| Front-end Next.js | Quatro áreas (mesa, balcão, Admin, cadastro/login) | `/m/[code]` (cliente), `/login`, `/admin/waiter` (balcão), `/admin/mesas` e `/admin/equipe` (OWNER); sem tela do SUPER_ADMIN nem cadastro | Parcial |
+| Front-end Next.js | Quatro áreas (mesa, balcão, Admin, cadastro/login) | `/m/[code]` (cliente), `/login`, `/admin/waiter` (balcão), `/admin/mesas` e `/admin/equipe` (OWNER), `/admin/restaurantes` (SUPER_ADMIN) e `/admin/senha`; sem tela de cadastro | Parcial |
 | API Express + TypeScript | Porta 4000, prefixo /api/v1 | Porta 4000 (`PORT`), prefixo `/api/v1`, 27 rotas, Swagger em `/docs` fora de produção | Implementado |
 | PostgreSQL + Prisma | 6 tabelas, migrations versionadas | 8 tabelas (6 do domínio, `refresh_tokens` e `password_resets`) e 9 migrations (duas escritas à mão por causa dos índices parciais) | Implementado |
 | Camadas controller/service/repository | Sim, com Zod na entrada | Completa em auth, users/administration, tables, sessions e calls | Implementado |

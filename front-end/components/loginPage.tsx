@@ -28,13 +28,8 @@ export default function LoginPage() {
 
         try{
             const session = await login(email, password)
-            // SUPER_ADMIN não tem restaurante: ainda não há tela para ele
-            if (session.user.role === 'SUPER_ADMIN') {
-                setError('Este acesso é da plataforma e ainda não tem tela.')
-                return
-            }
             saveSession(session)
-            router.push('/admin/waiter')
+            router.push(session.user.role === 'SUPER_ADMIN' ? '/admin/restaurantes' : '/admin/waiter')
         } catch(err) {
             setError(loginErrorMessage(err))
         } finally {

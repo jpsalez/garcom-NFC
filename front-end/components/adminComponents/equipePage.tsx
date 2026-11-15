@@ -2,10 +2,8 @@
 import { FormEvent, useCallback, useEffect, useState } from "react"
 import { useAct } from "@/lib/useAct"
 import { useSession } from "@/lib/session"
-import type { StaffCategory, StaffUser } from "@/lib/types"
+import { CATEGORIES, type StaffCategory, type StaffUser } from "@/lib/types"
 import { createStaff, listStaff, removeStaff, updateStaff } from "@/services/staff"
-
-const CATEGORIES: Record<StaffCategory, string> = { WAITER: 'Garçom', MANAGER: 'Gerente', CLEANING: 'Limpeza', KITCHEN: 'Cozinha', OTHER: 'Outro' }
 
 function StaffCard({user, onCategory, onActive, onDelete}: {
     user: StaffUser, onCategory: (category: StaffCategory | null) => void, onActive: (active: boolean) => void, onDelete: () => void
