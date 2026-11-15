@@ -28,6 +28,11 @@ export class RestaurantRepository implements IRestaurantRepository {
     return this.db.restaurants.findUnique({ where: { slug } });
   }
 
+  // Trava a linha do restaurante até o fim da transação: pedidos que mudam a equipe dele passam um de cada vez
+  async lock(id: string) {
+    await this.db.$queryRaw`SELECT id FROM restaurants WHERE id = ${id} FOR UPDATE`;
+  }
+
   update(id: string, data: Prisma.restaurantsUpdateInput) {
     return this.db.restaurants.update({ where: { id }, data });
   }

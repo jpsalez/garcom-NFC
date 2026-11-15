@@ -63,7 +63,10 @@ export class SessionsService implements ISessionsService {
   async extend(restaurantId: string, id: string) {
     const session = await this.getActive(restaurantId, id);
     const base = Math.max(session.expires_at.getTime(), Date.now());
-    const extended = await this.sessionRepository.update(restaurantId, id, { expires_at: new Date(base + sessionTtlMs()) });
+    const { count } = await this.sessionRepository.extendIfActive(restaurantId, id, new Date(base + sessionTtlMs()));
+    // Outro pedido encerrou entre a leitura e a escrita: nada é estendido nem anunciado
+    if (count === 0) throw new ConflictError("O atendimento já foi encerrado", "SESSION_CLOSED");
+    const extended = await this.getActive(restaurantId, id);
     this.notifier.toRestaurant(restaurantId, "session:extended", { id, expires_at: extended.expires_at });
     return extended;
   }

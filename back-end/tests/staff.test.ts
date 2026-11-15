@@ -105,6 +105,20 @@ describe("último OWNER", () => {
 
     expect(res.status).toBe(200);
   });
+
+  it("dois OWNER desativados ao mesmo tempo: um passa e o outro recebe 409", async () => {
+    const { user } = await ownerOf("a");
+    const superToken = await superAdminToken();
+    const base = `/api/v1/admin/restaurants/${user.restaurant_id}/users`;
+    const second = await api().post(base).set(auth(superToken)).send({ ...newStaff, role: "OWNER" });
+
+    const statuses = (
+      await Promise.all([user.id, second.body.id].map((id) => api().patch(`${base}/${id}`).set(auth(superToken)).send({ active: false })))
+    ).map((res) => res.status);
+
+    expect(statuses.sort()).toEqual([200, 409]);
+    expect(await prisma.users.count({ where: { restaurant_id: user.restaurant_id, role: "OWNER", active: true } })).toBe(1);
+  });
 });
 
 describe("/admin/restaurants (SUPER_ADMIN)", () => {
