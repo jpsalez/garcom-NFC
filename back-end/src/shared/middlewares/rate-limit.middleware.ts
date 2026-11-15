@@ -32,6 +32,8 @@ export const refreshLimiter = limiter(15, 60, "Muitas renovações de login. Ten
 // Pedir link: por IP+e-mail, para ninguém encher a caixa de entrada de uma pessoa; usar o link: por IP
 export const forgotPasswordLimiter = limiter(60, 5, "Muitos pedidos de redefinição. Tente novamente mais tarde.", byIpAndEmail);
 export const resetPasswordLimiter = limiter(15, 10, "Muitas tentativas de redefinição. Tente novamente em alguns minutos.", byIp);
+// Trocar a senha pede a senha atual: o limite por usuário trava quem testa senhas com um token roubado (usar depois do ensureAuthenticated)
+export const changePasswordLimiter = limiter(15, 10, "Muitas tentativas de trocar a senha. Tente novamente em alguns minutos.", (req) => req.user?.id ?? byIp(req));
 export const registerLimiter = limiter(60, 5, "Muitos cadastros deste endereço. Tente novamente mais tarde.", byIp);
 
 // IP + mesa: vários aparelhos na mesma rede do restaurante podem escanear mesas diferentes

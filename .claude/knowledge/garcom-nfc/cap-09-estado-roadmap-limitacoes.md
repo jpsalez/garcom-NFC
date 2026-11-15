@@ -8,7 +8,7 @@ Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-en
 | Módulo / área | Estado | O que existe | O que falta |
 |---|---|---|---|
 | Infraestrutura da API (main.ts, server.ts, routes.ts) | Completo | Express 5, prefixo `/api/v1`, 27 rotas, servidor HTTP próprio com Socket.IO, CORS por `FRONTEND_URL`, rate limits, `trust proxy` por `TRUST_PROXY`, `/docs` fora de produção, exigência de `JWT_SECRET` forte em produção, injeção de dependência, tratador de erros | Testar o deploy (o `TRUST_PROXY=1` já está no compose de produção) |
-| auth | Completo | Register fluxo B (OWNER + restaurante em transação, slug automático), login com hash falso e bloqueio de inativos, JWT HS256 de 15 min, refresh token de uso único com rotação, logout, `/auth/me`, recuperação de senha por e-mail, limites de tentativa | Troca de senha com o usuário logado |
+| auth | Completo | Register fluxo B (OWNER + restaurante em transação, slug automático), login com hash falso e bloqueio de inativos, JWT HS256 de 15 min, refresh token de uso único com rotação, logout, `/auth/me`, recuperação de senha por e-mail, troca de senha logado, limites de tentativa | Telas de troca de senha no front |
 | users + administration | Completo | SUPER_ADMIN: `/admin/restaurants` e usuários de qualquer restaurante. OWNER: `/staff`. Último OWNER ativo protegido; DEC-13 (restaurante desativado) | Tela do SUPER_ADMIN no front |
 | restaurants | Completo | Repository, slug automático | Sem exclusão por desenho (desativa-se) |
 | shared (container, Prisma, erros, validação, jwt, password, cache, utils) | Completo | Container, `DbClient` e `runInTransaction`, erros com `code`, validadores de corpo, query e UUID, `AuthCache`, utilitários de token e de URL pública | Redis só para multi-instância |
@@ -92,7 +92,7 @@ Todos decididos em 13–14/11/2026 (ver 2.7.1): alerta sonoro (sim, DEC-10), reg
  
 - **Segurança de produção:** decisão sobre cookie httpOnly (o `TRUST_PROXY` já vem definido no compose de produção). 
 - **Infra:** testar o compose de produção (`docker-compose.prod.yml`) num servidor; mesclar a `dev` na `main`. 
-- **Back-end:** troca de senha com o usuário logado; timestamps nos chamados cancelados. 
+- **Back-end:** timestamps nos chamados cancelados. 
 - **Front:** tela do SUPER_ADMIN (restaurantes e usuários); tela de cadastro (`/cadastro`). 
 - **Qualidade:** rodar `docker compose up` e `npm test` no ambiente do desenvolvedor (a suíte foi validada com um PostgreSQL local); mais testes de concorrência. 
 - **Documentação:** regerar o PDF consolidado quando o código mudar de forma relevante. 

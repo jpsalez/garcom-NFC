@@ -20,6 +20,7 @@ Todas as rotas abaixo estão implementadas (27 no total) e montadas sob `/api/v1
 | POST /auth/logout | Revogar o refresh token | Entrada: refreshToken; 204 (também para token desconhecido) | Mesmo limite do refresh |
 | POST /auth/forgot-password | Enviar o link de redefinição de senha por e-mail | Entrada: email; 202 com a mesma mensagem para qualquer e-mail | Link de uso único e 1 hora; 5 por hora por IP+e-mail |
 | POST /auth/reset-password | Definir a nova senha | Entrada: token, password (8 a 128); 204; 400 `RESET_TOKEN_INVALID` | Revoga os refresh tokens do usuário; 10 por 15 min por IP |
+| PATCH /auth/password | Trocar a senha do usuário logado | JWT; entrada: currentPassword, newPassword (8 a 128, diferente da atual); 200 `{ token, refreshToken, user }`; 400 `INVALID_CURRENT_PASSWORD` | Derruba os refresh tokens dos outros aparelhos; 10 por 15 min por usuário |
 | GET /auth/me | Usuário logado | JWT; 200 com o usuário sem o hash | |
 | POST /public/tables/:code/scan | Entrar no atendimento ativo ou abrir; devolve o token do aparelho | 200 `{ token, expires_at, table: { label }, restaurant: { name } }`; 404 se a mesa não existe, está inativa ou o restaurante está desativado | POST por ter efeito colateral; 30 por 15 min por IP+mesa; substitui `GET /public/tables/:code` e `POST /public/tables/:code/token` da v0.3 |
 

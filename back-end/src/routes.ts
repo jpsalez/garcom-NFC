@@ -16,10 +16,10 @@ import { StaffController } from "./modules/users/staff.controller.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "./modules/users/users.schema.ts";
 import { PasswordResetController } from "./modules/auth/password-reset.controller.ts";
 import { forgotPasswordSchema, resetPasswordSchema } from "./modules/auth/password-reset.schema.ts";
-import { callLimiter, forgotPasswordLimiter, loginIpLimiter, loginLimiter, refreshLimiter, registerLimiter, resetPasswordLimiter, scanLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
+import { callLimiter, changePasswordLimiter, forgotPasswordLimiter, loginIpLimiter, loginLimiter, refreshLimiter, registerLimiter, resetPasswordLimiter, scanLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
 import { ensureAuthenticated, ensureRole } from "./shared/middlewares/auth.middleware.ts";
 import { role } from "../generated/prisma/enums.ts";
-import { createUserSchema, loginUserSchema, refreshSchema } from "./modules/auth/auth.schema.ts";
+import { changePasswordSchema, createUserSchema, loginUserSchema, refreshSchema } from "./modules/auth/auth.schema.ts";
 
 export function SetupRoutes(){
     const router: Router = express.Router();
@@ -41,6 +41,7 @@ export function SetupRoutes(){
     router.post('/auth/refresh', refreshLimiter, validateSchema(refreshSchema), authController.refresh);
     router.post('/auth/logout', refreshLimiter, validateSchema(refreshSchema), authController.logout);
     router.get('/auth/me', ensureAuthenticated, authController.me);
+    router.patch('/auth/password', ensureAuthenticated, changePasswordLimiter, validateSchema(changePasswordSchema), authController.changePassword);
     router.post('/auth/forgot-password', forgotPasswordLimiter, validateSchema(forgotPasswordSchema), passwordResetController.forgot);
     router.post('/auth/reset-password', resetPasswordLimiter, validateSchema(resetPasswordSchema), passwordResetController.reset);
 

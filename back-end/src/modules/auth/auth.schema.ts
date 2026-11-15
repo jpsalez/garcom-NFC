@@ -21,3 +21,15 @@ export type loginUserInput = z.infer<typeof loginUserSchema>;
 // Refresh e logout recebem o refresh token que o login entregou
 export const refreshSchema = z.object({ refreshToken: z.string().min(1).max(200) });
 export type refreshInput = z.infer<typeof refreshSchema>;
+
+// Troca de senha com o usuário logado: exige a senha atual (quem pegou um token emprestado não consegue trocá-la)
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: z.string().min(8).max(128),
+  })
+  .refine((data) => data.newPassword !== data.currentPassword, {
+    path: ["newPassword"],
+    message: "A nova senha precisa ser diferente da atual",
+  });
+export type changePasswordInput = z.infer<typeof changePasswordSchema>;

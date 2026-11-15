@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createRestaurantSchema, setActiveSchema } from "../modules/administration/administration.schema.ts";
 import { forgotPasswordSchema, resetPasswordSchema } from "../modules/auth/password-reset.schema.ts";
-import { createUserSchema, loginUserSchema, refreshSchema } from "../modules/auth/auth.schema.ts";
+import { changePasswordSchema, createUserSchema, loginUserSchema, refreshSchema } from "../modules/auth/auth.schema.ts";
 import { createCallSchema } from "../modules/calls/calls.schemas.ts";
 import { createTableSchema, updateTableSchema } from "../modules/tables/tables.schemas.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "../modules/users/users.schema.ts";
@@ -82,6 +82,9 @@ export const openApiSpec = {
     },
     "/auth/reset-password": {
       post: operation({ tag: "Auth", summary: "Define a nova senha com o token do link (vale uma vez, 1 hora); encerra as sessões", success: 204, body: resetPasswordSchema, auth: false }),
+    },
+    "/auth/password": {
+      patch: operation({ tag: "Auth", summary: "Troca a senha do usuário logado (exige a senha atual); derruba as outras sessões e devolve um par novo", body: changePasswordSchema }),
     },
     "/auth/me": {
       get: operation({ tag: "Auth", summary: "Dados do usuário logado" }),

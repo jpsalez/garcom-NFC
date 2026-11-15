@@ -7,13 +7,15 @@ import { RestaurantRepository } from "../restaurants/restaurants.repository.ts";
 import { slugify, withRandomSuffix } from "../restaurants/slug.ts";
 import { runInTransaction } from "../../shared/providers/prisma.ts";
 import type { IRestaurantRepository } from "../restaurants/restaurants.repository.interface.ts";
-import type { createUserInput, loginUserInput } from "./auth.schema.ts";
+import type { changePasswordInput, createUserInput, loginUserInput } from "./auth.schema.ts";
 import type { users } from "../../../generated/prisma/client.ts";
 import { role } from "../../../generated/prisma/enums.ts";
 import { DUMMY_PASSWORD_HASH, comparePassword, passwordHash } from "../../shared/utils/password.ts";
 import { toPublicUser } from "../users/public-user.ts";
 import { signToken } from "../../shared/utils/jwt.ts";
+import { RefreshTokenRepository } from "./refresh-tokens.repository.ts";
 import { generateSessionToken, hashToken } from "../../shared/utils/token.ts";
+import { AppError } from "../../shared/errors/AppError.ts";
 import { ConflictError, UnauthorizedError } from "../../shared/errors/http-errors.ts";
 
 @injectable()
@@ -92,6 +94,22 @@ export class AuthService implements IAuthService {
   async logout(refreshToken: string) {
     const saved = await this.refreshTokenRepository.findByHash(hashToken(refreshToken));
     if (saved) await this.refreshTokenRepository.revokeIfActive(saved.id, new Date());
+  }
+
+  async changePassword(userId: string, input: changePasswordInput) {
+    const user = await this.userRepository.findForAuth(userId);
+    if (!user) throw new UnauthorizedError("Não autenticado");
+    // 400 e não 401: o front trata 401 como token vencido e tentaria renovar a sessão
+    if (!(await comparePassword(input.currentPassword, user.password_hash))) {
+      throw new AppError("Senha atual incorreta", 400, undefined, "INVALID_CURRENT_PASSWORD");
+    }
+
+    const newHash = await passwordHash(input.newPassword);
+    await runInTransaction(async (tx) => {
+      await new UserRepository(tx).setPassword(user.id, newHash);
+      await new RefreshTokenRepository(tx).revokeAllByUser(user.id, new Date());
+    });
+    return this.issueTokens(user);
   }
 
   async me(userId: string) {
