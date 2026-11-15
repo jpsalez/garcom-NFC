@@ -57,3 +57,12 @@ describe("limite de login por IP", () => {
     }
   });
 });
+
+describe("cabeçalhos de segurança", () => {
+  it("responde com os cabeçalhos do helmet e sem x-powered-by", async () => {
+    const res = await api().get("/api/v1/health");
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["strict-transport-security"]).toBeDefined();
+    expect(res.headers["x-powered-by"]).toBeUndefined();
+  });
+});

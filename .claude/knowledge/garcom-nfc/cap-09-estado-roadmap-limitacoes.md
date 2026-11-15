@@ -7,7 +7,7 @@ Conferido com o código em 14/11/2026 (branch `dev`). O MVP do chamado está com
 Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-end/` e `front-end/`).  
 | Módulo / área | Estado | O que existe | O que falta |
 |---|---|---|---|
-| Infraestrutura da API (main.ts, server.ts, routes.ts) | Completo | Express 5, prefixo `/api/v1`, 27 rotas, servidor HTTP próprio com Socket.IO, CORS por `FRONTEND_URL`, rate limits, `trust proxy` por `TRUST_PROXY`, `/docs` fora de produção, exigência de `JWT_SECRET` forte em produção, injeção de dependência, tratador de erros | `helmet` (cabeçalhos de segurança); valor de `TRUST_PROXY` no deploy |
+| Infraestrutura da API (main.ts, server.ts, routes.ts) | Completo | Express 5, prefixo `/api/v1`, 27 rotas, servidor HTTP próprio com Socket.IO, CORS por `FRONTEND_URL`, rate limits, `trust proxy` por `TRUST_PROXY`, `/docs` fora de produção, exigência de `JWT_SECRET` forte em produção, injeção de dependência, tratador de erros | Valor de `TRUST_PROXY` no deploy |
 | auth | Completo | Register fluxo B (OWNER + restaurante em transação, slug automático), login com hash falso e bloqueio de inativos, JWT HS256, limites de tentativa | Refresh de token, recuperação e troca de senha, `/auth/me` |
 | users + administration | Completo | SUPER_ADMIN: `/admin/restaurants` e usuários de qualquer restaurante. OWNER: `/staff`. Último OWNER ativo protegido; DEC-13 (restaurante desativado) | Tela do SUPER_ADMIN no front |
 | restaurants | Completo | Repository, slug automático | Sem exclusão por desenho (desativa-se) |
@@ -55,7 +55,7 @@ O back-end entregou a API de cada fase primeiro; o front ligou nos endpoints dep
 |---|---|---|---|---|
 | 1 Fundação | BE-01 Express, TypeScript, Prisma, Docker Compose; BE-02 autocadastro, login JWT, middlewares auth e tenant (BE-01); BE-03 mesas, QR Code, acesso do balcão (BE-02) | FE-01 setup Next.js e layouts das áreas; FE-02 login (BE-02); FE-03 mesas, QR Codes e equipe (BE-03) | Restaurante com mesas e QR Codes impressos | **Concluída (14/11/2026).** Falta a tela de cadastro de restaurante (`/cadastro`) |
 | 2 Chamado | BE-04 atendimento da mesa e token por aparelho (BE-03); BE-05 chamados e Socket.IO na sala do balcão, finalizar (BE-04) | FE-04 tela da mesa (BE-04, BE-05); FE-05 tela do balcão em tempo real e Finalizar (BE-05) | Cliente chama e o card aparece e some no balcão | **Concluída (14/11/2026)** |
-| 3 Encerramento | BE-06 encerrar: revogar tokens e cancelar chamados (BE-05); BE-07 estender, job de 4 h, limite de chamados (BE-06) | FE-06 balcão: mesas em atendimento, Encerrar, Estender (BE-06, BE-07); FE-07 mesa: reconexão (BE-06) | MVP completo rodando via Docker, pronto para piloto | **Concluída (14/11/2026)** para desenvolvimento; produção depende de Dockerfile, `helmet` e `TRUST_PROXY` |
+| 3 Encerramento | BE-06 encerrar: revogar tokens e cancelar chamados (BE-05); BE-07 estender, job de 4 h, limite de chamados (BE-06) | FE-06 balcão: mesas em atendimento, Encerrar, Estender (BE-06, BE-07); FE-07 mesa: reconexão (BE-06) | MVP completo rodando via Docker, pronto para piloto | **Concluída (14/11/2026)** para desenvolvimento; produção depende de Dockerfile e `TRUST_PROXY` |
 | Depois do MVP | KDS e comanda; avaliações; app do garçom e setores; relatórios; integração com gestão/PDV | Cardápio digital e telas correspondentes | Fora do escopo do MVP | Não iniciado |   
 
 O documento de módulos propunha uma ordem própria: (1) preparação; (2) tabelas; (3) sessões do lado do garçom; (4) sessões do lado do cliente; (5) chamados; (6) notificador e job; (7) Socket.IO. A ordem executada foi compatível com BE-02 a BE-07. A v0.2 trazia quatro fases (fundação, atendimento, comanda e cozinha, avaliação e relatórios) para o produto ampliado; foi substituída pelo roadmap da v0.3. 
@@ -82,7 +82,7 @@ O documento de módulos propunha uma ordem própria: (1) preparação; (2) tabel
 - **Dependências:** `npm audit` do back-end aponta 3 vulnerabilidades altas na cadeia do CLI do Prisma; a correção exige `--force` e pula versão. 
 - **NFC:** travar a etiqueta é irreversível; domínio e formato da URL (`PUBLIC_APP_URL`) devem estar definidos antes. 
 - **E-mail duplicado** revela a existência do usuário na criação por OWNER ou SUPER_ADMIN (o autocadastro responde de forma genérica). 
-- **Operação:** só há compose de desenvolvimento; produção exige Dockerfile, `helmet`, `TRUST_PROXY` e segredo próprio. 
+- **Operação:** só há compose de desenvolvimento; produção exige Dockerfile, `TRUST_PROXY` e segredo próprio. 
 
 ### 9.4.3 Pontos a validar do MVP (v0.3) 
 
@@ -90,7 +90,7 @@ Todos decididos em 13–14/11/2026 (ver 2.7.1): alerta sonoro (sim, DEC-10), reg
 
 ## 9.5 Pendências e próximos passos (não bloqueantes) 
  
-- **Segurança de produção:** `helmet` (ou cabeçalhos no proxy), `TRUST_PROXY`, decisão sobre cookie httpOnly. 
+- **Segurança de produção:** `TRUST_PROXY`, decisão sobre cookie httpOnly. 
 - **Infra:** Dockerfile e compose de produção; mesclar a `dev` na `main`. 
 - **Back-end:** paginação do histórico de sessões; refresh de token e recuperação de senha; timestamps de sessão; `extend` condicional. 
 - **Front:** tela do SUPER_ADMIN (restaurantes e usuários); tela de cadastro (`/cadastro`). 

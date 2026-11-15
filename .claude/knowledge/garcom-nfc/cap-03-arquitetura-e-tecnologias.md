@@ -78,7 +78,7 @@ As decisões de PostgreSQL, Prisma e Socket.IO estão confirmadas na prática pe
 | vitest, supertest, socket.io-client (dev) | ^5.1.0, ^7.3.2 e ^4.8.4 | Testes de integração contra um PostgreSQL real e de tempo real. |
 | @biomejs/biome (dev) | ^2.6.7 | Lint e formatação. |
 
-O hash de senha não usa biblioteca externa: emprega o algoritmo scrypt do módulo `crypto` do Node. O front-end (`front-end/`) usa Next.js 16.4, React 19.3, `socket.io-client`, Tailwind/shadcn e componentes base-ui. [Ausente] `helmet`: os cabeçalhos de segurança ainda não são aplicados pela API (item pendente; pode vir do proxy). 
+O hash de senha não usa biblioteca externa: emprega o algoritmo scrypt do módulo `crypto` do Node. O front-end (`front-end/`) usa Next.js 16.4, React 19.3, `socket.io-client`, Tailwind/shadcn e componentes base-ui. `helmet` aplica os cabeçalhos de segurança (sem CSP, porque a API só devolve JSON e o Swagger usa scripts inline). 
 
 A configuração do TypeScript habilita `experimentalDecorators` e `emitDecoratorMetadata` (necessários ao tsyringe), `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax` e `allowImportingTsExtensions`; os imports usam a extensão `.ts` explícita e o `package.json` declara `type: module`. O gerador do Prisma é o `prisma-client`, com saída em `generated/prisma` e `importFileExtension` igual a `ts`; o `prisma.config.ts` aponta o schema, a pasta de migrations e a variável `DATABASE_URL`. A pasta `generated/prisma` é ignorada pelo controle de versão. 
 Observação: o `package.json` declara os tipos do Node na versão ^26 (`@types/node`), enquanto o compose usa `node:22` e o CI usa a LTS; o código roda nas duas, mas a versão de Node de produção ainda não está fixada (não há Dockerfile de produção). 

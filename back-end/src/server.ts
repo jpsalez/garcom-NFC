@@ -1,10 +1,12 @@
 import cors from "cors";
 import express from "express";
+import helmet from "helmet";
 import type { Application } from "express";
 
 const app: Application = express();
 
-app.disable("x-powered-by");
+// Cabeçalhos de segurança (já remove o x-powered-by). Sem CSP: a API só devolve JSON e o Swagger de /docs usa scripts inline
+app.use(helmet({ contentSecurityPolicy: false }));
 // Atrás de proxy reverso: quantos proxies ficam à frente da API (sem isso, o IP dos limites seria o do proxy)
 const proxyHops = Number(process.env.TRUST_PROXY);
 if (proxyHops > 0) app.set("trust proxy", proxyHops);

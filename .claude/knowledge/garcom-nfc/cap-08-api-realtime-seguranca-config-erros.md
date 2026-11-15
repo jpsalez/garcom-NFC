@@ -147,7 +147,7 @@ Classe base `AppError` (mensagem, status, detalhes opcionais e `code`) e subclas
 | Código público da mesa | Aleatório, nunca sequencial | Impl. (12 caracteres, `crypto.randomInt`) | 
 | Concorrência | Índice único parcial de sessão ativa e de chamado aberto por tipo; atualização condicional; transação ao encerrar; trava da sessão ao criar chamado | Impl. | 
 | CORS, cookies | Origens explícitas (nunca curinga com credenciais) | CORS impl.; o token do balcão e o do aparelho ficam no `localStorage` (risco de XSS; alternativa: cookie httpOnly) | 
-| Cabeçalhos de segurança | `helmet` ou equivalente no proxy | [Pendente]; `x-powered-by` já está desligado | 
+| Cabeçalhos de segurança | `helmet` ou equivalente no proxy | Impl. (`helmet` em `server.ts`, sem CSP; `tests/hardening.test.ts`) | 
 | Documentação da API | Não exposta em produção | Impl. (`/docs` só fora de produção) | 
 | Dependências | Auditoria | `npm audit` do back-end: 3 vulnerabilidades altas na cadeia do CLI do Prisma (correção exige `--force`) | 
 | Etiqueta NFC | Gravar a URL, testar e só então travar a tag (irreversível); mesmo caminho do QR | Operacional | 

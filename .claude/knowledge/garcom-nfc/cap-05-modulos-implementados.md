@@ -20,7 +20,7 @@ Observação sobre escopo: o repositório tem `back-end/` e `front-end/`; a API 
 
 ### 5.1.2 Arquivo `server.ts`
 
-Cria a instância do Express e exporta `app` e `allowedOrigins`; **não abre porta** (a escuta é feita pelo `main.ts`, o que permite aos testes importar o `app` com supertest sem ocupar porta). Configura, nesta ordem: `x-powered-by` desligado; `trust proxy` conforme `TRUST_PROXY` (número de proxies à frente da API; desligado por padrão; um valor errado deixa o IP do cliente forjável ou sempre igual ao do proxy); CORS pela lista de `FRONTEND_URL` (separada por vírgulas; sem ela nenhuma origem de navegador é liberada); e `express.json()`. Pontos de atenção: [Ausente] `helmet` (cabeçalhos de segurança; pode vir do proxy). (DV-36 resolvida: porta 4000 e prefixo `/api/v1`.)
+Cria a instância do Express e exporta `app` e `allowedOrigins`; **não abre porta** (a escuta é feita pelo `main.ts`, o que permite aos testes importar o `app` com supertest sem ocupar porta). Configura, nesta ordem: `helmet` (cabeçalhos de segurança, sem CSP; já remove o `x-powered-by`); `trust proxy` conforme `TRUST_PROXY` (número de proxies à frente da API; desligado por padrão; um valor errado deixa o IP do cliente forjável ou sempre igual ao do proxy); CORS pela lista de `FRONTEND_URL` (separada por vírgulas; sem ela nenhuma origem de navegador é liberada); e `express.json()`. (DV-36 resolvida: porta 4000 e prefixo `/api/v1`.)
 
 ### 5.1.3 Arquivo `routes.ts` 
 
