@@ -20,3 +20,8 @@ export function forgotPassword(email: string) {
 export function resetPassword(token: string, password: string) {
   return api<void>("/auth/reset-password", { method: "POST", body: { token, password } });
 }
+
+// Troca a senha de quem está logado; a API derruba as outras sessões e devolve um par novo para esta
+export function changePassword(token: string, currentPassword: string, newPassword: string) {
+  return api<Session>("/auth/password", { method: "PATCH", body: { currentPassword, newPassword }, token });
+}
