@@ -43,7 +43,8 @@ export class UsersService implements IUsersService {
     if (!restaurant) throw new NotFoundError("Restaurante não encontrado");
     if (!restaurant.active) throw new ConflictError("Restaurante desativado: reative antes de criar usuários", "RESTAURANT_INACTIVE");
     if (await this.userRepository.findByEmail(input.email)) {
-      throw new ConflictError("E-mail já cadastrado");
+      // Mensagem genérica, como no cadastro: não confirma que o e-mail pertence a uma conta
+      throw new ConflictError("Não foi possível criar o usuário");
     }
 
     const user = await this.userRepository.create({
