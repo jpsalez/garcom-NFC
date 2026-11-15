@@ -66,7 +66,7 @@ export default function EquipePage() {
                     <option value="">Sem categoria</option>
                     {Object.entries(CATEGORIES).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
                 </select>
-                <button type="submit" disabled={busy}>Adicionar funcionário</button>
+                <button type="submit" disabled={busy} className="btn-primary">Adicionar funcionário</button>
             </form>
             {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             {loaded && staff.length === 0 && <p className="text-gray-500">Nenhum funcionário cadastrado.</p>}

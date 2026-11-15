@@ -20,8 +20,8 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
                 {mode === 'rename'
                     ? <form onSubmit={(e) => { e.preventDefault(); onRename(label); back() }} className="w-full flex gap-2">
                         <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={60} required autoFocus aria-label="Novo nome da mesa"/>
-                        <button type="submit" className="w-auto px-3">Salvar</button>
-                        <button type="button" onClick={() => { setLabel(table.label); back() }} className="w-auto px-3">Cancelar</button>
+                        <button type="submit" className="btn-primary w-auto px-3">Salvar</button>
+                        <button type="button" onClick={() => { setLabel(table.label); back() }} className="w-auto px-3 border rounded-lg">Cancelar</button>
                       </form>
                     : <p className="text-xl font-bold">{table.label}</p>}
                 <span className="text-sm">{table.active ? 'Ativa' : 'Inativa'}</span>
@@ -73,7 +73,7 @@ export default function MesasPage() {
 
             <form onSubmit={handleCreate} className="flex gap-3 max-w-md">
                 <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Nome da mesa (ex.: Mesa 7)" maxLength={60} required aria-label="Nome da nova mesa"/>
-                <button type="submit" disabled={busy} className="w-auto px-5">Adicionar</button>
+                <button type="submit" disabled={busy} className="btn-primary w-auto px-5">Adicionar</button>
             </form>
             {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             {loaded && tables.length === 0 && <p className="text-gray-500">Nenhuma mesa cadastrada.</p>}
