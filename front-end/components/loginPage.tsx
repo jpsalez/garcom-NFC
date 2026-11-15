@@ -65,6 +65,7 @@ export default function LoginPage() {
                     <p role="alert" className={`error ${error ? 'visible' : ''}`}>{error}</p>
 
                     <p className="text-sm">Esqueceu sua senha? <Link href="/esqueci-senha" className="underline">Clique aqui.</Link></p>
+                    <p className="text-sm">Ainda não tem conta? <Link href="/cadastro" className="underline">Cadastre seu restaurante.</Link></p>
                 </form>
             </div>
         </div>
