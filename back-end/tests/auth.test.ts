@@ -118,3 +118,35 @@ describe("GET /auth/me", () => {
     expect((await api().get("/api/v1/auth/me")).status).toBe(401);
   });
 });
+
+describe("PATCH /auth/password", () => {
+  const novaSenha = "outra-senha-forte-1";
+  const change = (token: string, currentPassword: string, newPassword: string) =>
+    api().patch("/api/v1/auth/password").set("Authorization", `Bearer ${token}`).send({ currentPassword, newPassword });
+
+  it("troca a senha, derruba as outras sessões e devolve um par novo para este aparelho", async () => {
+    const first = await loginAsOwner();
+    const other = (await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password })).body;
+
+    const res = await change(first.token, user.password, novaSenha);
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.password_hash).toBeUndefined();
+    expect((await api().post("/api/v1/auth/login").send({ email: user.email, password: novaSenha })).status).toBe(200);
+    expect((await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password })).status).toBe(401);
+    expect((await refresh(first.refreshToken)).status).toBe(401);
+    expect((await refresh(other.refreshToken)).status).toBe(401);
+    expect((await refresh(res.body.refreshToken)).status).toBe(200);
+  });
+
+  it("recusa a senha atual errada (400, não 401), senha igual, senha curta e pedido sem token", async () => {
+    const { token } = await loginAsOwner();
+
+    const wrong = await change(token, "senha-errada-123", novaSenha);
+    expect([wrong.status, wrong.body.code]).toEqual([400, "INVALID_CURRENT_PASSWORD"]);
+    expect((await change(token, user.password, user.password)).status).toBe(400);
+    expect((await change(token, user.password, "curta")).status).toBe(400);
+    expect((await api().patch("/api/v1/auth/password").send({ currentPassword: user.password, newPassword: novaSenha })).status).toBe(401);
+    expect((await api().post("/api/v1/auth/login").send({ email: user.email, password: user.password })).status).toBe(200);
+  });
+});

@@ -124,6 +124,7 @@ Classe injetável cuja dependência é o service, obtida pelo nome "AuthService"
 - **Rotação com detecção de reuso:** se chega um token que já foi trocado, todas as sessões do usuário são revogadas e a resposta é 401, porque o valor pode ter sido copiado. 
 - **`POST /auth/logout`** `{ refreshToken }`: revoga o token e responde 204 (token desconhecido também dá 204). 
 - **`GET /auth/me`** (JWT): devolve o usuário logado, lido do banco, sem o hash. 
+- **`PATCH /auth/password`** `{ currentPassword, newPassword }` (JWT; nova senha de 8 a 128 caracteres e diferente da atual): confere a senha atual (errada dá 400 `INVALID_CURRENT_PASSWORD`, e não 401, porque o front trata 401 como token vencido), troca o hash e revoga todos os refresh tokens na mesma transação, e devolve `{ token, refreshToken, user }` novos para este aparelho; os outros precisam entrar de novo. Limite de 10 por 15 min por usuário (`changePasswordLimiter`). 
 - Limite de 60 renovações ou logouts por 15 min por IP (`refreshLimiter`). Os arquivos são `refresh-tokens.repository.ts` e `refresh-tokens.repository.interface.ts`, em `modules/auth`. Testes em `tests/auth.test.ts`. 
 - **Front:** o `lib/api.ts` renova uma vez ao receber 401 com token do balcão e repete o pedido (pedidos simultâneos compartilham uma só renovação); o socket relê o token a cada conexão; sair chama `/auth/logout`. 
 
