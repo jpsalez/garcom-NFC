@@ -1,0 +1,13 @@
+# Proxy de produção: TLS automático e um único domínio para o front, a API e o Socket.IO.
+# O Caddy é o único proxy à frente da API, por isso TRUST_PROXY=1.
+{$DOMAIN} {
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+	handle /socket.io/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}

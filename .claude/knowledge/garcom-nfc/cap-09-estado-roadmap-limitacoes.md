@@ -7,7 +7,7 @@ Conferido com o código em 14/11/2026 (branch `dev`). O MVP do chamado está com
 Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-end/` e `front-end/`).  
 | Módulo / área | Estado | O que existe | O que falta |
 |---|---|---|---|
-| Infraestrutura da API (main.ts, server.ts, routes.ts) | Completo | Express 5, prefixo `/api/v1`, 27 rotas, servidor HTTP próprio com Socket.IO, CORS por `FRONTEND_URL`, rate limits, `trust proxy` por `TRUST_PROXY`, `/docs` fora de produção, exigência de `JWT_SECRET` forte em produção, injeção de dependência, tratador de erros | Valor de `TRUST_PROXY` no deploy |
+| Infraestrutura da API (main.ts, server.ts, routes.ts) | Completo | Express 5, prefixo `/api/v1`, 27 rotas, servidor HTTP próprio com Socket.IO, CORS por `FRONTEND_URL`, rate limits, `trust proxy` por `TRUST_PROXY`, `/docs` fora de produção, exigência de `JWT_SECRET` forte em produção, injeção de dependência, tratador de erros | Testar o deploy (o `TRUST_PROXY=1` já está no compose de produção) |
 | auth | Completo | Register fluxo B (OWNER + restaurante em transação, slug automático), login com hash falso e bloqueio de inativos, JWT HS256, limites de tentativa | Refresh de token, recuperação e troca de senha, `/auth/me` |
 | users + administration | Completo | SUPER_ADMIN: `/admin/restaurants` e usuários de qualquer restaurante. OWNER: `/staff`. Último OWNER ativo protegido; DEC-13 (restaurante desativado) | Tela do SUPER_ADMIN no front |
 | restaurants | Completo | Repository, slug automático | Sem exclusão por desenho (desativa-se) |
@@ -20,7 +20,7 @@ Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-en
 | Job de expiração | Completo (instância única) | `shared/jobs/session-expiry.job.ts`, 60 s, motivo TIMEOUT | |
 | Banco (Prisma) | Completo | 6 tabelas, enums, 6 migrations, CHECKs, índices parciais `table_sessions_one_active` e `calls_one_open_per_type`, índices de consulta, seeds (OWNER demo e SUPER_ADMIN) | Timestamps de abertura e fechamento da sessão |
 | Front-end Next.js 16 | Parcial | `/login`, `/admin/waiter` (balcão em tempo real), `/admin/mesas` (CRUD e QR), `/admin/equipe`, `/m/[code]` (cliente), cliente da API com `ApiError` e `code`, sessão no `localStorage` | Tela do SUPER_ADMIN; cadastro de restaurante (`/cadastro`); recuperação de senha |
-| Docker Compose, .env.example, CI | Parcial | `docker-compose.yml` na raiz (db, api, web, painel, banco de teste), `.env.example`, GitHub Actions (typecheck, lint, testes) | Dockerfile e compose de produção |
+| Docker Compose, .env.example, CI | Parcial | `docker-compose.yml` na raiz (db, api, web, painel, banco de teste), `.env.example`, GitHub Actions (typecheck, lint, testes) | Testar `docker-compose.prod.yml` num servidor real (os arquivos existem, mas ainda não foram executados) |
 | Testes | Completo para o MVP | vitest + supertest contra PostgreSQL real, cerca de 100 testes: auth, staff, tables, sessions, calls, realtime, session-expiry, tenant-isolation, hardening, api-v1, índices | Mais testes de concorrência e de ponta a ponta no front |
 
 ## 9.2 Estado por requisito (v0.3)  
@@ -82,7 +82,7 @@ O documento de módulos propunha uma ordem própria: (1) preparação; (2) tabel
 - **Dependências:** `npm audit` do back-end aponta 3 vulnerabilidades altas na cadeia do CLI do Prisma; a correção exige `--force` e pula versão. 
 - **NFC:** travar a etiqueta é irreversível; domínio e formato da URL (`PUBLIC_APP_URL`) devem estar definidos antes. 
 - **E-mail duplicado** revela a existência do usuário na criação por OWNER ou SUPER_ADMIN (o autocadastro responde de forma genérica). 
-- **Operação:** só há compose de desenvolvimento; produção exige Dockerfile, `TRUST_PROXY` e segredo próprio. 
+- **Operação:** o compose de produção existe (`docker-compose.prod.yml`, com `TRUST_PROXY=1` atrás do Caddy), mas ainda não foi testado num servidor; exige `DOMAIN`, `POSTGRES_PASSWORD` e `JWT_SECRET` próprios. 
 
 ### 9.4.3 Pontos a validar do MVP (v0.3) 
 
@@ -90,8 +90,8 @@ Todos decididos em 13–14/11/2026 (ver 2.7.1): alerta sonoro (sim, DEC-10), reg
 
 ## 9.5 Pendências e próximos passos (não bloqueantes) 
  
-- **Segurança de produção:** `TRUST_PROXY`, decisão sobre cookie httpOnly. 
-- **Infra:** Dockerfile e compose de produção; mesclar a `dev` na `main`. 
+- **Segurança de produção:** decisão sobre cookie httpOnly (o `TRUST_PROXY` já vem definido no compose de produção). 
+- **Infra:** testar o compose de produção (`docker-compose.prod.yml`) num servidor; mesclar a `dev` na `main`. 
 - **Back-end:** paginação do histórico de sessões; refresh de token e recuperação de senha; timestamps de sessão; `extend` condicional. 
 - **Front:** tela do SUPER_ADMIN (restaurantes e usuários); tela de cadastro (`/cadastro`). 
 - **Qualidade:** rodar `docker compose up` e `npm test` no ambiente do desenvolvedor (a suíte foi validada com um PostgreSQL local); mais testes de concorrência. 

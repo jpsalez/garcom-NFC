@@ -29,4 +29,14 @@ Para mudar portas ou o segredo do JWT, crie um `.env` na raiz (`JWT_SECRET`, `AP
 
 `docker compose down` para tudo (mantém o banco); `docker compose down -v` apaga o banco.
 
+## Produção
+
+`docker-compose.prod.yml` sobe PostgreSQL (sem porta exposta), API, front e Caddy (TLS automático nas portas 80 e 443). Copie `.env.prod.example` para `.env.prod`, preencha `DOMAIN`, `POSTGRES_PASSWORD` e `JWT_SECRET` (`openssl rand -hex 32`) e rode:
+
+```
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
+
+O Caddy é o único proxy à frente da API, então o compose já define `TRUST_PROXY=1`. O DNS do domínio precisa apontar para o servidor. `NEXT_PUBLIC_API_URL` é gravada no build do front: mudou o domínio, rode o comando de novo.
+
 Detalhes do back-end em [`back-end/README.md`](back-end/README.md).

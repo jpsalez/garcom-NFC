@@ -1,0 +1,6 @@
+node_modules
+generated
+tests
+.env
+.env.*
+*.md
