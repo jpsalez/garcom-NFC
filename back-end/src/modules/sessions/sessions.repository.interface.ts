@@ -34,7 +34,7 @@ export interface ITableSessionRepository {
   findActiveByTable(restaurantId: string, tableId: string): Promise<table_sessions | null>;
   findMany(restaurantId: string, filter?: { status?: tableStatus; limit?: number; offset?: number }): Promise<TableSessionListItem[]>;
   findExpired(now: Date): Promise<table_sessions[]>;
-  update(restaurantId: string, id: string, data: UpdateTableSessionData): Promise<table_sessions>;
+  extendIfActive(restaurantId: string, id: string, expiresAt: Date): Promise<Prisma.BatchPayload>;
   lockActive(restaurantId: string, id: string): Promise<boolean>;
   closeIfActive(restaurantId: string, id: string, data: UpdateTableSessionData): Promise<Prisma.BatchPayload>;
 }

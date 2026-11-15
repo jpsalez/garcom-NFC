@@ -73,7 +73,7 @@ O documento de módulos propunha uma ordem própria: (1) preparação; (2) tabel
 ### 9.4.2 Riscos técnicos 
  
 - **Vazamento entre restaurantes** [mitigado]: filtros nos repositories, `tenantOf`, CHECK `users_restaurant_by_role`, `req.user` vindo do banco, teste de isolamento e o script `check_tenant.py`; ainda depende de disciplina em cada consulta nova. 
-- **Concorrência** [tratada]: índices `table_sessions_one_active` e `calls_one_open_per_type`, `closeIfActive` e `markDone` condicionais, trava `FOR SHARE` da sessão ao criar chamado e encerramento transacional. Ficam abertos: `extend` não condicional e "último OWNER" não atômico. 
+- **Concorrência** [tratada]: índices `table_sessions_one_active` e `calls_one_open_per_type`, `closeIfActive` e `markDone` condicionais, trava `FOR SHARE` da sessão ao criar chamado e encerramento transacional. O `extend` é condicional e a regra do último OWNER roda sob trava do restaurante. 
 - **Perda de evento entre o commit e a emissão** [aceito]: sem outbox; o balcão recarrega por REST a cada reconexão. 
 - **Tempo real:** o JWT só é conferido na conexão (desativar ou excluir derruba o socket); a meta de 2 s não foi medida. 
 - **Abuso da rota pública:** o primeiro scan abre atendimento, então quem tem a foto do QR pode abri-lo; defesas: limite de scan, limite de chamados, expiração em 4 h e revogação. Um valor errado de `TRUST_PROXY` enfraquece os limites por IP. 
@@ -92,7 +92,7 @@ Todos decididos em 13–14/11/2026 (ver 2.7.1): alerta sonoro (sim, DEC-10), reg
  
 - **Segurança de produção:** decisão sobre cookie httpOnly (o `TRUST_PROXY` já vem definido no compose de produção). 
 - **Infra:** testar o compose de produção (`docker-compose.prod.yml`) num servidor; mesclar a `dev` na `main`. 
-- **Back-end:** troca de senha com o usuário logado; `extend` condicional; timestamps nos chamados cancelados. 
+- **Back-end:** troca de senha com o usuário logado; timestamps nos chamados cancelados. 
 - **Front:** tela do SUPER_ADMIN (restaurantes e usuários); tela de cadastro (`/cadastro`). 
 - **Qualidade:** rodar `docker compose up` e `npm test` no ambiente do desenvolvedor (a suíte foi validada com um PostgreSQL local); mais testes de concorrência. 
 - **Documentação:** regerar o PDF consolidado quando o código mudar de forma relevante. 

@@ -2,12 +2,15 @@ import { inject, injectable } from "tsyringe";
 import type { users } from "../../../generated/prisma/client.ts";
 import type { role } from "../../../generated/prisma/enums.ts";
 import type { IRestaurantRepository } from "../restaurants/restaurants.repository.interface.ts";
+import { RestaurantRepository } from "../restaurants/restaurants.repository.ts";
+import { runInTransaction } from "../../shared/providers/prisma.ts";
 import type { IAuthCache } from "../../shared/cache/auth-cache.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
 import { passwordHash } from "../../shared/utils/password.ts";
 import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
 import { toPublicUser } from "./public-user.ts";
 import type { IUserRepository } from "./users.repository.interface.ts";
+import { UserRepository } from "./users.repository.ts";
 import type { IUsersService } from "./users.interfaces.ts";
 import type { createRestaurantUserInput, updateUserInput } from "./users.schema.ts";
 
@@ -55,17 +58,15 @@ export class UsersService implements IUsersService {
   }
 
   async update(restaurantId: string, id: string, input: updateUserInput, allowedRoles: role[]) {
-    const user = await this.findManaged(restaurantId, id, allowedRoles);
+    const updated = await this.withRestaurantLock(restaurantId, async (repository) => {
+      const user = await this.findManaged(repository, restaurantId, id, allowedRoles);
 
-    if (input.category && user.role !== "STAFF") {
-      throw new BadRequestError("Categoria só vale para STAFF");
-    }
-    if (input.active === false) await this.ensureNotLastOwner(restaurantId, user);
+      if (input.category && user.role !== "STAFF") {
+        throw new BadRequestError("Categoria só vale para STAFF");
+      }
+      if (input.active === false) await this.ensureNotLastOwner(repository, restaurantId, user);
 
-    const updated = await this.userRepository.update(restaurantId, id, {
-      name: input.name,
-      category: input.category,
-      active: input.active,
+      return repository.update(restaurantId, id, { name: input.name, category: input.category, active: input.active });
     });
     this.authCache.invalidateUser(id);
     if (input.active === false) this.notifier.disconnectUser(id);
@@ -73,25 +74,35 @@ export class UsersService implements IUsersService {
   }
 
   async remove(restaurantId: string, id: string, allowedRoles: role[]) {
-    const user = await this.findManaged(restaurantId, id, allowedRoles);
-    await this.ensureNotLastOwner(restaurantId, user);
-    // Histórico de chamados e atendimentos fica: closed_by e done_by viram nulos (SET NULL)
-    await this.userRepository.delete(restaurantId, id);
+    await this.withRestaurantLock(restaurantId, async (repository) => {
+      const user = await this.findManaged(repository, restaurantId, id, allowedRoles);
+      await this.ensureNotLastOwner(repository, restaurantId, user);
+      // Histórico de chamados e atendimentos fica: closed_by e done_by viram nulos (SET NULL)
+      await repository.delete(restaurantId, id);
+    });
     this.authCache.invalidateUser(id);
     this.notifier.disconnectUser(id);
   }
 
-  private async findManaged(restaurantId: string, id: string, allowedRoles: role[]) {
-    const user = await this.userRepository.findById(restaurantId, id);
+  // A regra do último OWNER lê a equipe e depois escreve: sem a trava, dois pedidos simultâneos passariam os dois
+  private withRestaurantLock<T>(restaurantId: string, work: (repository: IUserRepository) => Promise<T>) {
+    return runInTransaction(async (tx) => {
+      await new RestaurantRepository(tx).lock(restaurantId);
+      return work(new UserRepository(tx));
+    });
+  }
+
+  private async findManaged(repository: IUserRepository, restaurantId: string, id: string, allowedRoles: role[]) {
+    const user = await repository.findById(restaurantId, id);
     if (!user || !allowedRoles.includes(user.role)) throw new NotFoundError("Usuário não encontrado");
     return user;
   }
 
   // Desativar ou excluir o único OWNER ativo deixaria o restaurante sem dono
-  private async ensureNotLastOwner(restaurantId: string, user: users) {
+  private async ensureNotLastOwner(repository: IUserRepository, restaurantId: string, user: users) {
     if (user.role !== "OWNER" || !user.active) return;
-    const users = await this.userRepository.findMany(restaurantId);
-    const otherOwners = users.filter((other) => other.role === "OWNER" && other.active && other.id !== user.id);
+    const team = await repository.findMany(restaurantId);
+    const otherOwners = team.filter((other) => other.role === "OWNER" && other.active && other.id !== user.id);
     if (otherOwners.length === 0) throw new ConflictError("O restaurante precisa de ao menos um OWNER ativo");
   }
 }

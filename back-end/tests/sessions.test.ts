@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { TableSessionRepository } from "../src/modules/sessions/sessions.repository.ts";
 import { api } from "./helpers/app.ts";
 import { auth, ownerOf, staffToken } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
@@ -276,5 +277,21 @@ describe("bordas dos atendimentos", () => {
     expect((await api().post("/api/v1/sessions/nao-e-uuid/close").set(auth(token))).status).toBe(400);
     expect((await api().get("/api/v1/sessions")).status).toBe(401);
     expect((await api().post("/api/v1/sessions/00000000-0000-4000-8000-000000000000/extend")).status).toBe(401);
+  });
+});
+
+describe("extendIfActive", () => {
+  it("estende o ativo e não mexe no encerrado", async () => {
+    const { restaurantId } = await ownerOf("a");
+    const repository = new TableSessionRepository(prisma);
+    const active = await createSession(restaurantId, (await createTable(restaurantId, "A")).id);
+    const closed = await createSession(restaurantId, (await createTable(restaurantId, "B")).id, "CLOSED");
+    const later = new Date(Date.now() + 8 * 60 * 60 * 1000);
+
+    expect((await repository.extendIfActive(restaurantId, active.id, later)).count).toBe(1);
+    expect((await repository.extendIfActive(restaurantId, closed.id, later)).count).toBe(0);
+
+    expect((await prisma.table_sessions.findUniqueOrThrow({ where: { id: active.id } })).expires_at).toEqual(later);
+    expect((await prisma.table_sessions.findUniqueOrThrow({ where: { id: closed.id } })).expires_at).not.toEqual(later);
   });
 });

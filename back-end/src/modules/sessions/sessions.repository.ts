@@ -52,8 +52,12 @@ export class TableSessionRepository implements ITableSessionRepository {
     });
   }
 
-  update(restaurantId: string, id: string, data: UpdateTableSessionData) {
-    return this.db.table_sessions.update({ where: { id, restaurant_id: restaurantId }, data });
+  // Só estende se ainda estiver ACTIVE: um encerramento simultâneo não é desfeito nem anunciado depois ({ count: 0 } = perdeu)
+  extendIfActive(restaurantId: string, id: string, expiresAt: Date) {
+    return this.db.table_sessions.updateMany({
+      where: { id, restaurant_id: restaurantId, status: tableStatus.ACTIVE },
+      data: { expires_at: expiresAt },
+    });
   }
 
   // Trava a linha enquanto a transação durar, se a sessão ainda estiver ACTIVE: um encerramento simultâneo espera

@@ -62,7 +62,7 @@ _Figura: **Figura 6.2** – Métodos dos repositories de sessões, tokens e cham
 | findActiveByTable | restaurante, mesa | Primeira sessão ACTIVE da mesa | filtra | Encontrar ou criar; regra de uma sessão ativa por mesa |
 | findMany | restaurante, filtro de status | Lista sessões do restaurante com id e rótulo da mesa e a contagem de tokens não revogados | filtra | Painel de mesas em atendimento |
 | findExpired | instante atual | Lista sessões ACTIVE com keep_open falso e expiração menor ou igual ao instante | sem tenant: varre todos os restaurantes | Job de expiração (RF12/RN10) |
-| update | restaurante, id, dados | Atualiza expiração e demais campos; P2025 se inexistente | filtra | Estender |
+| extendIfActive | restaurante, id, nova expiração | Atualiza `expires_at` **somente se ainda ACTIVE** (updateMany) e devolve a contagem | filtra | Estender sem desfazer um encerramento simultâneo |
 | closeIfActive | restaurante, id, dados | Fecha **somente se ainda ACTIVE** (updateMany) e devolve a contagem | filtra | Fechamento atômico sem corrida |
 | lockActive | restaurante, sessão | Trava a linha da sessão ativa (`FOR SHARE`) dentro de uma transação | filtra | Criar chamado sem corrida com o encerramento |
 
@@ -83,7 +83,7 @@ O fechamento (`finish`, usado por encerrar, expirar e desativar) é uma única t
 
 ### 6.3.5 Limitações conhecidas 
  
-- `extend` não é condicional: um `close` simultâneo pode gerar `session:extended` depois de `session:closed` (baixo risco, registrado na revisão geral). 
+- `extend` é condicional (`extendIfActive`): se o atendimento foi encerrado entre a leitura e a escrita, nada é estendido nem anunciado e a resposta é 409 `SESSION_CLOSED`. 
 - O job de expiração roda no processo da API (instância única); com mais de uma instância seria preciso coordenar. 
 - O aviso de 15 min antes de vencer (DEC-02) é calculado no front a partir de `expires_at`; a API não o emite. 
 - A listagem usa `limit` e `offset` (resposta continua sendo uma lista); não há contagem total nem cursor. 
@@ -114,7 +114,7 @@ O fechamento (`finish`, usado por encerrar, expirar e desativar) é uma única t
 
 ### 6.4.3 `UsersService` e `StaffController` (equipe do OWNER) 
 
-Rotas `GET/POST /staff` e `PATCH/DELETE /staff/:id`, só OWNER, sempre com o `restaurantId` do token e restritas a usuários STAFF (outro papel ou outro restaurante dá 404). Regras: e-mail duplicado dá 409 "E-mail já cadastrado"; criar usuário em restaurante desativado dá 409 `RESTAURANT_INACTIVE` (DEC-13); `category` só vale para STAFF (400 caso contrário); desativar ou excluir o último OWNER ativo dá 409; ao editar ou excluir, o cache de autenticação é invalidado e, ao desativar ou excluir, o socket do usuário é derrubado. O mesmo service atende o SUPER_ADMIN com a lista de papéis permitidos. 
+Rotas `GET/POST /staff` e `PATCH/DELETE /staff/:id`, só OWNER, sempre com o `restaurantId` do token e restritas a usuários STAFF (outro papel ou outro restaurante dá 404). Regras: e-mail duplicado dá 409 "E-mail já cadastrado"; criar usuário em restaurante desativado dá 409 `RESTAURANT_INACTIVE` (DEC-13); `category` só vale para STAFF (400 caso contrário); desativar ou excluir o último OWNER ativo dá 409 (a leitura da equipe e a escrita rodam numa transação que trava a linha do restaurante com `RestaurantRepository.lock`, então dois pedidos simultâneos não passam os dois); ao editar ou excluir, o cache de autenticação é invalidado e, ao desativar ou excluir, o socket do usuário é derrubado. O mesmo service atende o SUPER_ADMIN com a lista de papéis permitidos. 
 
 ### 6.4.4 `AdministrationService` (SUPER_ADMIN) 
 
