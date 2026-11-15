@@ -1,49 +1,27 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
 export type Role = "SUPER_ADMIN" | "OWNER" | "STAFF";
 export type User = { id: string; name: string; email: string; role: Role; restaurant_id: string | null };
-// token: JWT de acesso (curto); refreshToken: renova o login sem pedir a senha (vale uma vez)
-export type Session = { token: string; refreshToken: string; user: User };
+// Só o usuário: o JWT e o refresh token ficam em cookies httpOnly, que o JavaScript não lê
+export type Session = { user: User };
 
-const KEY = "psiu.session";
-const EVENT = "psiu:session";
+// undefined = ainda descobrindo (restoreSession em services/auth); null = sem login
+let current: Session | null | undefined;
+const listeners = new Set<() => void>();
 
-// A sessão do balcão fica no localStorage; o evento avisa os componentes da mesma aba (o "storage" só vale entre abas)
-export function saveSession(session: Session) {
-  localStorage.setItem(KEY, JSON.stringify(session));
-  window.dispatchEvent(new Event(EVENT));
+function set(next: Session | null) {
+  current = next;
+  listeners.forEach((notify) => notify());
 }
 
-export function clearSession() {
-  localStorage.removeItem(KEY);
-  window.dispatchEvent(new Event(EVENT));
+export const saveSession = (session: Session) => set(session);
+export const clearSession = () => set(null);
+
+function subscribe(notify: () => void) {
+  listeners.add(notify);
+  return () => listeners.delete(notify);
 }
 
-function subscribe(onChange: () => void) {
-  window.addEventListener(EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
-
-// Texto estável (string) como snapshot: o React compara por valor
-const snapshot = () => localStorage.getItem(KEY);
-
-function parse(raw: string | null): Session | null {
-  try {
-    return raw ? (JSON.parse(raw) as Session) : null;
-  } catch {
-    return null;
-  }
-}
-
-// Leitura fora do React (renovação do token e reconexão do socket)
-export const readSession = () => parse(localStorage.getItem(KEY));
-
-// undefined = ainda no servidor ou carregando; null = sem login (ou sessão corrompida)
 export function useSession(): Session | null | undefined {
-  const raw = useSyncExternalStore(subscribe, snapshot, () => undefined);
-  return useMemo(() => (raw === undefined ? undefined : parse(raw)), [raw]);
+  return useSyncExternalStore(subscribe, () => current, () => undefined);
 }

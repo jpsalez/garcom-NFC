@@ -4,7 +4,7 @@ import { tableQrCode } from "@/services/tables"
 import type { Table } from "@/lib/types"
 
 // QR Code da mesa (SVG gerado pela API) com o link e o download para imprimir
-export default function QrModal({token, table, onClose}: {token: string, table: Table, onClose: () => void}) {
+export default function QrModal({table, onClose}: {table: Table, onClose: () => void}) {
     const [svgUrl, setSvgUrl] = useState('')
     const [error, setError] = useState('')
     const [copied, setCopied] = useState(false)
@@ -12,7 +12,7 @@ export default function QrModal({token, table, onClose}: {token: string, table: 
     useEffect(() => {
         let url = ''
         let cancelled = false // o modal pode fechar antes de a resposta chegar
-        tableQrCode(token, table.id)
+        tableQrCode(table.id)
             .then((svg) => {
                 if (cancelled) return
                 url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
@@ -20,7 +20,7 @@ export default function QrModal({token, table, onClose}: {token: string, table: 
             })
             .catch(() => { if (!cancelled) setError('Não foi possível gerar o QR Code.') })
         return () => { cancelled = true; if (url) URL.revokeObjectURL(url) }
-    }, [token, table.id])
+    }, [table.id])
 
     async function copy() {
         try {
@@ -37,7 +37,7 @@ export default function QrModal({token, table, onClose}: {token: string, table: 
             <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`QR Code da ${table.label}`}
             className="bg-white text-gray-900 p-5 m-5 w-full md:max-w-90 rounded-lg shadow-xl space-y-3 cursor-auto flex flex-col items-center">
                 <h2 className="font-bold text-xl">{table.label}</h2>
-                {/* O SVG vem de um blob local (a API exige o token): next/image não se aplica */}
+                {/* O SVG vem de um blob local (a API exige o cookie de sessão): next/image não se aplica */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 {svgUrl && <img src={svgUrl} alt={`QR Code da ${table.label}`} className="w-64 h-64"/>}
                 {error && <p role="alert" className="text-sm text-red-600">{error}</p>}

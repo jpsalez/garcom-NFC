@@ -26,15 +26,15 @@ function UserRow({ user, onActive, onDelete }: { user: RestaurantUser, onActive:
 }
 
 // Usuários de um restaurante (OWNER e STAFF), geridos pelo SUPER_ADMIN
-export default function RestaurantUsers({ token, restaurantId }: { token: string, restaurantId: string }) {
+export default function RestaurantUsers({ restaurantId }: { restaurantId: string }) {
     const [users, setUsers] = useState<RestaurantUser[]>([])
     const [form, setForm] = useState(EMPTY)
 
     const [loaded, setLoaded] = useState(false)
 
     const reload = useCallback(async () => {
-        try { setUsers(await listRestaurantUsers(token, restaurantId)) } finally { setLoaded(true) }
-    }, [token, restaurantId])
+        try { setUsers(await listRestaurantUsers(restaurantId)) } finally { setLoaded(true) }
+    }, [restaurantId])
     const { error, busy, act } = useAct(reload)
 
     useEffect(() => { reload().catch(() => {}) }, [reload])
@@ -45,7 +45,7 @@ export default function RestaurantUsers({ token, restaurantId }: { token: string
         e.preventDefault()
         const { category, role, ...rest } = form
         const body = { ...rest, role: role as 'OWNER' | 'STAFF', ...(role === 'STAFF' && category && { category: category as StaffCategory }) }
-        if (await act(() => createRestaurantUser(token, restaurantId, body))) setForm(EMPTY)
+        if (await act(() => createRestaurantUser(restaurantId, body))) setForm(EMPTY)
     }
 
     return(
@@ -54,8 +54,8 @@ export default function RestaurantUsers({ token, restaurantId }: { token: string
             <ul className="space-y-2">
                 {users.map((u) => (
                     <UserRow key={u.id} user={u}
-                        onActive={(active) => act(() => updateRestaurantUser(token, restaurantId, u.id, { active }))}
-                        onDelete={() => act(() => removeRestaurantUser(token, restaurantId, u.id))}/>
+                        onActive={(active) => act(() => updateRestaurantUser(restaurantId, u.id, { active }))}
+                        onDelete={() => act(() => removeRestaurantUser(restaurantId, u.id))}/>
                 ))}
             </ul>
 

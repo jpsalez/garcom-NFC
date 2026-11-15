@@ -1,14 +1,14 @@
 import { api } from "@/lib/api";
 import type { ActiveSession } from "@/lib/types";
 
-export function listSessions(token: string) {
-  return api<ActiveSession[]>("/sessions", { token });
+export function listSessions() {
+  return api<ActiveSession[]>("/sessions");
 }
 
-export function extendSession(token: string, id: string) {
-  return api<unknown>(`/sessions/${id}/extend`, { method: "POST", token });
+export function extendSession(id: string) {
+  return api<unknown>(`/sessions/${id}/extend`, { method: "POST" });
 }
 
-export function closeSession(token: string, id: string) {
-  return api<unknown>(`/sessions/${id}/close`, { method: "POST", token });
+export function closeSession(id: string) {
+  return api<unknown>(`/sessions/${id}/close`, { method: "POST" });
 }

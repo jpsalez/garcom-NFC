@@ -2,7 +2,6 @@
 import { useState } from "react"
 import { useAct } from "@/lib/useAct"
 import { useBalcao } from "@/lib/useBalcao"
-import { useSession } from "@/lib/session"
 import { finishCall } from "@/services/calls"
 import { closeSession, extendSession } from "@/services/sessions"
 import KpiWaiter from "./kpiWaiter"
@@ -11,9 +10,8 @@ import TicketWaiterList from "./ticketWaiterList"
 
 // Tela do balcão: dados reais da API, atualizados em tempo real. Só renderiza com sessão (dentro do RequireAuth).
 export default function BalcaoPage() {
-    const token = useSession()?.token ?? ''
     const [soundOn, setSoundOn] = useState(true)
-    const { calls, sessions, doneToday, live, stale, now, reload } = useBalcao(token, soundOn)
+    const { calls, sessions, doneToday, live, stale, now, reload } = useBalcao(soundOn)
     const { error, act } = useAct(reload)
 
     return(
@@ -35,12 +33,12 @@ export default function BalcaoPage() {
                 bills={calls.filter((c) => c.type === 'BILL').length}
                 doneToday={doneToday}
             />
-            <TicketWaiterList calls={calls} now={now} onFinish={(id) => act(() => finishCall(token, id))}/>
+            <TicketWaiterList calls={calls} now={now} onFinish={(id) => act(() => finishCall(id))}/>
             <SessionList
                 sessions={sessions}
                 now={now}
-                onExtend={(id) => act(() => extendSession(token, id))}
-                onClose={(id) => act(() => closeSession(token, id))}
+                onExtend={(id) => act(() => extendSession(id))}
+                onClose={(id) => act(() => closeSession(id))}
             />
         </div>
     )

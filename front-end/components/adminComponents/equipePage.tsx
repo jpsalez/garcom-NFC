@@ -1,7 +1,6 @@
 'use client'
 import { FormEvent, useCallback, useEffect, useState } from "react"
 import { useAct } from "@/lib/useAct"
-import { useSession } from "@/lib/session"
 import { CATEGORIES, type StaffCategory, type StaffUser } from "@/lib/types"
 import { createStaff, listStaff, removeStaff, updateStaff } from "@/services/staff"
 
@@ -35,14 +34,13 @@ function StaffCard({user, onCategory, onActive, onDelete}: {
 }
 
 export default function EquipePage() {
-    const token = useSession()?.token ?? ''
     const [staff, setStaff] = useState<StaffUser[]>([])
     const [loaded, setLoaded] = useState(false)
     const [form, setForm] = useState({ name: '', email: '', password: '', category: '' })
 
     const reload = useCallback(async () => {
-        try { setStaff(await listStaff(token)) } finally { setLoaded(true) }
-    }, [token])
+        try { setStaff(await listStaff()) } finally { setLoaded(true) }
+    }, [])
     const { error, busy, act } = useAct(reload)
 
     useEffect(() => { reload().catch(() => {}) }, [reload])
@@ -52,7 +50,7 @@ export default function EquipePage() {
     async function handleCreate(e: FormEvent) {
         e.preventDefault()
         const { category, ...rest } = form
-        const ok = await act(() => createStaff(token, { ...rest, ...(category && { category: category as StaffCategory }) }))
+        const ok = await act(() => createStaff({ ...rest, ...(category && { category: category as StaffCategory }) }))
         if (ok) setForm({ name: '', email: '', password: '', category: '' })
     }
 
@@ -76,9 +74,9 @@ export default function EquipePage() {
             <div className="w-full gap-5 grid grid-cols-1 md:grid-cols-3">
                 {staff.map((u) => (
                     <StaffCard key={u.id} user={u}
-                        onCategory={(category) => act(() => updateStaff(token, u.id, { category }))}
-                        onActive={(active) => act(() => updateStaff(token, u.id, { active }))}
-                        onDelete={() => act(() => removeStaff(token, u.id))}/>
+                        onCategory={(category) => act(() => updateStaff(u.id, { category }))}
+                        onActive={(active) => act(() => updateStaff(u.id, { active }))}
+                        onDelete={() => act(() => removeStaff(u.id))}/>
                 ))}
             </div>
         </div>

@@ -1,12 +1,11 @@
 'use client'
 import { FormEvent, useCallback, useEffect, useState } from "react"
 import { useAct } from "@/lib/useAct"
-import { useSession } from "@/lib/session"
 import type { Restaurant } from "@/lib/types"
 import { createRestaurant, listRestaurants, setRestaurantActive } from "@/services/admin"
 import RestaurantUsers from "./restaurantUsers"
 
-function RestaurantCard({ restaurant, token, onActive }: { restaurant: Restaurant, token: string, onActive: (active: boolean) => void }) {
+function RestaurantCard({ restaurant, onActive }: { restaurant: Restaurant, onActive: (active: boolean) => void }) {
     const [showUsers, setShowUsers] = useState(false)
     const [confirmOff, setConfirmOff] = useState(false)
 
@@ -28,27 +27,26 @@ function RestaurantCard({ restaurant, token, onActive }: { restaurant: Restauran
                             className="flex-1 p-2 rounded-lg bg-gray-900 text-white">Encerra os atendimentos. Confirmar?</button>
                         : <button onClick={() => setConfirmOff(true)} className="flex-1 p-2 border rounded-lg">Desativar</button>}
             </div>
-            {showUsers && <RestaurantUsers token={token} restaurantId={restaurant.id} />}
+            {showUsers && <RestaurantUsers restaurantId={restaurant.id} />}
         </div>
     )
 }
 
 export default function RestaurantsPage() {
-    const token = useSession()?.token ?? ''
     const [restaurants, setRestaurants] = useState<Restaurant[]>([])
     const [loaded, setLoaded] = useState(false)
     const [form, setForm] = useState({ name: '', slug: '' })
 
     const reload = useCallback(async () => {
-        try { setRestaurants(await listRestaurants(token)) } finally { setLoaded(true) }
-    }, [token])
+        try { setRestaurants(await listRestaurants()) } finally { setLoaded(true) }
+    }, [])
     const { error, busy, act } = useAct(reload)
 
     useEffect(() => { reload().catch(() => {}) }, [reload])
 
     async function handleCreate(e: FormEvent) {
         e.preventDefault()
-        if (await act(() => createRestaurant(token, form))) setForm({ name: '', slug: '' })
+        if (await act(() => createRestaurant(form))) setForm({ name: '', slug: '' })
     }
 
     return(
@@ -66,8 +64,8 @@ export default function RestaurantsPage() {
 
             <div className="w-full gap-5 grid grid-cols-1 md:grid-cols-2">
                 {restaurants.map((r) => (
-                    <RestaurantCard key={r.id} restaurant={r} token={token}
-                        onActive={(active) => act(() => setRestaurantActive(token, r.id, active))}/>
+                    <RestaurantCard key={r.id} restaurant={r}
+                        onActive={(active) => act(() => setRestaurantActive(r.id, active))}/>
                 ))}
             </div>
         </div>
