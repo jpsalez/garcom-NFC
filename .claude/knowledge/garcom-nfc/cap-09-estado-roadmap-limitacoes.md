@@ -45,7 +45,7 @@ Legenda: Completo, Parcial, Ausente. Fonte: conferência com o código (`back-en
 | RNF04 Mesa em um toque | Definido | Implementado (tela mobile sem login) |
 | RNF05 Tokens revogáveis | Definido | Implementado (SHA-256, `revoked_at`) |
 | RNF06 Limite de chamados | Proposto | Implementado (10 por 5 min por token) |
-| RNF07 Docker Compose | Definido | Implementado para desenvolvimento; produção pendente |
+| RNF07 Docker Compose | Definido | Implementado (dev e produção; produção testada só localmente) |
 | RNF08 Cliente anônimo | Definido | Implementado por desenho (sem dado pessoal do cliente) |
 
 ## 9.3 Roadmap por fase 
@@ -82,7 +82,7 @@ O documento de módulos propunha uma ordem própria: (1) preparação; (2) tabel
 - **Dependências:** `npm audit` do back-end limpo desde 14/11/2026: a `deepmerge-ts` (versão < 8, vulnerável a estouro de pilha em objetos recursivos) usada pelo CLI do Prisma é forçada para a ^8.0.2 por `overrides` no `package.json`. O Prisma 6.19.3 continua; a correção oficial só existe na linha 7 (mudança grande). Validado com `prisma validate`, `generate` e `migrate diff`; falta rodar `migrate deploy` e a suíte num banco real. 
 - **NFC:** travar a etiqueta é irreversível; domínio e formato da URL (`PUBLIC_APP_URL`) devem estar definidos antes. 
 - **E-mail duplicado:** o 409 diz só "Não foi possível criar o usuário" na criação por OWNER ou SUPER_ADMIN e no autocadastro; o próprio 409 (contra um 201) ainda indica que o e-mail já está em uso, o que é inevitável para quem cria contas. 
-- **Operação:** o compose de produção existe (`docker-compose.prod.yml`, com `TRUST_PROXY=1` atrás do Caddy), mas ainda não foi testado num servidor; exige `DOMAIN`, `POSTGRES_PASSWORD` e `JWT_SECRET` próprios. 
+- **Operação:** o compose de produção existe (`docker-compose.prod.yml`, com `TRUST_PROXY=1` atrás do Caddy), testado só localmente em 15/11/2026 (build das imagens, subida, cadastro e login pelo Caddy), falta um servidor real; exige `DOMAIN`, `POSTGRES_PASSWORD` e `JWT_SECRET` próprios. 
 
 ### 9.4.3 Pontos a validar do MVP (v0.3) 
 
@@ -91,7 +91,7 @@ Todos decididos em 13–14/11/2026 (ver 2.7.1): alerta sonoro (sim, DEC-10), reg
 ## 9.5 Pendências e próximos passos (não bloqueantes) 
  
 - **Segurança de produção:** decisão sobre cookie httpOnly (o `TRUST_PROXY` já vem definido no compose de produção). 
-- **Infra:** testar o compose de produção (`docker-compose.prod.yml`) num servidor; mesclar a `dev` na `main`. 
+- **Infra:** testar o compose de produção (`docker-compose.prod.yml`) num servidor real (localmente já foi); mesclar a `dev` na `main`. 
 - **Back-end:** timestamps nos chamados cancelados. 
 - **Front:** nada bloqueia o MVP; falta testar as telas no navegador. 
 - **Qualidade:** rodar `docker compose up` e `npm test` no ambiente do desenvolvedor (a suíte foi validada com um PostgreSQL local); mais testes de concorrência. 

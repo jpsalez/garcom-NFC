@@ -47,7 +47,7 @@ Todas as rotas abaixo estão implementadas (27 no total) e montadas sob `/api/v1
 ### 8.2.4 Balcão (JWT; papéis OWNER e STAFF)  
 | Método e caminho | Finalidade | Observações |
 |---|---|---|
-| GET /calls | Cards em ordem de chegada | `?status=` OPEN (padrão), DONE ou CANCELLED e `?since=<data>` (400 se inválida); resposta `{ serverTime, calls[] }` com `table.label` |
+| GET /calls | Cards em ordem de chegada | `?status=` OPEN (padrão), DONE ou CANCELLED `?since=<data>` (400 se inválida) e paginação por `?limit=` (1 a 1000, padrão 500) e `?offset=`; resposta `{ serverTime, calls[] }` com `table.label` |
 | PATCH /calls/:id/done | Finalizar chamado | `done_by` = usuário logado; 404; 409 `CALL_NOT_OPEN` |
 | GET /sessions | Mesas em atendimento, com a contagem de aparelhos | `?status=ACTIVE` (padrão) ou `CLOSED`; mais recentes primeiro; paginação por `?limit=` (1 a 200, padrão 100) e `?offset=`; valores inválidos dão 400; a resposta continua sendo uma lista |
 | POST /tables/:id/session | Abrir o atendimento de uma mesa | 409 `TABLE_INACTIVE` ou `SESSION_ALREADY_ACTIVE` |

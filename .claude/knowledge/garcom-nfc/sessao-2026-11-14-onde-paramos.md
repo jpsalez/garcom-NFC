@@ -63,3 +63,10 @@ Testes primeiro (`tests/tables.test.ts`): criar devolve `public_url` com o domí
 
 ## Git
 Branch `docs/decisoes-2026-11-13`: registro das decisões e este arquivo. Ainda não mesclada na `main`.
+
+## 15/11/2026: pendências fechadas (branch `ia/fechar-pendencias`, local)
+- Suíte rodou no Docker (`db-test`): 118 testes verdes depois de corrigir a ordem de um teste de troca de senha (era erro do teste, não do back-end).
+- Já estavam feitos e só constavam como pendentes: paginação de `GET /sessions`, `helmet`, Dockerfiles e compose de produção, `npm audit` limpo, telas do SUPER_ADMIN e de recuperação/troca de senha.
+- Novo: `limit`/`offset` em `GET /calls` (padrão 500, máx. 1000); testes de RN02 e de isolamento HTTP em `/tables`.
+- Compose de produção testado localmente (build, subida, cadastro/login pelo Caddy, `/docs` 404, HSTS). Falta só um servidor real.
+- Abertas: decisão do token no `localStorage` (mantido como risco aceito), merge da `dev` na `main`.
