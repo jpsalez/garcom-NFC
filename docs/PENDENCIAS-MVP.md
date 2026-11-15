@@ -40,6 +40,7 @@ Ninguém rodou isso depois das mudanças de refresh token, tema escuro e recuper
 - [ ] Chamar garçom e pedir a conta; o card aparece no balcão em tempo real e com som.
 - [ ] Finalizar o chamado; estender e encerrar o atendimento; o cliente que toca de novo recebe um atendimento novo.
 - [ ] Deixar o balcão aberto por mais de 15 minutos e confirmar que ele continua logado (renovação do token) e que o socket reconecta.
+- [ ] Trocar a senha em `/admin/senha`: a sessão continua logada, os outros aparelhos caem, e a senha antiga deixa de entrar.
 - [ ] Esqueci minha senha: `/esqueci-senha` → e-mail no Mailpit (`http://localhost:8025`) → `/redefinir-senha` → login com a senha nova.
 - [ ] **Conferir as cores:** o tema escuro mudou o texto padrão para claro. Olhar balcão, mesas, equipe, modal do QR e modal de confirmação da conta, que têm fundo claro.
 
@@ -74,7 +75,7 @@ Pode fazer depois do piloto, nesta ordem de valor:
 - [x] `extend` condicional: um `close` simultâneo não gera mais `session:extended` depois de `session:closed` (14/11/2026).
 - [x] "Último OWNER" atômico: a verificação e a escrita rodam sob trava do restaurante (14/11/2026).
 - [x] Criar usuário com e-mail repetido responde com mensagem genérica, como o autocadastro (14/11/2026). O 409 em si ainda indica que o e-mail está em uso, o que é inevitável.
-- [x] Trocar a senha estando logado (`PATCH /auth/password`, 14/11/2026). Falta a tela no front.
+- [x] Trocar a senha estando logado (`PATCH /auth/password`, 14/11/2026) e a tela `/admin/senha` no front.
 - [x] `npm audit`: as 3 vulnerabilidades altas (`deepmerge-ts` < 8 na cadeia do CLI do Prisma) foram corrigidas com `overrides` no `back-end/package.json`, sem trocar de versão do Prisma (14/11/2026). Se atualizar o Prisma, confira se o override ainda é necessário.
 - [ ] Data de cancelamento do chamado e `created_at` em `session_tokens` (para relatórios).
 - [ ] Mais de uma instância da API: adapter Redis do Socket.IO e lock do job de expiração.

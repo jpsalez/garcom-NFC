@@ -148,7 +148,7 @@ Arquivos: `administration.service.ts`, `administration.schema.ts` (criar restaur
 
 | Módulo | Estado | Pendências |
 |---|---|---|
-| auth | Completo | telas de recuperação de senha no front |
+| auth | Completo | tela de cadastro de restaurante no front |
 | users e administration | Completo | tela do SUPER_ADMIN no front |
 | restaurants | Completo | não há exclusão (por desenho) |
 | tables | Completo | `/deactivate`, `/activate` e `/regenerate-code` não foram feitos (desativar é um PATCH) |
