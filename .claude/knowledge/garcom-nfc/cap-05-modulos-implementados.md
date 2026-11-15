@@ -136,7 +136,7 @@ Classe injetável cuja dependência é o service, obtida pelo nome "AuthService"
 | 201 | Cadastro bem-sucedido | controller | 
 | 400 | Corpo inválido | ValidationError do middleware | 
 | 401 | Credenciais inválidas ou usuário/restaurante inativo | UnauthorizedError do service | 
-| 409 | E-mail já cadastrado (checagem ou corrida via P2002) | ConflictError | 
+| 409 | E-mail duplicado (checagem ou corrida via P2002; mensagem genérica) | ConflictError | 
 | 429 | Limite de tentativas | express-rate-limit | 
 | 500 | Falha inesperada | tratador global |   
 

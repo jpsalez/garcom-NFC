@@ -81,7 +81,7 @@ O documento de módulos propunha uma ordem própria: (1) preparação; (2) tabel
 - **Timestamps:** a sessão tem `created_at` e `closed_at` desde 14/11/2026 (os antigos ficaram sem `closed_at`); o chamado cancelado ainda não tem data, o que dificulta auditoria e relatórios. 
 - **Dependências:** `npm audit` do back-end aponta 3 vulnerabilidades altas na cadeia do CLI do Prisma; a correção exige `--force` e pula versão. 
 - **NFC:** travar a etiqueta é irreversível; domínio e formato da URL (`PUBLIC_APP_URL`) devem estar definidos antes. 
-- **E-mail duplicado** revela a existência do usuário na criação por OWNER ou SUPER_ADMIN (o autocadastro responde de forma genérica). 
+- **E-mail duplicado:** o 409 diz só "Não foi possível criar o usuário" na criação por OWNER ou SUPER_ADMIN e no autocadastro; o próprio 409 (contra um 201) ainda indica que o e-mail já está em uso, o que é inevitável para quem cria contas. 
 - **Operação:** o compose de produção existe (`docker-compose.prod.yml`, com `TRUST_PROXY=1` atrás do Caddy), mas ainda não foi testado num servidor; exige `DOMAIN`, `POSTGRES_PASSWORD` e `JWT_SECRET` próprios. 
 
 ### 9.4.3 Pontos a validar do MVP (v0.3) 

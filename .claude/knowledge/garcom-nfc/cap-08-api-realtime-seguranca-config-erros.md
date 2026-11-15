@@ -118,7 +118,7 @@ Classe base `AppError` (mensagem, status, detalhes opcionais e `code`) e subclas
 | 401 | UNAUTHORIZED | Login inválido; token de usuário ausente, mal formatado, inválido ou expirado; usuário ou restaurante desativado; token de aparelho ausente, revogado ou vencido (mensagem única; o `TOKEN_REVOKED` da v0.3 não foi adotado) | Impl. |
 | 403 | FORBIDDEN | Papel sem permissão; usuário sem restaurante | Impl. |
 | 404 | NOT_FOUND | Recurso ausente ou de outro restaurante; mesa inexistente, inativa ou de restaurante desativado no scan (sem `TABLE_NOT_FOUND`); Prisma P2025 | Impl. |
-| 409 | CONFLICT e códigos próprios | E-mail já cadastrado; unicidade violada (P2002); registro referenciado (P2003); `TABLE_HAS_SESSIONS`; `TABLE_INACTIVE`; `SESSION_ALREADY_ACTIVE`; `SESSION_CLOSED`; `CALL_NOT_OPEN`; `RESTAURANT_INACTIVE`; último OWNER ativo | Impl. |
+| 409 | CONFLICT e códigos próprios | E-mail duplicado (mensagem genérica, sem confirmar a conta); unicidade violada (P2002); registro referenciado (P2003); `TABLE_HAS_SESSIONS`; `TABLE_INACTIVE`; `SESSION_ALREADY_ACTIVE`; `SESSION_CLOSED`; `CALL_NOT_OPEN`; `RESTAURANT_INACTIVE`; último OWNER ativo | Impl. |
 | 413 | PAYLOAD_TOO_LARGE | Corpo acima de 100 KB | Impl. |
 | 429 | TOO_MANY_REQUESTS | Limite de chamados (10/5 min por token), login, cadastro e scan; substitui o TOO_MANY_CALLS | Impl. |
 | 500 | INTERNAL_ERROR | Erro não previsto; é registrado em log (nos erros do Prisma, só o nome e o código) e a resposta não vaza detalhes | Impl. |

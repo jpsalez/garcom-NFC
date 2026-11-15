@@ -41,7 +41,8 @@ describe("/staff (OWNER gerencia a equipe do próprio restaurante)", () => {
     const { token } = await ownerOf("a");
     const first = await api().post("/api/v1/staff").set(auth(token)).send({ ...newStaff, role: "OWNER" });
     expect(first.body.role).toBe("STAFF");
-    expect((await api().post("/api/v1/staff").set(auth(token)).send(newStaff)).status).toBe(409);
+    const duplicate = await api().post("/api/v1/staff").set(auth(token)).send(newStaff);
+    expect([duplicate.status, duplicate.body.message]).toEqual([409, "Não foi possível criar o usuário"]);
 
     const staff = (await login(newStaff.email)).body.token as string;
     expect((await api().get("/api/v1/staff").set(auth(staff))).status).toBe(403);

@@ -73,7 +73,7 @@ Pode fazer depois do piloto, nesta ordem de valor:
 - [x] Limpeza de tokens vencidos: job de hora em hora apaga `refresh_tokens` e `password_resets` vencidos (14/11/2026).
 - [x] `extend` condicional: um `close` simultâneo não gera mais `session:extended` depois de `session:closed` (14/11/2026).
 - [x] "Último OWNER" atômico: a verificação e a escrita rodam sob trava do restaurante (14/11/2026).
-- [ ] Criar usuário com e-mail repetido revela que a conta existe (o autocadastro já responde de forma genérica).
+- [x] Criar usuário com e-mail repetido responde com mensagem genérica, como o autocadastro (14/11/2026). O 409 em si ainda indica que o e-mail está em uso, o que é inevitável.
 - [ ] Trocar a senha estando logado (`PATCH /auth/password`): a recuperação por e-mail já existe, falta esta.
 - [ ] `npm audit`: 3 vulnerabilidades altas na cadeia do CLI do Prisma (a correção exige `--force`; avaliar antes de aplicar).
 - [ ] Data de cancelamento do chamado e `created_at` em `session_tokens` (para relatórios).
