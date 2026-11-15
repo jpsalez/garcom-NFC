@@ -40,6 +40,7 @@ model users {
   tableSessions table_sessions[]
   calls         calls[]
   refresh_tokens refresh_tokens[]
+  password_resets password_resets[]
 }
 
 model tables {
@@ -148,6 +149,19 @@ model refresh_tokens {
   token_hash String    @unique
   expires_at DateTime
   revoked_at DateTime?
+  created_at DateTime  @default(now())
+
+  @@index([user_id])
+}
+
+// Link de redefinição de senha enviado por e-mail: uso único, curto, só o hash no banco
+model password_resets {
+  id         String    @id @default(uuid())
+  user_id    String
+  user       users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  token_hash String    @unique
+  expires_at DateTime
+  used_at    DateTime?
   created_at DateTime  @default(now())
 
   @@index([user_id])

@@ -14,7 +14,9 @@ import { TablesController } from "./modules/tables/tables.controller.ts";
 import { createTableSchema, updateTableSchema } from "./modules/tables/tables.schemas.ts";
 import { StaffController } from "./modules/users/staff.controller.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "./modules/users/users.schema.ts";
-import { callLimiter, loginIpLimiter, loginLimiter, refreshLimiter, registerLimiter, scanLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
+import { PasswordResetController } from "./modules/auth/password-reset.controller.ts";
+import { forgotPasswordSchema, resetPasswordSchema } from "./modules/auth/password-reset.schema.ts";
+import { callLimiter, forgotPasswordLimiter, loginIpLimiter, loginLimiter, refreshLimiter, registerLimiter, resetPasswordLimiter, scanLimiter } from "./shared/middlewares/rate-limit.middleware.ts";
 import { ensureAuthenticated, ensureRole } from "./shared/middlewares/auth.middleware.ts";
 import { role } from "../generated/prisma/enums.ts";
 import { createUserSchema, loginUserSchema, refreshSchema } from "./modules/auth/auth.schema.ts";
@@ -23,6 +25,7 @@ export function SetupRoutes(){
     const router: Router = express.Router();
 
     const authController = container.resolve(AuthController);
+    const passwordResetController = container.resolve(PasswordResetController);
     const administrationController = container.resolve(AdministrationController);
     const staffController = container.resolve(StaffController);
     const tablesController = container.resolve(TablesController);
@@ -38,6 +41,8 @@ export function SetupRoutes(){
     router.post('/auth/refresh', refreshLimiter, validateSchema(refreshSchema), authController.refresh);
     router.post('/auth/logout', refreshLimiter, validateSchema(refreshSchema), authController.logout);
     router.get('/auth/me', ensureAuthenticated, authController.me);
+    router.post('/auth/forgot-password', forgotPasswordLimiter, validateSchema(forgotPasswordSchema), passwordResetController.forgot);
+    router.post('/auth/reset-password', resetPasswordLimiter, validateSchema(resetPasswordSchema), passwordResetController.reset);
 
     // SUPER_ADMIN: plataforma
     const superAdmin = [ensureAuthenticated, ensureRole(role.SUPER_ADMIN)];

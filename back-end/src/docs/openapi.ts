@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createRestaurantSchema, setActiveSchema } from "../modules/administration/administration.schema.ts";
+import { forgotPasswordSchema, resetPasswordSchema } from "../modules/auth/password-reset.schema.ts";
 import { createUserSchema, loginUserSchema, refreshSchema } from "../modules/auth/auth.schema.ts";
 import { createCallSchema } from "../modules/calls/calls.schemas.ts";
 import { createTableSchema, updateTableSchema } from "../modules/tables/tables.schemas.ts";
@@ -75,6 +76,12 @@ export const openApiSpec = {
     },
     "/auth/logout": {
       post: operation({ tag: "Auth", summary: "Revoga o refresh token", success: 204, body: refreshSchema, auth: false }),
+    },
+    "/auth/forgot-password": {
+      post: operation({ tag: "Auth", summary: "Envia o link de redefinição de senha por e-mail (responde 202 para qualquer e-mail)", success: 202, body: forgotPasswordSchema, auth: false }),
+    },
+    "/auth/reset-password": {
+      post: operation({ tag: "Auth", summary: "Define a nova senha com o token do link (vale uma vez, 1 hora); encerra as sessões", success: 204, body: resetPasswordSchema, auth: false }),
     },
     "/auth/me": {
       get: operation({ tag: "Auth", summary: "Dados do usuário logado" }),

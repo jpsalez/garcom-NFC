@@ -1,6 +1,6 @@
 # 4. Modelo de dados 
 
-O modelo de dados é a parte mais estável do repositório: as seis tabelas previstas na v0.3 existem no schema do Prisma, mais `refresh_tokens` (renovação do login), em oito migrations (a inicial, mais ajustes de papéis, categorias, CHECKs, o índice parcial de chamados e índices de consulta). Este capítulo descreve cada tabela, campo e enum, as relações, os índices, as regras de integridade e as diferenças entre a documentação e o schema real. Convenções: [Especificado] vem de v0.2/v0.3; [Implementado] vem de `schema.prisma` e das migrations (conferido em 14/11/2026). 
+O modelo de dados é a parte mais estável do repositório: as seis tabelas previstas na v0.3 existem no schema do Prisma, mais `refresh_tokens` (renovação do login) e `password_resets` (recuperação de senha), em nove migrations (a inicial, mais ajustes de papéis, categorias, CHECKs, o índice parcial de chamados e índices de consulta). Este capítulo descreve cada tabela, campo e enum, as relações, os índices, as regras de integridade e as diferenças entre a documentação e o schema real. Convenções: [Especificado] vem de v0.2/v0.3; [Implementado] vem de `schema.prisma` e das migrations (conferido em 14/11/2026). 
 
 ## 4.1 Visão geral 
 
@@ -106,6 +106,20 @@ Renovação do login da equipe (auxiliar, fora do domínio de mesas e chamados).
 
 Índice em `user_id`. Não tem `restaurant_id`: o restaurante do usuário é conferido no banco a cada renovação. 
 
+### 4.2.8 password_resets 
+
+Link de redefinição de senha enviado por e-mail. [Implementado, 14/11/2026]  
+| Campo | Tipo | Restrições | Descrição |
+|---|---|---|---|
+| id | texto | Chave primária | Identificador. |
+| user_id | texto | Obrigatório; chave estrangeira para users (exclusão em cascata) | Dono do link. |
+| token_hash | texto | Obrigatório, único | SHA-256 do token que vai no link. |
+| expires_at | data/hora | Obrigatório | Validade de 1 hora. |
+| used_at | data/hora | Opcional | Preenchido ao usar o link (ou ao usar outro do mesmo usuário). |
+| created_at | data/hora | Padrão: instante atual | Criação. |
+
+Índice em `user_id`; sem `restaurant_id`. 
+
 ## 4.3 Enums 
 
 [Implementado] O schema define cinco enums, criados como tipos enumerados do PostgreSQL pela migration.  
@@ -165,7 +179,7 @@ Cuidado de manutenção: uma nova geração de migration em modo de desenvolvime
 
 ## 4.6 Migration 
 
-[Implementado] Existem oito migrations, mais o arquivo de trava de provedor (PostgreSQL): `20261111232558_init` (enums, seis tabelas, índices únicos, chaves estrangeiras e o índice parcial de atendimento ativo, com o comentário "Uma sessão ACTIVE por mesa"); `20261112193624_roles_and_staff_category` (papéis SUPER_ADMIN/OWNER/STAFF, `staff_category`, `active`); `20261112193904_staff_category_and_checks` e `20261112200521_users_restaurant_by_role` (CHECKs `users_category_only_staff` e `users_restaurant_by_role`); `20261114120000_calls_one_open_per_type` (índice parcial de chamados); `20261114130000_indexes_consultas_e_fks` (índices das chaves estrangeiras) e `20261114140000_sessions_created_at_closed_at` (`created_at` e `closed_at` em `table_sessions`) e `20261114150000_refresh_tokens` (tabela `refresh_tokens`). O `prisma.config.ts` define a pasta de migrations e a fonte da URL do banco. O fluxo de trabalho: alterar o schema, gerar a migration, aplicar; o client é regenerado em `generated/prisma`. No compose, a API aplica as migrations com `prisma migrate deploy` ao subir. 
+[Implementado] Existem nove migrations, mais o arquivo de trava de provedor (PostgreSQL): `20261111232558_init` (enums, seis tabelas, índices únicos, chaves estrangeiras e o índice parcial de atendimento ativo, com o comentário "Uma sessão ACTIVE por mesa"); `20261112193624_roles_and_staff_category` (papéis SUPER_ADMIN/OWNER/STAFF, `staff_category`, `active`); `20261112193904_staff_category_and_checks` e `20261112200521_users_restaurant_by_role` (CHECKs `users_category_only_staff` e `users_restaurant_by_role`); `20261114120000_calls_one_open_per_type` (índice parcial de chamados); `20261114130000_indexes_consultas_e_fks` (índices das chaves estrangeiras) e `20261114140000_sessions_created_at_closed_at` (`created_at` e `closed_at` em `table_sessions`) `20261114150000_refresh_tokens` (tabela `refresh_tokens`) e `20261114160000_password_resets` (tabela `password_resets`). O `prisma.config.ts` define a pasta de migrations e a fonte da URL do banco. O fluxo de trabalho: alterar o schema, gerar a migration, aplicar; o client é regenerado em `generated/prisma`. No compose, a API aplica as migrations com `prisma migrate deploy` ao subir. 
 
 Regra de manutenção: os índices parciais e os CHECKs são escritos à mão no SQL das migrations; nunca aceitar um `migrate dev` que os remova. Ajustes futuros exigirão novas migrations. 
 

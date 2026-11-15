@@ -18,6 +18,8 @@ Todas as rotas abaixo estão implementadas (27 no total) e montadas sob `/api/v1
 | POST /auth/login | Obter JWT e refresh token | Entrada: email, password; 200 `{ token, refreshToken, user }`; 401 "E-mail ou senha inválidos" | 10 por 15 min por IP+e-mail e 30 por 15 min por IP |
 | POST /auth/refresh | Trocar o refresh token por um par novo | Entrada: refreshToken; 200 `{ token, refreshToken, user }`; 401 se desconhecido, usado, vencido ou usuário inativo | O token antigo deixa de valer; reuso de um já trocado encerra todas as sessões do usuário; 60 por 15 min por IP |
 | POST /auth/logout | Revogar o refresh token | Entrada: refreshToken; 204 (também para token desconhecido) | Mesmo limite do refresh |
+| POST /auth/forgot-password | Enviar o link de redefinição de senha por e-mail | Entrada: email; 202 com a mesma mensagem para qualquer e-mail | Link de uso único e 1 hora; 5 por hora por IP+e-mail |
+| POST /auth/reset-password | Definir a nova senha | Entrada: token, password (8 a 128); 204; 400 `RESET_TOKEN_INVALID` | Revoga os refresh tokens do usuário; 10 por 15 min por IP |
 | GET /auth/me | Usuário logado | JWT; 200 com o usuário sem o hash | |
 | POST /public/tables/:code/scan | Entrar no atendimento ativo ou abrir; devolve o token do aparelho | 200 `{ token, expires_at, table: { label }, restaurant: { name } }`; 404 se a mesa não existe, está inativa ou o restaurante está desativado | POST por ter efeito colateral; 30 por 15 min por IP+mesa; substitui `GET /public/tables/:code` e `POST /public/tables/:code/token` da v0.3 |
 
@@ -128,6 +130,7 @@ Classe base `AppError` (mensagem, status, detalhes opcionais e `code`) e subclas
 | JWT_SECRET | api | Segredo do JWT; ausência provoca erro; em produção a API não sobe com menos de 32 caracteres ou com o padrão de desenvolvimento | Usada |
 | JWT_EXPIRES_IN | api | Validade do JWT de acesso; padrão 15m; não consta na documentação v0.3 | Usada |
 | REFRESH_TOKEN_TTL_DAYS | api | Validade do refresh token, em dias; padrão 30 | Usada |
+| SMTP_URL, MAIL_FROM | api | E-mail da recuperação de senha (`smtp://usuario:senha@host:587`); sem SMTP_URL nada é enviado | Usadas |
 | PORT | api | Porta da API (padrão 4000) | Usada |
 | FRONTEND_URL (substitui CORS_ORIGIN) | api | Origem(ns) do front, separadas por vírgula; alimenta o CORS e o Socket.IO | Usada |
 | PUBLIC_APP_URL (era PUBLIC_WEB_URL) | api | Base da URL pública da mesa e do QR Code (`/m/<código>`); obrigatória na subida; padrão `http://localhost:3000` no `.env.example` e no compose (DV-43 resolvida) | Usada |
@@ -158,4 +161,4 @@ Classe base `AppError` (mensagem, status, detalhes opcionais e `code`) e subclas
 | LGPD (RNF08) | Cliente anônimo; nenhum dado pessoal coletado | Consistente com o modelo (sem dados do cliente) | 
 | Validação de entrada | Zod em corpo, query e parâmetros | Impl.; o resultado validado substitui `req.body` | 
 | Vazamento de erros | 500 genérico sem detalhes; log de erro do Prisma só com nome e código | Impl. | 
-| Sessão do usuário | JWT curto (15 min) e refresh token de uso único com rotação e detecção de reuso | Impl.; recuperação de senha [Pendente] |
+| Sessão e senha do usuário | JWT curto (15 min) e refresh token de uso único com rotação e detecção de reuso | Impl.; recuperação de senha por e-mail com link de uso único |

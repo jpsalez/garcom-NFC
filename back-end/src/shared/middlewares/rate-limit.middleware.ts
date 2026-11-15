@@ -29,6 +29,9 @@ export const loginIpLimiter = limiter(15, 30, "Muitas tentativas de login deste 
 export const loginLimiter = limiter(15, 10, "Muitas tentativas de login. Tente novamente em alguns minutos.", byIpAndEmail);
 // Renovar o login é barato para quem tem o token, mas não deve virar força bruta de tokens
 export const refreshLimiter = limiter(15, 60, "Muitas renovações de login. Tente novamente em alguns minutos.", byIp);
+// Pedir link: por IP+e-mail, para ninguém encher a caixa de entrada de uma pessoa; usar o link: por IP
+export const forgotPasswordLimiter = limiter(60, 5, "Muitos pedidos de redefinição. Tente novamente mais tarde.", byIpAndEmail);
+export const resetPasswordLimiter = limiter(15, 10, "Muitas tentativas de redefinição. Tente novamente em alguns minutos.", byIp);
 export const registerLimiter = limiter(60, 5, "Muitos cadastros deste endereço. Tente novamente mais tarde.", byIp);
 
 // IP + mesa: vários aparelhos na mesma rede do restaurante podem escanear mesas diferentes

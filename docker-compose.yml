@@ -50,6 +50,8 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
       JWT_SECRET: ${JWT_SECRET:-segredo-apenas-para-desenvolvimento-local-troque-em-producao}
+      # Recuperação de senha: o Mailpit recebe os e-mails (caixa de entrada em http://localhost:8025)
+      SMTP_URL: ${SMTP_URL:-smtp://mailpit:1025}
     ports:
       - "${API_PORT:-4000}:4000"
     volumes:
@@ -102,6 +104,13 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # Caixa de entrada de desenvolvimento: guarda os e-mails da API (link de redefinição de senha) sem enviá-los
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
 
   # Banco DESCARTÁVEL dos testes (dados em memória). Só sobe com o perfil "test":
   # `npm run test:db:up`. Nunca é tocado por `docker compose up`.

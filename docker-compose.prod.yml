@@ -37,6 +37,9 @@ services:
       FRONTEND_URL: https://${DOMAIN:?defina DOMAIN}
       PUBLIC_APP_URL: https://${DOMAIN}
       TRUST_PROXY: 1
+      # Recuperação de senha por e-mail; sem SMTP_URL nenhum e-mail é enviado
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-garcom-NFC <nao-responda@localhost>}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s

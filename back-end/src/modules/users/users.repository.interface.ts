@@ -14,6 +14,7 @@ export interface IUserRepository {
   create(data: CreateUserData): Promise<users>;
   findByEmail(email: string): Promise<users | null>;
   findForAuth(id: string): Promise<(users & { restaurant: { active: boolean } | null }) | null>;
+  setPassword(id: string, passwordHash: string): Promise<users>;
   findById(restaurantId: string, id: string): Promise<users | null>;
   findMany(restaurantId: string): Promise<users[]>;
   update(restaurantId: string, id: string, data: Prisma.usersUpdateInput): Promise<users>;
