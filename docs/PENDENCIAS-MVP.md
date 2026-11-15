@@ -75,7 +75,7 @@ Pode fazer depois do piloto, nesta ordem de valor:
 - [x] "Último OWNER" atômico: a verificação e a escrita rodam sob trava do restaurante (14/11/2026).
 - [x] Criar usuário com e-mail repetido responde com mensagem genérica, como o autocadastro (14/11/2026). O 409 em si ainda indica que o e-mail está em uso, o que é inevitável.
 - [x] Trocar a senha estando logado (`PATCH /auth/password`, 14/11/2026). Falta a tela no front.
-- [ ] `npm audit`: 3 vulnerabilidades altas na cadeia do CLI do Prisma (a correção exige `--force`; avaliar antes de aplicar).
+- [x] `npm audit`: as 3 vulnerabilidades altas (`deepmerge-ts` < 8 na cadeia do CLI do Prisma) foram corrigidas com `overrides` no `back-end/package.json`, sem trocar de versão do Prisma (14/11/2026). Se atualizar o Prisma, confira se o override ainda é necessário.
 - [ ] Data de cancelamento do chamado e `created_at` em `session_tokens` (para relatórios).
 - [ ] Mais de uma instância da API: adapter Redis do Socket.IO e lock do job de expiração.
 

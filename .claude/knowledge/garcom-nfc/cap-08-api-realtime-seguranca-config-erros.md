@@ -157,7 +157,7 @@ Classe base `AppError` (mensagem, status, detalhes opcionais e `code`) e subclas
 | CORS, cookies | Origens explícitas (nunca curinga com credenciais) | CORS impl.; o token do balcão e o do aparelho ficam no `localStorage` (risco de XSS; alternativa: cookie httpOnly) | 
 | Cabeçalhos de segurança | `helmet` ou equivalente no proxy | Impl. (`helmet` em `server.ts`, sem CSP; `tests/hardening.test.ts`) | 
 | Documentação da API | Não exposta em produção | Impl. (`/docs` só fora de produção) | 
-| Dependências | Auditoria | `npm audit` do back-end: 3 vulnerabilidades altas na cadeia do CLI do Prisma (correção exige `--force`) | 
+| Dependências | Auditoria | `npm audit` limpo: `overrides` força a `deepmerge-ts` ^8.0.2 (usada pelo CLI do Prisma 6.19.3); reavaliar ao atualizar o Prisma | 
 | Etiqueta NFC | Gravar a URL, testar e só então travar a tag (irreversível); mesmo caminho do QR | Operacional | 
 | LGPD (RNF08) | Cliente anônimo; nenhum dado pessoal coletado | Consistente com o modelo (sem dados do cliente) | 
 | Validação de entrada | Zod em corpo, query e parâmetros | Impl.; o resultado validado substitui `req.body` | 
