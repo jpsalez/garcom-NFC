@@ -5,6 +5,8 @@ import { useSession } from "@/lib/session"
 import type { Table } from "@/lib/types"
 import { createTable, listTables, removeTable, updateTable } from "@/services/tables"
 import QrModal from "./qrModal"
+import { FaCheckCircle } from "react-icons/fa"
+import { IoIosWarning } from "react-icons/io"
 
 type Mode = 'view' | 'rename' | 'confirmOff' | 'confirmDelete'
 
@@ -16,16 +18,20 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
     const back = () => setMode('view')
 
     return(
-        <div className={`w-full border p-5 rounded-lg shadow-lg space-y-3 ${table.active ? '' : 'bg-gray-100 text-gray-500'}`}>
+
+        <div className={`
+            kpi-card
+            w-full border p-5 rounded-lg shadow-lg space-y-3 ${table.active ? '' : 'bg-gray-100 text-gray-500'}`}>
             <div className="flex items-center justify-between">
                 {mode === 'rename'
                     ? <form onSubmit={(e) => { e.preventDefault(); onRename(label); back() }} className="w-full flex gap-2">
                         <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={60} required autoFocus aria-label="Novo nome da mesa"/>
-                        <button type="submit" className="w-auto px-3">Salvar</button>
-                        <button type="button" onClick={() => { setLabel(table.label); back() }} className="w-auto px-3">Cancelar</button>
+                        <button type="submit" className="w-auto px-3 btn-primary">Salvar</button>
+                        <button type="button" onClick={() => { setLabel(table.label); back() }} className="w-auto px-3 border rounded-lg">Cancelar</button>
                       </form>
                     : <p className="text-xl font-bold">{table.label}</p>}
-                <span className="text-sm">{table.active ? 'Ativa' : 'Inativa'}</span>
+                {table.active && mode !== 'rename' && <FaCheckCircle className="text-green-600"/>}
+                {!table.active && mode !== 'rename' && <IoIosWarning className="text-yellow-600"/>}
             </div>
 
             {mode === 'confirmOff' && <p className="text-sm">Desativar encerra o atendimento aberto desta mesa.</p>}
@@ -71,15 +77,19 @@ export default function MesasPage() {
 
     return(
         <div className="w-full p-5 space-y-5">
-            <h2 className="text-xl">Mesas</h2>
 
-            <form onSubmit={handleCreate} className="flex gap-3 max-w-md">
-                <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Nome da mesa (ex.: Mesa 7)" maxLength={60} required aria-label="Nome da nova mesa"/>
-                <button type="submit" disabled={busy} className="w-auto px-5">Adicionar</button>
-            </form>
+            <div className="w-full flex flex-col space-y-5 items-center justify-center">
+                <h2 className="text-xl font-bold">Cadastrar Mesa</h2>
+                <form onSubmit={handleCreate} className="w-full flex gap-3 max-w-md border-b border-foreground/30 pb-5">
+                    <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Nome da mesa (ex.: Mesa 7)" maxLength={60} required aria-label="Nome da nova mesa"/>
+                    <button type="submit" disabled={busy} className="w-auto px-5 btn-primary">Adicionar</button>
+                </form>
+                
+            </div>
             {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             {loaded && tables.length === 0 && <p className="text-gray-500">Nenhuma mesa cadastrada.</p>}
 
+            <h2 className="text-xl">Mesas Cadastradas</h2>
             <div className="w-full gap-5 grid grid-cols-1 md:grid-cols-3">
                 {tables.map((t) => (
                     <TableCard key={`${t.id}:${t.label}`} table={t}

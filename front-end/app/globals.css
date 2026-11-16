@@ -122,7 +122,7 @@
   }
 
   option {
-    @apply bg-[#12233F] text-lg;
+    @apply bg-foreground text-background text-lg;
   }
 }
 

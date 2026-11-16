@@ -13,11 +13,11 @@ function StaffCard({user, onCategory, onActive, onDelete}: {
     const [confirmDelete, setConfirmDelete] = useState(false)
 
     return(
-        <div className={`w-full border py-3 px-5 rounded-lg shadow-lg space-y-3 ${user.active ? '' : 'bg-red-500/10 text-gray-500'}`}>
+        <div className={`w-full border py-3 px-5 rounded-lg shadow-lg space-y-3 ${user.active ? '' : 'border-red-400/50 bg-red-200/30 text-gray-500'}`}>
 
             <div className="flex items-center justify-between gap-3">
 
-                <div className="w-full flex items-end">
+                <div className="w-full grid grid-cols-[40%_40%_15%]">
                     <p 
                     className={`
                         flex-1 px-3 text-sm font-bold truncate border-r
@@ -31,53 +31,61 @@ function StaffCard({user, onCategory, onActive, onDelete}: {
                     `}
                     >{user.email}</p>
 
-                    <div className="flex items-center justify-center px-3">
-                        {user.active && <FaCheckCircle size={20} className="text-green-400"/>}
-                        {!user.active && <IoIosWarning size={20} className="text-yellow-400/40"/>}
+                    <div className="w-full flex items-center justify-center px-3">
+                        {user.active && <FaCheckCircle className="text-green-400"/>}
+                        {!user.active && <IoIosWarning className="text-yellow-400/80"/>}
                     </div>
 
                 </div>
 
             </div>
 
-            <select value={user.category ?? ''} onChange={(e) => onCategory((e.target.value || null) as StaffCategory | null)}
-            aria-label={`Categoria de ${user.name}`} 
-            className={`
-            w-full border p-2 rounded-lg text-sm
-            ${user.active ? '' : 'border-red-400/20'}
-            `}>
-                <option value="">Sem categoria</option>
-                {Object.entries(CATEGORIES).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
-            </select>
+            <div className="grid 
+            grid-rows-2 gap-y-3
+            md:grid-cols-[40%_60%] md:grid-rows-1 md:gap-y-0 
+            ">
 
-            <div className="flex gap-2 text-sm">
-                <button onClick={() => onActive(!user.active)}
+                <select value={user.category ?? ''} onChange={(e) => onCategory((e.target.value || null) as StaffCategory | null)}
+                aria-label={`Categoria de ${user.name}`}
                 className={`
-                    flex-1 p-2 border rounded-lg
-                    ${user.active ? '' : 'border-red-400/20'}
-                `}
-                >{user.active ? 'Desativar' : 'Ativar'}
-                </button>
+                w-full border p-2 rounded-lg text-sm
+                ${user.active ? '' : 'border-red-400/20'}
+                `}>
+                    <option value="">Sem categoria</option>
+                    {Object.entries(CATEGORIES).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+                </select>
 
-                {confirmDelete
-                    ? 
-                    <button onClick={onDelete} onBlur={() => setConfirmDelete(false)} autoFocus 
-                    className={`
-                        flex-1 p-2 rounded-lg text-white
-                        ${user.active ? 'bg-gray-900' : 'bg-red-500/20'}
-                    `}
-                    >
-                        Confirmar?
-                    </button>
-                    : 
-                    <button onClick={() => setConfirmDelete(true)}
+                <div className="flex md:px-5 gap-2 text-sm">
+                    <button onClick={() => onActive(!user.active)}
                     className={`
                         flex-1 p-2 border rounded-lg
                         ${user.active ? '' : 'border-red-400/20'}
                     `}
                     >
-                        Excluir
-                    </button>}
+                        {user.active ? 'Desativar' : 'Ativar'}
+                    </button>
+
+                    {confirmDelete
+                        ?
+                        <button onClick={onDelete} onBlur={() => setConfirmDelete(false)} autoFocus
+                        className={`
+                            flex-1 p-2 rounded-lg text-white
+                            ${user.active ? 'bg-gray-900' : 'bg-red-500/20'}
+                        `}
+                        >
+                            Confirmar?
+                        </button>
+                        :
+                        <button onClick={() => setConfirmDelete(true)}
+                        className={`
+                            flex-1 p-2 border rounded-lg
+                            ${user.active ? '' : 'border-red-400/20'}
+                        `}
+                        >
+                            Excluir
+                        </button>}
+                </div>
+
             </div>
 
         </div>
@@ -109,7 +117,7 @@ export default function EquipePage() {
     return(
         <div className="page-div h-full">
 
-            <div className="w-full md:max-w-300 grid grid-cols-2 items-start justify-items-center overflow-hidden">
+            <div className="w-full md:max-w-300 py-15 grid md:grid-cols-2 gap-y-10 items-start justify-items-center overflow-hidden">
 
                 {/* formulario cadastrar funcionarios */}
                 <div className="form-background">
