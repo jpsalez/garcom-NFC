@@ -7,6 +7,7 @@ import { closeSession, extendSession } from "@/services/sessions"
 import KpiWaiter from "./kpiWaiter"
 import SessionList from "./sessionList"
 import TicketWaiterList from "./ticketWaiterList"
+import { FaBell, FaBellSlash } from "react-icons/fa"
 
 // Tela do balcão: dados reais da API, atualizados em tempo real. Só renderiza com sessão (dentro do RequireAuth).
 export default function BalcaoPage() {
@@ -18,11 +19,19 @@ export default function BalcaoPage() {
         <div className="w-full flex flex-col">
             <div className="w-full flex items-center justify-between px-5 pt-5 text-sm">
                 <span className="flex items-center gap-2 whitespace-nowrap">
-                    <span className={`inline-block w-2 h-2 rounded-full ${live && !stale ? 'bg-green-500' : 'bg-gray-400'}`}/>
-                    {stale ? 'Dados desatualizados, tentando de novo...' : live ? 'Ao vivo' : 'Reconectando...'}
+                    <span className={`inline-block w-2 h-2 rounded-full ${live && !stale ? 'hidden' : 'bg-gray-400'}`}/>
+                    {stale ? 'Dados desatualizados, tentando de novo...' : live ? '' : 'Reconectando...'}
                 </span>
                 <button onClick={() => setSoundOn(!soundOn)} className="w-auto p-0 underline cursor-pointer">
-                    Alerta sonoro: {soundOn ? 'ligado' : 'desligado'}
+                    {soundOn ? 
+                    <div className="p-2 border rounded-lg shadow-lg">
+                        <FaBell className="text-2xl"/>
+                    </div>
+                    :
+                    <div className="p-2 border border-red-500/60 rounded-lg shadow-lg">
+                        <FaBellSlash className="text-2xl text-red-600/60"/>
+                    </div>
+                    }
                 </button>
             </div>
             {error && <p role="alert" className="px-5 pt-3 text-sm text-red-600">{error}</p>}
@@ -33,7 +42,9 @@ export default function BalcaoPage() {
                 bills={calls.filter((c) => c.type === 'BILL').length}
                 doneToday={doneToday}
             />
+
             <TicketWaiterList calls={calls} now={now} onFinish={(id) => act(() => finishCall(id))}/>
+                
             <SessionList
                 sessions={sessions}
                 now={now}

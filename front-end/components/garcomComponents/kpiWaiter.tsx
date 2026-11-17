@@ -21,22 +21,32 @@ export default function KpiWaiter({ pending, activeTables, bills, doneToday }: K
             [&>div]:[&>span]:text-3xl
             "
             >
-                <div>
+                <div 
+                className={`
+                    kpi-card
+                    ${pending > 0 ? 'bg-yellow-400/50' : ''}
+                `}
+                >
                     <NumberTicker value={pending} delay={0}/>
                     <p>Chamados Pendentes</p>
                 </div>
 
-                <div>
+                <div className="kpi-card">
                     <NumberTicker value={activeTables} delay={0}/>
                     <p>Mesas Ativas</p>
                 </div>
 
-                <div>
+                <div 
+                className={`
+                    kpi-card
+                    ${bills > 0 ? 'bg-red-400/50' : ''}
+                `}
+                >
                     <NumberTicker value={bills} delay={0}/>
                     <p>Pedidos de Contas</p>
                 </div>
 
-                <div>
+                <div className="kpi-card">
                     <NumberTicker value={doneToday} delay={0}/>
                     <p>Atendimentos Concluídos</p>
                 </div>

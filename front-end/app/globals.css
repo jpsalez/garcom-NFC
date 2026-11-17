@@ -5,6 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-montserrat: var(--font-montserrat);
+  
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
@@ -62,9 +64,9 @@
 
 :root {
   --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --foreground: #1D2540;
+  --card: #FFFFFF;
+  --card-foreground: #1D2540;
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.205 0 0);
@@ -76,7 +78,7 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
+  --border: #263F66;
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.87 0 0);
@@ -95,68 +97,59 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground bg-linear-135 from-[#dbdbdb] via-[#D9D9D9] to-[#dbdbdb] font-montserrat;
   }
   html {
     @apply font-sans;
   }
 
-  input {
-    @apply w-full bg-linear-130 from-gray-100 via-white to-gray-100 border p-3 rounded-lg shadow-lg placeholder:text-gray-400;
+  button {
+    @apply w-full cursor-pointer p-3 rounded-sm transition-all duration-300 hover:scale-105 hover:shadow-lg active:scale-105 
   }
 
-  button {
-    @apply w-full cursor-pointer p-3 rounded-sm transition-all duration-300 hover:scale-105 hover:shadow-lg active:scale-105;
+  input[type="text"], input[type="email"], input[type="password"] {
+    @apply w-full bg-linear-130 from-gray-200 via-white to-gray-200 
+    border border-foreground/50 p-3 rounded-lg shadow-lg text-gray-800 
+    placeholder:text-gray-400;
+  };  
+
+  select {
+    @apply cursor-pointer;
+  }
+
+  option {
+    @apply bg-foreground text-background text-lg;
   }
 }
 
 /* Formulários (login, recuperação de senha). Em @layer components, as utilidades do Tailwind ainda sobrescrevem. */
 @layer components {
+
+  .no-scrollbar {
+    /* Firefox */
+    scrollbar-width: none;
+    /* IE e Edge antigo */
+    -ms-overflow-style: none;
+  }
+
+  /* Chrome, Safari, Opera e Edge moderno */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  
   .page-div {
     @apply w-full flex items-center justify-center p-5 overflow-hidden;
   }
 
   .form-background {
-    @apply relative p-5 rounded-lg outline outline-gray-200 shadow-xl w-full max-w-100;
+    @apply relative p-5 rounded-xl  bg-card/50 text-card-foreground outline-gray-200 shadow-xl w-full;
   }
 
   .form-style {
@@ -164,7 +157,13 @@
   }
 
   .btn-primary {
-    @apply bg-linear-130 from-gray-300 via-gray-100 to-gray-300 outline outline-gray-300 rounded-lg shadow-lg;
+    @apply text-gray-700 bg-linear-130 from-[#8DBF21] via-[#B5D86A] to-[#8DBF21] outline outline-gray-300 rounded-lg shadow-xl;
+  }
+
+  /* ESTILOS DOS KPIS */
+
+  .kpi-card {
+    @apply bg-[#EDEDED] text-foreground border-foreground/30 shadow-lg;
   }
 
   /* Mensagens que abrem e fecham com animação: <p className={`error ${texto ? 'visible' : ''}`}> */

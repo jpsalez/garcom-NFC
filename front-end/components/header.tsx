@@ -30,12 +30,7 @@ export default function Header() {
             </span>
 
             <div className="flex items-center justify-end gap-3">
-                {session && (
-                    <button
-                        onClick={() => { void logout(); router.push('/login') }}
-                        className="w-auto p-0 text-sm underline cursor-pointer"
-                    >Sair</button>
-                )}
+
                 <FaRegUser
                     onClick={() => router.push('/login')}
                     className="
@@ -44,6 +39,14 @@ export default function Header() {
                         hover:scale-125 active:scale-130
                     "
                 />
+
+                {session && (
+                    <button
+                        onClick={() => { void logout(); router.push('/login') }}
+                        className="w-auto p-0 text-sm underline cursor-pointer"
+                    >Sair</button>
+                )}
+                
             </div>
         </header>
     )

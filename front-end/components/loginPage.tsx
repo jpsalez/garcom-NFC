@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { saveSession } from "@/lib/session";
 import { login } from "@/services/auth";
+import { FaUser } from "react-icons/fa";
 
 function loginErrorMessage(err: unknown) {
     if (err instanceof ApiError && err.status === 401) return 'E-mail ou senha inválidos.'
@@ -38,36 +39,70 @@ export default function LoginPage() {
     }
     
     return(
-        <div className="page-div">
-            <div className="form-background">
-                <BorderBeam size={200} duration={3} colorFrom="#d4d4d8" colorTo="#71717a"/>
+        <div className="page-div py-10!">
 
-                <form onSubmit={handleSubmit} className="form-style">
-                    <h2>Realizar Login</h2>
 
-                    <input type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="E-mail"
-                    autoComplete="username"
-                    required
-                    />
-                    <input type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Senha"
-                    autoComplete="current-password"
-                    required
-                    />
+            
+            <div className="flex flex-col items-center justify-center rounded-xl shadow-xl w-full
+            lg:flex-row lg:items-start lg:w-full lg:max-w-300"
+            >
 
-                    <button disabled={loading} className="btn-primary">{loading ? 'Entrando...' : 'Entrar'}</button>
+                <div className="w-full max-w-200 aspect-4/3 rounded-l-xl bg-blue-600 hidden lg:flex items-center justify-center">
+                    <h2 className="text-2xl text-background">IMAGEM AKI AAAAA</h2>
+                </div>
+                
+                <div className="form-background bg-white! self-stretch max-w-100 lg:rounded-l-none flex items-center justify-center">
 
-                    <p role="alert" className={`error ${error ? 'visible' : ''}`}>{error}</p>
+                    
+                
+                    <form onSubmit={handleSubmit} className="form-style w-full h-full">
+                        <div className="flex flex-col items-center justify-center space-y-2 text-sm">
 
-                    <p className="text-sm">Esqueceu sua senha? <Link href="/esqueci-senha" className="underline">Clique aqui.</Link></p>
-                    <p className="text-sm">Ainda não tem conta? <Link href="/cadastro" className="underline">Cadastre seu restaurante.</Link></p>
-                </form>
+                            <div className="relative w-15 flex items-center justify-center aspect-square border rounded-full">
+                                <BorderBeam />
+                                <FaUser className="text-2xl"/>
+                            </div>
+                            
+                            <h2 className="font-bold text-xl text-center">É bom ter você de volta!</h2>
+                            <p className="text-center">Faça Login para continuar</p>
+                        </div>
+                        <input type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="bg-none! bg-transparent! border-0! border-b-2! rounded-b-none border-foreground! shadow-none!"
+                        placeholder="E-mail"
+                        autoComplete="username"
+                        required
+                        />
+                        <input type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="bg-none! bg-transparent! border-0! border-b-2! rounded-b-none border-foreground! shadow-none!"
+                        placeholder="Senha"
+                        autoComplete="current-password"
+                        required
+                        />
+                        <button disabled={loading} className="btn-primary">{loading ? 'Entrando...' : 'Entrar'}</button>
+                        <p role="alert" className={`error ${error ? 'visible' : ''}`}>{error}</p>
+
+                        <div className="w-full text-center space-y-2">
+                            <div className="w-full flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                    <input type="checkbox" name="" id=""/>
+                                    <span className="text-sm line-clamp-1">Salvar login</span>
+                                </div>
+                                <Link href="/esqueci-senha" className="underline text-sm line-clamp-1">Esqueci minha senha</Link>
+                            </div>
+                            <div className="text-center">
+                                <p className="">Ainda não tem conta?</p>
+                                <Link href="/cadastro" className="underline text-sm">Cadastre seu restaurante.</Link>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
             </div>
+
         </div>
     )
 }
