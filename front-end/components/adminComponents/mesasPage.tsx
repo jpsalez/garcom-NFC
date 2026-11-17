@@ -5,13 +5,14 @@ import { useSession } from "@/lib/session"
 import type { Table } from "@/lib/types"
 import { createTable, listTables, removeTable, updateTable } from "@/services/tables"
 import QrModal from "./qrModal"
-import { FaCheckCircle, FaChevronCircleUp, FaTrash } from "react-icons/fa"
-import { IoIosWarning } from "react-icons/io"
-import { QrCode } from "lucide-react"
+import { FaCheck, FaPlus, FaTrash } from "react-icons/fa"
+import { IoIosWarning, IoMdCloseCircle } from "react-icons/io"
+import { Plus, QrCode } from "lucide-react"
 import { FaCircleCheck, FaPencil } from "react-icons/fa6"
-import { CiWarning } from "react-icons/ci"
+import { IoClose } from "react-icons/io5"
+import { MdClose } from "react-icons/md"
 
-type Mode = 'view' | 'rename' | 'confirmOff' | 'confirmDelete'
+type Mode = 'view' | 'rename' | 'confirmOff' | 'confirmDelete' | 'create'
 
 function TableCard({table, onQr, onRename, onActive, onDelete}: {
     table: Table, onQr: () => void, onRename: (label: string) => void, onActive: (active: boolean) => void, onDelete: () => void
@@ -23,11 +24,9 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
     return(
 
         <div className={`
-            kpi-card
+            kpi-card space-y-0! gap-y-2
             w-full border p-5 rounded-lg shadow-lg
             ${table.active ? '' : 'bg-gray-100 text-gray-500'}
-            transition-all duration-500
-            ${(mode === 'confirmOff' || mode === 'confirmDelete') ? 'space-y-3!' : 'space-y-0!'}
         `}
             
         >
@@ -87,15 +86,15 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
             <div 
             className={`
                 px-5 space-y-3 text-sm overflow-hidden
-                transition-all duration-500
-                ${(mode === 'confirmOff' || mode === 'confirmDelete') ? 'max-h-30 py-2' : 'h-0 py-0'}
+                transition-all duration-700 ease-in-out
+                ${(mode === 'confirmOff' || mode === 'confirmDelete') ? 'max-h-30 py-2' : 'max-h-0 py-0'}
             `}
             >
                 <div className="relative">
                     <p
                     className={`
                         text-sm
-                        transition-all duration-500
+                        transition-opacity duration-300 
                         ${mode === 'confirmOff' ? 'opacity-100' : 'opacity-0'}
                     `}
                     >
@@ -129,6 +128,8 @@ export default function MesasPage() {
     const [label, setLabel] = useState('')
     const [qr, setQr] = useState<Table | null>(null)
 
+    const [mode, setMode] = useState<Mode>('view')
+
     const reload = useCallback(async () => {
         try { setTables(await listTables(token)) } finally { setLoaded(true) }
     }, [token])
@@ -143,27 +144,87 @@ export default function MesasPage() {
 
     return(
         <div className="w-full p-5 space-y-5">
-
-            <div className="w-full flex flex-col space-y-5 items-center justify-center">
-                <h2 className="text-xl font-bold">Cadastrar Mesa</h2>
-                <form onSubmit={handleCreate} className="w-full flex gap-3 max-w-md border-b border-foreground/30 pb-5">
-                    <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Nome da mesa (ex.: Mesa 7)" maxLength={60} required aria-label="Nome da nova mesa"/>
-                    <button type="submit" disabled={busy} className="w-auto px-5 btn-primary">Adicionar</button>
-                </form>
-                
-            </div>
+            
             {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             {loaded && tables.length === 0 && <p className="text-gray-500">Nenhuma mesa cadastrada.</p>}
 
-            <h2 className="text-xl">Mesas Cadastradas</h2>
-            <div className="w-full gap-5 grid grid-cols-1 md:grid-cols-3">
-                {tables.map((t) => (
-                    <TableCard key={`${t.id}:${t.label}`} table={t}
-                        onQr={() => setQr(t)}
-                        onRename={(newLabel) => act(() => updateTable(token, t.id, { label: newLabel }))}
-                        onActive={(active) => act(() => updateTable(token, t.id, { active }))}
-                        onDelete={() => act(() => removeTable(token, t.id))}/>
-                ))}
+            <div className="w-full md:max-w-300 mx-auto flex flex-col gap-5 z-5">
+
+                <div className="relative w-full h-25 rounded-lg overflow-hidden">
+
+                    {/* input add mesa */}
+                    <div 
+                    className={`
+                        absolute inset-0 w-full h-full z-10
+                        rounded-lg shadow-lg
+                        transition-all duration-1000
+                        ${mode === 'create' ? 'w-full left-0 pointer-events-auto' : 'left-full pointer-events-none'}
+                    `}
+                    >
+                        <form
+                        onSubmit={handleCreate} 
+                        className="h-full flex items-center gap-3 z-10">
+                            <input 
+                            type="text"
+                            value={label}
+                            onChange={(e) => setLabel(e.target.value)}
+                            placeholder="Ex: Mesa 1"
+                            required
+                            />
+
+                            <div 
+                            role=""
+                            className="w-15 bg-green-500 text-white rounded-lg aspect-square flex items-center justify-center text-lg cursor-pointer scale-90
+                            transition-all duration-300
+                            hover:bg-white hover:text-green-500 hover:scale-100
+                            ">
+                                <button className="flex items-center justify-center">
+                                    <FaCheck />
+                                </button>
+                            </div>
+
+                            <div 
+                            role="button"
+                            onClick={() => setMode('view')}
+                            className="w-15 bg-red-500 text-white rounded-lg aspect-square flex items-center justify-center text-lg cursor-pointer scale-90
+                            transition-all duration-300
+                            hover:bg-white hover:text-red-500 hover:scale-100
+                            ">
+                                <IoMdCloseCircle />
+                            </div>
+
+                        </form>
+                    </div>
+
+                    {/* botao add mesa */}
+                    <div 
+                    className={`
+                        w-full h-full flex items-center justify-between
+                        transition-all duration-500
+                        ${mode === 'create' ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}
+                    `}
+                    >
+                        <h2 className="text-2xl">Mesas Cadastradas</h2>
+                        <div className="w-10 md:w-12 aspect-square flex items-center justify-center bg-green-500 text-white text-lg md:text-2xl rounded-lg
+                        cursor-pointer
+                        transition-all duration-300
+                        hover:scale-105
+                        ">
+                            <FaPlus onClick={() => setMode('create')}/>
+                        </div>
+                    </div>
+
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    {tables.map((t) => (
+                        <TableCard key={`${t.id}:${t.label}`} table={t}
+                            onQr={() => setQr(t)}
+                            onRename={(newLabel) => act(() => updateTable(token, t.id, { label: newLabel }))}
+                            onActive={(active) => act(() => updateTable(token, t.id, { active }))}
+                            onDelete={() => act(() => removeTable(token, t.id))}/>
+                    ))}
+                </div>
             </div>
 
             {/* Gerar o QR de uma mesa inativa a reativa: recarrega a lista ao fechar */}
