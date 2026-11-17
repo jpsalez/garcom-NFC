@@ -33,7 +33,7 @@ export default function QrModal({token, table, onClose}: {token: string, table: 
     }
 
     return(
-        <div onClick={onClose} className="fixed top-0 left-0 z-30 w-full h-screen bg-black/50 flex items-center justify-center cursor-pointer">
+        <div onClick={onClose} className="fixed top-0 left-0 z-30 w-full h-screen bg-black/70 flex items-center justify-center cursor-pointer">
             <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`QR Code da ${table.label}`}
             className="bg-white text-gray-900 p-5 m-5 w-full md:max-w-90 rounded-lg shadow-xl space-y-3 cursor-auto flex flex-col items-center">
                 <h2 className="font-bold text-xl">{table.label}</h2>

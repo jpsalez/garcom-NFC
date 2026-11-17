@@ -23,19 +23,29 @@ export default function TicketWaiterCard({call, now, onFinish} : {call: Call, no
             className="
             kpi-card
             relative
-            w-full h-full max-h-50 border p-5 rounded-lg shadow-lg cursor-pointer overflow-hidden
+            w-full min-h-50 max-h-100 border p-5 rounded-lg shadow-lg cursor-pointer overflow-hidden
             transition-all duration-300
             hover:scale-105 hover:shadow-xl
             ">
                 <div inert={!confirmation} className={`
-                absolute inset-0 bg-black/50 text-white
+                p-2 space-y-2
+                h-full max-h-80
+                absolute inset-0 bg-foreground text-background
                 grid grid-rows-3 items-center justify-items-center
                 transition-all duration-500
                 ${confirmation ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
                 `}>
                     <p>Finalizar Chamado?</p>
-                    <button disabled={busy} onClick={(e) => { e.stopPropagation(); setBusy(true); onFinish() }}>Sim</button>
-                    <button onClick={(e) => { e.stopPropagation(); setConfirmation(false) }}>Não</button>
+                    <button disabled={busy} onClick={(e) => { e.stopPropagation(); setBusy(true); onFinish() }}
+                    className="btn-primary"
+                    >
+                        Sim
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); setConfirmation(false) }}
+                    className="border"
+                    >
+                        Não
+                    </button>
                 </div>
                 
                 <div inert={confirmation} className={`

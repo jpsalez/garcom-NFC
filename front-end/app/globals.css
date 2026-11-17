@@ -113,8 +113,10 @@
     @apply w-full cursor-pointer p-3 rounded-sm transition-all duration-300 hover:scale-105 hover:shadow-lg active:scale-105 
   }
 
-  input {
-    @apply w-full bg-linear-130 from-gray-200 via-white to-gray-200 border border-foreground/50 p-3 rounded-lg shadow-lg text-gray-800 placeholder:text-gray-400;
+  input[type="text"], input[type="email"], input[type="password"] {
+    @apply w-full bg-linear-130 from-gray-200 via-white to-gray-200 
+    border border-foreground/50 p-3 rounded-lg shadow-lg text-gray-800 
+    placeholder:text-gray-400;
   };  
 
   select {
@@ -122,7 +124,7 @@
   }
 
   option {
-    @apply bg-[#12233F] text-lg;
+    @apply bg-foreground text-background text-lg;
   }
 }
 
@@ -147,7 +149,7 @@
   }
 
   .form-background {
-    @apply relative p-5 rounded-xl  bg-card/50 text-card-foreground outline-gray-200 shadow-xl w-full max-w-100;
+    @apply relative p-5 rounded-xl  bg-card/50 text-card-foreground outline-gray-200 shadow-xl w-full;
   }
 
   .form-style {
