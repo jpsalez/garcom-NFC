@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api";
 import { saveSession } from "@/lib/session";
 import { login } from "@/services/auth";
 import { FaUser } from "react-icons/fa";
+import Image from "next/image";
 
 function loginErrorMessage(err: unknown) {
     if (err instanceof ApiError && err.status === 401) return 'E-mail ou senha inválidos.'
@@ -47,8 +48,12 @@ export default function LoginPage() {
             lg:flex-row lg:items-start lg:w-full lg:max-w-300"
             >
 
-                <div className="w-full max-w-200 aspect-4/3 rounded-l-xl bg-blue-600 hidden lg:flex items-center justify-center">
-                    <h2 className="text-2xl text-background">IMAGEM AKI AAAAA</h2>
+                <div className="relative w-full max-w-200 aspect-4/3 rounded-l-xl bg-blue-600 hidden lg:flex items-center justify-center overflow-hidden">
+                    <Image
+                    src={'/psiu_4_3.png'}
+                    fill
+                    alt="Psiu logo"
+                    />
                 </div>
                 
                 <div className="form-background bg-white! self-stretch max-w-100 lg:rounded-l-none flex items-center justify-center">
@@ -59,7 +64,7 @@ export default function LoginPage() {
                         <div className="flex flex-col items-center justify-center space-y-2 text-sm">
 
                             <div className="relative w-15 flex items-center justify-center aspect-square border rounded-full">
-                                <BorderBeam />
+                                <BorderBeam colorFrom="#1D2540" colorTo="#1D2540"/>
                                 <FaUser className="text-2xl"/>
                             </div>
                             
@@ -91,11 +96,11 @@ export default function LoginPage() {
                                     <input type="checkbox" name="" id=""/>
                                     <span className="text-sm line-clamp-1">Salvar login</span>
                                 </div>
-                                <Link href="/esqueci-senha" className="underline text-sm line-clamp-1">Esqueci minha senha</Link>
+                                <Link href="/esqueci-senha" className="font-extrabold text-sm line-clamp-1">Esqueci minha senha</Link>
                             </div>
                             <div className="text-center">
-                                <p className="">Ainda não tem conta?</p>
-                                <Link href="/cadastro" className="underline text-sm">Cadastre seu restaurante.</Link>
+                                <p className="text-lg">Ainda não tem conta?</p>
+                                <Link href="/cadastro" className="font-extrabold text-sm">Cadastre seu restaurante aqui</Link>
                             </div>
                         </div>
                     </form>
