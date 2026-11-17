@@ -10,7 +10,7 @@ import { IoIosWarning, IoMdCloseCircle } from "react-icons/io"
 import { Plus, QrCode } from "lucide-react"
 import { FaCircleCheck, FaPencil } from "react-icons/fa6"
 import { IoClose } from "react-icons/io5"
-import { MdClose } from "react-icons/md"
+import { MdClose, MdTableBar } from "react-icons/md"
 
 type Mode = 'view' | 'rename' | 'confirmOff' | 'confirmDelete' | 'create'
 
@@ -25,7 +25,8 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
 
         <div className={`
             kpi-card space-y-0! gap-y-2
-            w-full border p-5 rounded-lg shadow-lg
+            w-full border p-5 md:p-2 rounded-lg shadow-lg
+            md:relative
             ${table.active ? '' : 'bg-gray-100 text-gray-500'}
         `}
             
@@ -40,24 +41,26 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
                             <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={60} required autoFocus aria-label="Novo nome da mesa"/>
                             <button type="submit" className="w-auto px-3 btn-primary">Salvar</button>
                             <button type="button" onClick={() => { setLabel(table.label); back() }} className="w-auto px-3 border rounded-lg">Cancelar</button>
-                    </form>
+                        </form>
                     </>
                     :
                     <>
                         <div
                         className="
-                            w-full grid grid-cols-[auto_40px_40px_40px_40px]
+                            w-full md:aspect-square grid grid-cols-[auto_40px_40px_40px_40px]
+                            md:grid-rows-[auto_40px] md:grid-cols-4 
                             [&>div]:flex [&>div]:items-center [&>div]:justify-center
                             [&>div>svg]:cursor-pointer [&>div>svg]:text-lg
                             [&>div>svg]:transition-all [&>div>svg]:duration-300
                             [&>div>svg]:hover:scale-110
                         "
                         >
-                            <div className="w-full">
-                                <p className="text-lg font-bold  w-full">{table.label}</p>
+                            <div className="w-full md:col-span-4 md:flex md:flex-col md:items-center md:justify-center md:py-3">
+                                <MdTableBar className="hidden md:flex md:flex-1" size={50}/>
+                                <p className="text-2xl font-bold w-full md:text-center">{table.label}</p>
                             </div>
 
-                            <div>
+                            <div className="">
                                 {table.active
                                     ?
                                     <FaCircleCheck className="text-green-600" onClick={() => setMode('confirmOff')}/>
@@ -85,12 +88,13 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
 
             <div 
             className={`
-                px-5 space-y-3 text-sm overflow-hidden
+                w-full px-5 space-y-3 text-sm overflow-hidden md:bg-white rounded-lg
+                md:grid md:grid-rows-2 md:gap-y-1 md:absolute md:inset-0 md:px-3 md:w-full md:max-w-80 md:aspect-square md:items-stretch 
                 transition-all duration-700 ease-in-out
-                ${(mode === 'confirmOff' || mode === 'confirmDelete') ? 'max-h-30 py-2' : 'max-h-0 py-0'}
+                ${(mode === 'confirmOff' || mode === 'confirmDelete') ? 'max-h-80 py-2 md:py-5' : 'max-h-0 py-0'}
             `}
             >
-                <div className="relative">
+                <div className="relative md:h-full md:flex md:items-center md:justify-center md:text-center">
                     <p
                     className={`
                         text-sm
@@ -100,20 +104,23 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
                     >
                         Desativar encerra o atendimento aberto desta mesa.
                     </p>
-                    <p
+                    <div
                     className={`
                         text-sm absolute inset-0
+                        md:flex md:items-center md:justify-center
                         transition-all duration-300
                         ${mode === 'confirmDelete' ? 'opacity-100' : 'opacity-0'}
                     `}
                     >
-                        Excluir apaga a mesa de vez (só vale sem atendimentos registrados).
-                    </p>
+                        <p>Excluir apaga a mesa de vez (só vale sem atendimentos registrados).</p>
+                    </div>
                 </div>
                 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2
+                md:flex-col md:flex-nowrap md:items-center md:justify-center md:px-3
+                ">
                     <button onClick={() => { if (mode === 'confirmOff') onActive(false); else onDelete(); back() }} className="flex-1 p-2 rounded-lg bg-gray-900 text-white">Confirmar</button>
-                    <button onClick={back} className="flex-1 p-2 border rounded-lg">Cancelar</button>
+                    <button onClick={back} className="flex-1 p-2 border rounded-lg md:max-w-[70%]">Cancelar</button>
                 </div>
 
             </div>
@@ -143,7 +150,7 @@ export default function MesasPage() {
     }
 
     return(
-        <div className="w-full p-5 space-y-5">
+        <div className="page-div">
             
             {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             {loaded && tables.length === 0 && <p className="text-gray-500">Nenhuma mesa cadastrada.</p>}
@@ -156,8 +163,8 @@ export default function MesasPage() {
                     <div 
                     className={`
                         absolute inset-0 w-full h-full z-10
-                        rounded-lg shadow-lg
-                        transition-all duration-1000
+                        rounded-lg
+                        transition-all duration-800
                         ${mode === 'create' ? 'w-full left-0 pointer-events-auto' : 'left-full pointer-events-none'}
                     `}
                     >
@@ -216,7 +223,7 @@ export default function MesasPage() {
 
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-5 md:max-h-155 no-scrollbar overflow-y-scroll">
                     {tables.map((t) => (
                         <TableCard key={`${t.id}:${t.label}`} table={t}
                             onQr={() => setQr(t)}
