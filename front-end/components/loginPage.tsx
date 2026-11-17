@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { saveSession } from "@/lib/session";
 import { login } from "@/services/auth";
+import { FaUser } from "react-icons/fa";
 
 function loginErrorMessage(err: unknown) {
     if (err instanceof ApiError && err.status === 401) return 'E-mail ou senha inválidos.'
@@ -42,20 +43,28 @@ export default function LoginPage() {
 
 
             
-            <div className="grid grid-cols-1 shadow-xl 
-            md:grid-rows-1 md:grid-cols-2 md:h-full md:w-full md:max-w-300">
+            <div className="flex flex-col items-center justify-center rounded-xl shadow-xl w-full
+            lg:flex-row lg:items-start lg:w-full lg:max-w-300"
+            >
 
-                <div className="w-full rounded-l-xl bg-blue-600 hidden md:flex items-center justify-center">
+                <div className="w-full max-w-200 aspect-4/3 rounded-l-xl bg-blue-600 hidden lg:flex items-center justify-center">
                     <h2 className="text-2xl text-background">IMAGEM AKI AAAAA</h2>
                 </div>
                 
-                <div className="form-background md:rounded-l-none flex items-center justify-center">
-                    <BorderBeam size={200} duration={3} colorFrom="#d4d4d8" colorTo="#71717a"/>
+                <div className="form-background bg-white! self-stretch max-w-100 lg:rounded-l-none flex items-center justify-center">
+
+                    
                 
-                    <form onSubmit={handleSubmit} className="form-style">
-                        <div className="text-center text-sm">
-                            <h2 className="font-bold text-xl">É bom ter você de volta!</h2>
-                            <p>Faça Login para continuar</p>
+                    <form onSubmit={handleSubmit} className="form-style w-full h-full">
+                        <div className="flex flex-col items-center justify-center space-y-2 text-sm">
+
+                            <div className="relative w-15 flex items-center justify-center aspect-square border rounded-full">
+                                <BorderBeam />
+                                <FaUser className="text-2xl"/>
+                            </div>
+                            
+                            <h2 className="font-bold text-xl text-center">É bom ter você de volta!</h2>
+                            <p className="text-center">Faça Login para continuar</p>
                         </div>
                         <input type="email"
                         value={email}
@@ -75,9 +84,19 @@ export default function LoginPage() {
                         />
                         <button disabled={loading} className="btn-primary">{loading ? 'Entrando...' : 'Entrar'}</button>
                         <p role="alert" className={`error ${error ? 'visible' : ''}`}>{error}</p>
-                        <div className="text-center space-y-2">
-                            <p className="text-sm">Esqueceu sua senha? <Link href="/esqueci-senha" className="underline">Clique aqui.</Link></p>
-                            <p className="text-sm">Ainda não tem conta? <Link href="/cadastro" className="underline">Cadastre seu restaurante.</Link></p>
+
+                        <div className="w-full text-center space-y-2">
+                            <div className="w-full flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                    <input type="checkbox" name="" id=""/>
+                                    <span className="text-sm line-clamp-1">Salvar login</span>
+                                </div>
+                                <Link href="/esqueci-senha" className="underline text-sm line-clamp-1">Esqueci minha senha</Link>
+                            </div>
+                            <div className="text-center">
+                                <p className="">Ainda não tem conta?</p>
+                                <Link href="/cadastro" className="underline text-sm">Cadastre seu restaurante.</Link>
+                            </div>
                         </div>
                     </form>
                 </div>
