@@ -1,8 +1,11 @@
 import type { Request , Response } from "express"
 import { inject, injectable } from "tsyringe"
 import type { IAuthService } from "./auth.interfaces.ts"
-import type { changePasswordInput, createUserInput, loginUserInput, refreshInput } from '../auth/auth.schema.ts';
+import type { changePasswordInput, createUserInput, loginUserInput } from '../auth/auth.schema.ts';
 import { userOf } from "../../shared/middlewares/auth.middleware.ts";
+import { REFRESH_COOKIE, clearAuthCookies, readCookie, setAuthCookies } from "../../shared/utils/cookies.ts";
+
+const refreshTokenOf = (req : Request) => readCookie(req.headers.cookie, REFRESH_COOKIE) ?? "";
 
 // Sem try/catch: erros lançados pelo service vão para o errorHandler global
 @injectable()
@@ -24,28 +27,27 @@ export class AuthController {
     login = async (req : Request, res : Response) => {
         const credentials = req.body as loginUserInput;
 
-        const result = await this.authService.login(credentials);
-
-        return res.status(200).json(result);
+        return this.sendSession(res, await this.authService.login(credentials));
     }
 
     refresh = async (req : Request, res : Response) => {
-        const { refreshToken } = req.body as refreshInput;
-
-        return res.status(200).json(await this.authService.refresh(refreshToken));
+        return this.sendSession(res, await this.authService.refresh(refreshTokenOf(req)));
     }
 
     logout = async (req : Request, res : Response) => {
-        const { refreshToken } = req.body as refreshInput;
-
-        await this.authService.logout(refreshToken);
+        await this.authService.logout(refreshTokenOf(req));
+        clearAuthCookies(res);
         return res.status(204).send();
     }
 
     changePassword = async (req : Request, res : Response) => {
-        const result = await this.authService.changePassword(userOf(req), req.body as changePasswordInput)
+        return this.sendSession(res, await this.authService.changePassword(userOf(req), req.body as changePasswordInput))
+    }
 
-        return res.status(200).json(result)
+    // Os tokens vão só nos cookies httpOnly; o corpo traz apenas o usuário
+    private sendSession(res : Response, { user, ...tokens } : { user: unknown; token: string; refreshToken: string }) {
+        setAuthCookies(res, tokens);
+        return res.status(200).json({ user });
     }
 
     me = async (req : Request, res : Response) => {

@@ -31,8 +31,8 @@ export default function ChangePasswordPage() {
         }
         setLoading(true)
         try {
-            // A resposta traz o par de tokens novo deste aparelho: os outros precisam entrar de novo
-            saveSession(await changePassword(session.token, current, next))
+            // A API grava o par de cookies novo deste aparelho: os outros precisam entrar de novo
+            saveSession(await changePassword(current, next))
             setCurrent('')
             setNext('')
             setConfirm('')

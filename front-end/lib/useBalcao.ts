@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { API_URL, refreshSession } from "@/lib/api";
-import { clearSession, readSession } from "@/lib/session";
+import { clearSession } from "@/lib/session";
 import { playAlert } from "@/lib/sound";
 import type { ActiveSession, Call } from "@/lib/types";
 import { listCalls } from "@/services/calls";
@@ -12,7 +12,7 @@ const startOfToday = () => new Date(new Date().setHours(0, 0, 0, 0));
 
 // Estado do balcão: carga inicial pela API e atualizações em tempo real pelo Socket.IO.
 // Eventos podem se perder numa queda; por isso tudo é recarregado a cada (re)conexão.
-export function useBalcao(token: string, soundOn: boolean) {
+export function useBalcao(soundOn: boolean) {
   const [calls, setCalls] = useState<Call[]>([])
   const [sessions, setSessions] = useState<ActiveSession[]>([])
   const [doneToday, setDoneToday] = useState(0)
@@ -31,9 +31,9 @@ export function useBalcao(token: string, soundOn: boolean) {
       for (let attempt = 0; attempt < 3; attempt++) {
         const seen = events.current
         const [open, done, active] = await Promise.all([
-          listCalls(token, 'OPEN'),
-          listCalls(token, 'DONE', startOfToday()),
-          listSessions(token),
+          listCalls('OPEN'),
+          listCalls('DONE', startOfToday()),
+          listSessions(),
         ])
         // Chegou evento durante a carga: o retrato pode ser anterior a ele (ressuscitaria um card); busca de novo
         if (events.current !== seen && attempt < 2) continue
@@ -47,15 +47,15 @@ export function useBalcao(token: string, soundOn: boolean) {
     } catch {
       setStale(true)
     }
-  }, [token])
+  }, [])
 
   useEffect(() => {
-    // O token é lido a cada (re)conexão: depois de uma renovação o socket não reaproveita o vencido
-    const socket = io(new URL(API_URL).origin, { auth: (cb) => cb({ token: readSession()?.token ?? token }) })
+    // withCredentials: o navegador manda o cookie de sessão no handshake (a cada reconexão, já com o renovado)
+    const socket = io(new URL(API_URL).origin, { withCredentials: true })
 
     socket.on('connect', () => { setLive(true); void load() })
     socket.on('disconnect', () => setLive(false))
-    // Token recusado: tenta renovar o login e reconectar; se não der (usuário desativado, refresh vencido), volta ao login
+    // Cookie recusado: tenta renovar o login e reconectar; se não der (usuário desativado, refresh vencido), volta ao login
     socket.on('connect_error', (err) => {
       setLive(false)
       if (err.message !== 'Não autorizado') return
@@ -88,7 +88,7 @@ export function useBalcao(token: string, soundOn: boolean) {
     })
 
     return () => { socket.disconnect() }
-  }, [token, load])
+  }, [load])
 
   // Carga que falhou: tenta de novo a cada 5 s
   useEffect(() => {

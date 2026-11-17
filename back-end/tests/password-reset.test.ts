@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, outbox } from "./helpers/app.ts";
+import { cookieOf } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
 
 const owner = { name: "Ana", email: "ana@teste.com", password: "senha-forte-123", restaurantName: "Bar do Teste" };
@@ -53,7 +54,7 @@ describe("POST /auth/forgot-password", () => {
 describe("POST /auth/reset-password", () => {
   it("troca a senha, o link vale uma vez e as sessões antigas caem", async () => {
     await api().post("/api/v1/auth/register").send(owner);
-    const { refreshToken } = (await login(owner.password)).body;
+    const refreshToken = cookieOf(await login(owner.password), "refresh_token");
     await forgot(owner.email);
     const token = await tokenFromMail();
 
@@ -61,7 +62,7 @@ describe("POST /auth/reset-password", () => {
 
     expect((await login(novaSenha)).status).toBe(200);
     expect((await login(owner.password)).status).toBe(401);
-    expect((await api().post("/api/v1/auth/refresh").send({ refreshToken })).status).toBe(401);
+    expect((await api().post("/api/v1/auth/refresh").set("Cookie", `refresh_token=${refreshToken}`)).status).toBe(401);
     const again = await reset(token, "mais-uma-senha-forte");
     expect([again.status, again.body.code]).toEqual([400, "RESET_TOKEN_INVALID"]);
   });

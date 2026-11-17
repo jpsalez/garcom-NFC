@@ -2,7 +2,7 @@
 
 ## 8.1 Convenções gerais da API 
  
-- **[Implementado]** Base `/api/v1`, corpos JSON. Usuários do balcão e do OWNER enviam `Authorization: Bearer` com JWT; a mesa envia o cabeçalho `X-Table-Token` (v0.3; a v0.2 usava `X-Table-Session` para um token compartilhado, DV-24).
+- **[Implementado]** Base `/api/v1`, corpos JSON. Usuários do balcão e do OWNER se autenticam por cookies httpOnly (`access_token` e `refresh_token`, `SameSite=Lax`, `Secure` em produção; a API não aceita mais `Authorization: Bearer`). Como o navegador envia cookie sozinho, o filtro `blockForeignOrigin` responde 403 a POST/PATCH/PUT/DELETE de `Origin` fora de `FRONTEND_URL` (CSRF); o CORS usa `credentials: true` com origens explícitas. A mesa envia o cabeçalho `X-Table-Token` (v0.3; a v0.2 usava `X-Table-Session` para um token compartilhado, DV-24).
 - **[Implementado, 14/11/2026]** Todas as rotas são montadas sob `/api/v1` (DEC-11), inclusive `GET /api/v1/health` (usado no healthcheck do Compose); `/docs` fica fora do prefixo. O erro sempre tem o formato `{ error, code, message, details? }` (DEC-12): `code` é estável (`BAD_REQUEST`, `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `TOO_MANY_REQUESTS`, `INTERNAL_ERROR`) e os erros novos têm código próprio (`TABLE_HAS_SESSIONS`, `RESTAURANT_INACTIVE`). 
 - Rotas "públicas" não exigem usuário; as "da mesa" exigem token de aparelho; as demais exigem JWT e papel.  
 
@@ -15,12 +15,12 @@ Todas as rotas abaixo estão implementadas (27 no total) e montadas sob `/api/v1
 |---|---|---|---|
 | GET /health | Verificar se a API responde | Sem entrada; 200 `{ message: "API Healthy" }` | Healthcheck do compose |
 | POST /auth/register | Autocadastro: restaurante + OWNER (RF01) | Entrada: name, email, password (8 a 128), restaurantName; 201 `{ user, restaurant }` | Fluxo B em transação; e-mail duplicado com erro genérico; 5 por hora por IP |
-| POST /auth/login | Obter JWT e refresh token | Entrada: email, password; 200 `{ token, refreshToken, user }`; 401 "E-mail ou senha inválidos" | 10 por 15 min por IP+e-mail e 30 por 15 min por IP |
-| POST /auth/refresh | Trocar o refresh token por um par novo | Entrada: refreshToken; 200 `{ token, refreshToken, user }`; 401 se desconhecido, usado, vencido ou usuário inativo | O token antigo deixa de valer; reuso de um já trocado encerra todas as sessões do usuário; 60 por 15 min por IP |
-| POST /auth/logout | Revogar o refresh token | Entrada: refreshToken; 204 (também para token desconhecido) | Mesmo limite do refresh |
+| POST /auth/login | Autenticar e gravar os cookies de sessão | Entrada: email, password; 200 `{ user }` + `Set-Cookie` (access e refresh); 401 "E-mail ou senha inválidos" | 10 por 15 min por IP+e-mail e 30 por 15 min por IP |
+| POST /auth/refresh | Trocar o refresh token por um par novo | Entrada: cookie `refresh_token`; 200 `{ user }` + novos cookies; 401 se ausente, desconhecido, usado, vencido ou usuário inativo | O token antigo deixa de valer; reuso de um já trocado encerra todas as sessões do usuário; 60 por 15 min por IP |
+| POST /auth/logout | Revogar o refresh token | Entrada: cookie `refresh_token`; 204 e cookies limpos (também sem cookie ou token desconhecido) | Mesmo limite do refresh |
 | POST /auth/forgot-password | Enviar o link de redefinição de senha por e-mail | Entrada: email; 202 com a mesma mensagem para qualquer e-mail | Link de uso único e 1 hora; 5 por hora por IP+e-mail |
 | POST /auth/reset-password | Definir a nova senha | Entrada: token, password (8 a 128); 204; 400 `RESET_TOKEN_INVALID` | Revoga os refresh tokens do usuário; 10 por 15 min por IP |
-| PATCH /auth/password | Trocar a senha do usuário logado | JWT; entrada: currentPassword, newPassword (8 a 128, diferente da atual); 200 `{ token, refreshToken, user }`; 400 `INVALID_CURRENT_PASSWORD` | Derruba os refresh tokens dos outros aparelhos; 10 por 15 min por usuário |
+| PATCH /auth/password | Trocar a senha do usuário logado | JWT; entrada: currentPassword, newPassword (8 a 128, diferente da atual); 200 `{ user }` + novos cookies; 400 `INVALID_CURRENT_PASSWORD` | Derruba os refresh tokens dos outros aparelhos; 10 por 15 min por usuário |
 | GET /auth/me | Usuário logado | JWT; 200 com o usuário sem o hash | |
 | POST /public/tables/:code/scan | Entrar no atendimento ativo ou abrir; devolve o token do aparelho | 200 `{ token, expires_at, table: { label }, restaurant: { name } }`; 404 se a mesa não existe, está inativa ou o restaurante está desativado | POST por ter efeito colateral; 30 por 15 min por IP+mesa; substitui `GET /public/tables/:code` e `POST /public/tables/:code/token` da v0.3 |
 
@@ -47,7 +47,7 @@ Todas as rotas abaixo estão implementadas (27 no total) e montadas sob `/api/v1
 ### 8.2.4 Balcão (JWT; papéis OWNER e STAFF)  
 | Método e caminho | Finalidade | Observações |
 |---|---|---|
-| GET /calls | Cards em ordem de chegada | `?status=` OPEN (padrão), DONE ou CANCELLED e `?since=<data>` (400 se inválida); resposta `{ serverTime, calls[] }` com `table.label` |
+| GET /calls | Cards em ordem de chegada | `?status=` OPEN (padrão), DONE ou CANCELLED `?since=<data>` (400 se inválida) e paginação por `?limit=` (1 a 1000, padrão 500) e `?offset=`; resposta `{ serverTime, calls[] }` com `table.label` |
 | PATCH /calls/:id/done | Finalizar chamado | `done_by` = usuário logado; 404; 409 `CALL_NOT_OPEN` |
 | GET /sessions | Mesas em atendimento, com a contagem de aparelhos | `?status=ACTIVE` (padrão) ou `CLOSED`; mais recentes primeiro; paginação por `?limit=` (1 a 200, padrão 100) e `?offset=`; valores inválidos dão 400; a resposta continua sendo uma lista |
 | POST /tables/:id/session | Abrir o atendimento de uma mesa | 409 `TABLE_INACTIVE` ou `SESSION_ALREADY_ACTIVE` |
@@ -68,7 +68,7 @@ O documento de módulos previa `PATCH /sessions/:id` (keepOpen) e `POST /tables/
 | session:extended | restaurant:<restaurantId> | {id, expires_at} |
 | session:closed | restaurant:<restaurantId> | {id, reason} (reason STAFF ou TIMEOUT) |
 
-- Autenticação: JWT em `handshake.auth.token`, mesma regra do HTTP (`authenticateToken` em `auth.middleware.ts`, que usa `AuthCache`). Só quem tem restaurante (OWNER/STAFF) entra; a sala é `restaurant:<restaurantId>`. CORS pelas mesmas origens (FRONTEND_URL).
+- Autenticação: JWT no cookie `access_token` do handshake (o navegador o envia com `withCredentials`; `handshake.auth.token` não vale mais), mesma regra do HTTP (`authenticateToken` em `auth.middleware.ts`, que usa `AuthCache`). Só quem tem restaurante (OWNER/STAFF) entra; a sala é `restaurant:<restaurantId>`. CORS pelas mesmas origens (FRONTEND_URL).
 - Emissão apenas após o commit, só para a sala do restaurante (isolamento por tenant).
 - Não existe `call:cancelled`: `session:closed` manda o balcão remover todos os cards da sessão (por isso CallView ganhou `session_id`). Nomes com dois pontos por decisão do usuário (DV-38 resolvida; substituem os com ponto da v0.3).
 - O cliente (mesa) não usa tempo real (DEC-08); sem sala `session:<id>`.
@@ -84,7 +84,7 @@ O documento de módulos previa `PATCH /sessions/:id` (keepOpen) e `POST /tables/
 - **Mensagens anti-enumeração [Implementado]:** o login devolve a mesma mensagem para e-mail inexistente, senha errada e usuário ou restaurante desativado, e compara contra `DUMMY_PASSWORD_HASH` quando o usuário não existe (tempo uniforme); o cadastro responde com erro genérico para e-mail duplicado. 
 - **CORS e rate limit [Implementado]:** CORS por `FRONTEND_URL` (lista separada por vírgula; sem ela nenhuma origem de navegador). Rate limit em memória (`express-rate-limit`), desligado com `NODE_ENV=test`: login 10 por 15 min por IP+e-mail e 30 por 15 min só por IP; cadastro 5 por hora por IP; scan 30 por 15 min por IP+mesa; chamados 10 por 5 min por token do aparelho. Resposta 429. Atrás de proxy reverso é preciso `TRUST_PROXY` (número de proxies), senão o IP dos limites é o do proxy; um valor maior que o real deixa o IP forjável por `X-Forwarded-For`. 
 - **Aparelho da mesa [Implementado]:** token opaco por aparelho, hash SHA-256 no banco, cabeçalho `X-Table-Token` (seção 7.4). 
-- **`ensureAuthenticated` [Implementado]:** valida o Bearer, consulta o banco (`findForAuth`) com cache em memória (TTL 30 s, `AUTH_CACHE_TTL_SECONDS`, invalidação ao alterar ou remover usuário e ao ativar ou desativar restaurante) e preenche `req.user { id, restaurantId, role }` a partir do banco. Existem `ensureRole`, `tenantOf` e `validateUuidParams`, aplicados a todas as rotas autenticadas. 
+- **`ensureAuthenticated` [Implementado]:** valida o cookie `access_token`, consulta o banco (`findForAuth`) com cache em memória (TTL 30 s, `AUTH_CACHE_TTL_SECONDS`, invalidação ao alterar ou remover usuário e ao ativar ou desativar restaurante) e preenche `req.user { id, restaurantId, role }` a partir do banco. Existem `ensureRole`, `tenantOf` e `validateUuidParams`, aplicados a todas as rotas autenticadas. 
 - **Limites de entrada [Implementado]:** corpo acima de 100 KB dá 413 `PAYLOAD_TOO_LARGE`; JSON inválido dá 400; senha até 128 caracteres, nomes até 100, slug até 60. 
 
 ### 8.4.2 Papéis (autorização)  
@@ -154,7 +154,7 @@ Classe base `AppError` (mensagem, status, detalhes opcionais e `code`) e subclas
 | Abuso (RNF06) | Limite de chamados, scan, login e cadastro; trust proxy atrás de proxy | Impl.; `TRUST_PROXY` precisa ser definido no deploy | 
 | Código público da mesa | Aleatório, nunca sequencial | Impl. (12 caracteres, `crypto.randomInt`) | 
 | Concorrência | Índice único parcial de sessão ativa e de chamado aberto por tipo; atualização condicional; transação ao encerrar; trava da sessão ao criar chamado | Impl. | 
-| CORS, cookies | Origens explícitas (nunca curinga com credenciais) | CORS impl.; o token do balcão e o do aparelho ficam no `localStorage` (risco de XSS; alternativa: cookie httpOnly) | 
+| CORS, cookies | Origens explícitas (nunca curinga com credenciais) | Impl.: sessão do balcão em cookies httpOnly (15/11/2026) com `SameSite=Lax` e filtro de `Origin` contra CSRF. O token do aparelho do cliente continua no `localStorage` (escolha consciente: rota pública, sem cookie) | 
 | Cabeçalhos de segurança | `helmet` ou equivalente no proxy | Impl. (`helmet` em `server.ts`, sem CSP; `tests/hardening.test.ts`) | 
 | Documentação da API | Não exposta em produção | Impl. (`/docs` só fora de produção) | 
 | Dependências | Auditoria | `npm audit` limpo: `overrides` força a `deepmerge-ts` ^8.0.2 (usada pelo CLI do Prisma 6.19.3); reavaliar ao atualizar o Prisma | 

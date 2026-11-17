@@ -9,17 +9,30 @@ const inFlight = new Map<string, Promise<Device>>();
 export function scanTable(code: string) {
   let scan = inFlight.get(code);
   if (!scan) {
-    scan = api<Device>(`/public/tables/${encodeURIComponent(code)}/scan`, { method: "POST" }).finally(() => inFlight.delete(code));
+    scan = api<Device>(`/public/tables/${encodeURIComponent(code)}/scan`, { method: "POST", renew: false }).finally(() => inFlight.delete(code));
     inFlight.set(code, scan);
   }
   return scan;
 }
 
 // Gestão das mesas (OWNER). Desativar encerra o atendimento aberto; excluir só vale sem histórico (409 TABLE_HAS_SESSIONS).
-export const listTables = (token: string) => api<Table[]>("/tables", { token });
-export const createTable = (token: string, label: string) => api<Table>("/tables", { method: "POST", body: { label }, token });
-export const updateTable = (token: string, id: string, body: { label?: string; active?: boolean }) =>
-  api<Table>(`/tables/${id}`, { method: "PATCH", body, token });
-export const removeTable = (token: string, id: string) => api<void>(`/tables/${id}`, { method: "DELETE", token });
+export function listTables() {
+  return api<Table[]>("/tables");
+}
+
+export function createTable(label: string) {
+  return api<Table>("/tables", { method: "POST", body: { label } });
+}
+
+export function updateTable(id: string, body: { label?: string; active?: boolean }) {
+  return api<Table>(`/tables/${id}`, { method: "PATCH", body });
+}
+
+export function removeTable(id: string) {
+  return api<void>(`/tables/${id}`, { method: "DELETE" });
+}
+
 // SVG do QR Code; gerar o QR de uma mesa inativa a reativa
-export const tableQrCode = (token: string, id: string) => api<string>(`/tables/${id}/qrcode`, { token, text: true });
+export function tableQrCode(id: string) {
+  return api<string>(`/tables/${id}/qrcode`, { text: true });
+}

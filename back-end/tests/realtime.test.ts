@@ -8,7 +8,7 @@ import type { ISessionsService } from "../src/modules/sessions/sessions.interfac
 import { container } from "../src/shared/container/container.ts";
 import type { SocketNotifier } from "../src/shared/realtime/socket-notifier.ts";
 import { api } from "./helpers/app.ts";
-import { auth, ownerOf, staffToken } from "./helpers/auth.ts";
+import { auth, cookieOf, ownerOf, staffToken } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
 import { passwordHash } from "../src/shared/utils/password.ts";
 import { createTable } from "./helpers/factories.ts";
@@ -38,7 +38,9 @@ afterEach(() => {
 
 // Conecta e espera a conexão (ou a recusa)
 function connectAs(token?: string) {
-  const socket = connect(url, { auth: { token }, reconnection: false, forceNew: true });
+  // O navegador manda o cookie de sessão no handshake; aqui ele é montado à mão
+  const extraHeaders = token ? { cookie: `access_token=${token}` } : undefined;
+  const socket = connect(url, { extraHeaders, reconnection: false, forceNew: true });
   sockets.push(socket);
   return new Promise<Socket>((resolve, reject) => {
     socket.on("connect", () => resolve(socket));
@@ -72,6 +74,14 @@ describe("conexão", () => {
   it("recusa sem token e com token inválido", async () => {
     await expect(connectAs()).rejects.toThrow();
     await expect(connectAs("token-invalido")).rejects.toThrow();
+  });
+
+  it("não aceita mais o JWT em handshake.auth (só no cookie)", async () => {
+    const { token } = await ownerOf("a");
+    const socket = connect(url, { auth: { token }, reconnection: false, forceNew: true });
+    sockets.push(socket);
+
+    await expect(new Promise<void>((resolve, reject) => { socket.on("connect", () => resolve()); socket.on("connect_error", reject); })).rejects.toThrow();
   });
 
   it("recusa SUPER_ADMIN (não tem restaurante) e aceita OWNER e STAFF", async () => {
@@ -183,7 +193,7 @@ describe("desconexão ao perder o acesso", () => {
     const a = await ownerOf("a");
     const staffA = await api().post("/api/v1/staff").set(auth(a.token)).send({ name: "G1", email: "g1@teste.com", password: "senha-forte-123" });
     const staffB = await api().post("/api/v1/staff").set(auth(a.token)).send({ name: "G2", email: "g2@teste.com", password: "senha-forte-123" });
-    const tokenOf = async (email: string) => (await api().post("/api/v1/auth/login").send({ email, password: "senha-forte-123" })).body.token;
+    const tokenOf = async (email: string) => cookieOf(await api().post("/api/v1/auth/login").send({ email, password: "senha-forte-123" }), "access_token");
     const owner = await connectAs(a.token);
     const first = await connectAs(await tokenOf("g1@teste.com"));
     const second = await connectAs(await tokenOf("g2@teste.com"));
@@ -204,7 +214,7 @@ describe("desconexão ao perder o acesso", () => {
     const counterA = await connectAs(a.token);
     const counterB = await connectAs(b.token);
     await prisma.users.create({ data: { name: "Super", email: "super@teste.com", password_hash: await passwordHash("senha-forte-123"), role: "SUPER_ADMIN" } });
-    const superToken = (await api().post("/api/v1/auth/login").send({ email: "super@teste.com", password: "senha-forte-123" })).body.token;
+    const superToken = cookieOf(await api().post("/api/v1/auth/login").send({ email: "super@teste.com", password: "senha-forte-123" }), "access_token") as string;
     const gone = disconnected(counterA);
 
     await api().patch(`/api/v1/admin/restaurants/${a.user.restaurant_id}`).set(auth(superToken)).send({ active: false });

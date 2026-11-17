@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createRestaurantSchema, setActiveSchema } from "../modules/administration/administration.schema.ts";
 import { forgotPasswordSchema, resetPasswordSchema } from "../modules/auth/password-reset.schema.ts";
-import { changePasswordSchema, createUserSchema, loginUserSchema, refreshSchema } from "../modules/auth/auth.schema.ts";
+import { changePasswordSchema, createUserSchema, loginUserSchema } from "../modules/auth/auth.schema.ts";
 import { createCallSchema } from "../modules/calls/calls.schemas.ts";
 import { createTableSchema, updateTableSchema } from "../modules/tables/tables.schemas.ts";
 import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "../modules/users/users.schema.ts";
@@ -36,7 +36,7 @@ function operation({ tag, summary, success = 200, body, auth = true, params = []
   return {
     tags: [tag],
     summary,
-    ...(auth && { security: [{ bearerAuth: [] }] }),
+    ...(auth && { security: [{ cookieAuth: [] }] }),
     ...(params.length && { parameters: params.map(uuidParam) }),
     ...(body && {
       requestBody: {
@@ -58,10 +58,10 @@ export const openApiSpec = {
     version: "1.0.0",
     description:
       "SaaS multi-restaurante: o cliente chama o garçom ou pede a conta por QR/NFC. " +
-      "Faça login em /auth/login e use o token em Authorize (o restaurantId vem do token).",
+      "Faça login em /auth/login: o navegador guarda o cookie de sessão e o Swagger o envia sozinho (o restaurantId vem do token).",
   },
   components: {
-    securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } },
+    securitySchemes: { cookieAuth: { type: "apiKey", in: "cookie", name: "access_token" } },
   },
   paths: {
     "/health": { get: operation({ tag: "Sistema", summary: "Verifica se a API está no ar", auth: false }) },
@@ -69,13 +69,13 @@ export const openApiSpec = {
       post: operation({ tag: "Auth", summary: "Cadastra restaurante e dono", success: 201, body: createUserSchema, auth: false }),
     },
     "/auth/login": {
-      post: operation({ tag: "Auth", summary: "Login (retorna token de acesso, refresh token e usuário)", body: loginUserSchema, auth: false }),
+      post: operation({ tag: "Auth", summary: "Login (grava os cookies httpOnly de acesso e de refresh e devolve o usuário)", body: loginUserSchema, auth: false }),
     },
     "/auth/refresh": {
-      post: operation({ tag: "Auth", summary: "Troca o refresh token por um par novo (o antigo deixa de valer)", body: refreshSchema, auth: false }),
+      post: operation({ tag: "Auth", summary: "Troca o refresh token (cookie refresh_token) por um par novo nos cookies; o antigo deixa de valer", auth: false }),
     },
     "/auth/logout": {
-      post: operation({ tag: "Auth", summary: "Revoga o refresh token", success: 204, body: refreshSchema, auth: false }),
+      post: operation({ tag: "Auth", summary: "Revoga o refresh token (cookie) e limpa os cookies de sessão", success: 204, auth: false }),
     },
     "/auth/forgot-password": {
       post: operation({ tag: "Auth", summary: "Envia o link de redefinição de senha por e-mail (responde 202 para qualquer e-mail)", success: 202, body: forgotPasswordSchema, auth: false }),
@@ -139,7 +139,7 @@ export const openApiSpec = {
       post: operation({ tag: "Chamados", summary: "Cliente chama o garçom ou pede a conta (cabeçalho X-Table-Token); 201 novo, 200 se já havia um aberto do tipo", success: 201, body: createCallSchema, auth: false }),
     },
     "/calls": {
-      get: operation({ tag: "Chamados", summary: "Lista chamados e serverTime; ?status=OPEN (padrão), DONE ou CANCELLED e ?since=data (OWNER ou STAFF)" }),
+      get: operation({ tag: "Chamados", summary: "Lista chamados e serverTime; ?status=OPEN (padrão), DONE ou CANCELLED ?since=data e ?limit=/?offset= (padrão 500, máx. 1000) (OWNER ou STAFF)" }),
     },
     "/calls/{id}/done": {
       patch: operation({ tag: "Chamados", summary: "Finaliza o chamado; 409 CALL_NOT_OPEN se não estiver mais aberto (OWNER ou STAFF)", params: ["id"] }),

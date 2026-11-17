@@ -4,18 +4,13 @@ import type { IUserRepository } from "../../modules/users/users.repository.inter
 import type { IAuthCache } from "../cache/auth-cache.ts";
 import { container } from "../container/container.ts";
 import { ForbiddenError, UnauthorizedError } from "../errors/http-errors.ts";
+import { ACCESS_COOKIE, readCookie } from "../utils/cookies.ts";
 import { type TokenPayload, verifyToken } from "../utils/jwt.ts";
 
-function bearerToken(req: Request) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    throw new UnauthorizedError("Token não informado");
-  }
-
-  const [scheme, token] = authHeader.split(" ");
-  if (scheme !== "Bearer" || !token) {
-    throw new UnauthorizedError("Token mal formatado");
-  }
+// O JWT de acesso vem no cookie httpOnly gravado no login
+function accessToken(req: Request) {
+  const token = readCookie(req.headers.cookie, ACCESS_COOKIE);
+  if (!token) throw new UnauthorizedError("Token não informado");
   return token;
 }
 
@@ -47,7 +42,7 @@ export async function authenticateToken(token: string) {
 }
 
 export async function ensureAuthenticated(req: Request, _res: Response, next: NextFunction) {
-  req.user = await authenticateToken(bearerToken(req));
+  req.user = await authenticateToken(accessToken(req));
   next();
 }
 

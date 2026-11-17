@@ -100,7 +100,7 @@ Histórico: a v0.3 era contraditória (RN08 "cada novo chamado gera um novo card
  
 - Estado inicial: ao abrir a tela e a cada `connect` (inclusive reconexão), o balcão carrega `GET /calls` (OPEN), `GET /calls?status=DONE&since=<hoje 00:00>` e `GET /sessions` (ACTIVE); eventos só contam mudanças e podem ser perdidos durante uma queda (RNF03). Um contador de eventos recebidos durante a carga faz a carga repetir (até 3 vezes) em vez de sobrescrever a tela com um retrato mais velho que o evento; se a carga falha, mostra "Dados desatualizados, tentando de novo..." e tenta a cada 5 s. 
 - Eventos (com dois pontos, na sala `restaurant:<id>`): `call:created` adiciona o card (e dispara o alerta sonoro, DEC-10), `call:done` remove, `session:opened`, `session:extended` e `session:closed` atualizam o painel de mesas (este último também remove os cards de chamado da sessão, que a API cancelou). Não há `call:cancelled`. 
-- Reconexão automática do cliente Socket.IO (RNF03); o JWT vai em `handshake.auth.token`, é conferido só na conexão, e um token recusado ("Não autorizado") limpa a sessão e volta ao login. 
+- Reconexão automática do cliente Socket.IO (RNF03); o cookie `access_token` vai no handshake (`withCredentials`), é conferido só na conexão, e um token recusado ("Não autorizado") limpa a sessão e volta ao login. 
 
 **[Implementado]** No back-end, `INotifier` (`toRestaurant`, `disconnectUser`, `disconnectRestaurant`) com `SocketNotifier` registrado como "Notifier". Os testes de tempo real estão em `tests/realtime.test.ts`. Limitações aceitas: o socket continua válido até reconectar se o usuário perder acesso por outro caminho que não desativar ou excluir; instância única (com mais de uma seria preciso o adapter Redis).
 

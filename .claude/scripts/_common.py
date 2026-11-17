@@ -1,10 +1,12 @@
 """Utilidades comuns. Somente leitura: estes scripts nunca alteram o código-fonte."""
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]          # raiz do projeto
 BACK = ROOT / "back-end"
 SRC = BACK / "src"
 KNOW = ROOT / ".claude" / "knowledge" / "garcom-nfc"
+MAX_FILE = 200_000        # tamanho máximo exibido de um arquivo
 IGNORE = {"node_modules", "generated", ".git", "dist"}
 
 
@@ -36,3 +38,12 @@ def safe(rel: str) -> Path:
     if blocked(p):
         raise PermissionError("arquivo bloqueado")
     return p
+
+
+def now():
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def read_text(p: Path, limit=MAX_FILE):
+    data = p.read_bytes()[: limit + 1]
+    return data[:limit].decode("utf-8", errors="replace"), len(data) > limit

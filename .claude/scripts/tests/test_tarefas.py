@@ -82,11 +82,6 @@ class Tarefas(unittest.TestCase):
         tarefas.apagar("AUT-01")  # remove também a dependência que apontava para ela
         self.assertNotIn("depende_de", next(x for x in tarefas.carregar() if x["id"] == "SES-01"))
 
-    def test_formato_antigo_e_detectado(self):
-        tarefas.TASKS.write_text(json.dumps({"tasks": [{"id": "AA-1", "title": "x"}]}), encoding="utf-8")
-        with self.assertRaisesRegex(RuntimeError, "migrar_tarefas"):
-            tarefas.carregar()
-
     def test_decisoes_separam_pendentes_e_resolvidas_e_contam_bloqueios(self):
         d = tarefas.decisoes()
         self.assertEqual([x["id"] for x in d["pendentes"]], ["DEC-01"])

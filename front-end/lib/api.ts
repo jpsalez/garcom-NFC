@@ -1,4 +1,4 @@
-import { clearSession, readSession, saveSession, type Session } from "@/lib/session";
+import { clearSession, saveSession, type Session } from "@/lib/session";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -18,16 +18,17 @@ export class ApiError extends Error {
 type Options = {
   method?: string;
   body?: unknown;
-  // JWT do balcão (Authorization) ou token do aparelho da mesa (X-Table-Token)
-  token?: string;
+  // Token do aparelho da mesa (X-Table-Token); a sessão do balcão vai nos cookies
   deviceToken?: string;
+  // false: 401 não é login vencido (login, rotas públicas), então não tenta renovar
+  renew?: boolean;
   // Resposta que não é JSON (ex.: SVG do QR Code)
   text?: boolean;
 };
 
 let renewing: Promise<Session | null> | null = null;
 
-// Troca o refresh token por um par novo. Pedidos que falham juntos compartilham uma só renovação (o refresh token vale uma vez).
+// Troca o refresh token (cookie) por um par novo, também nos cookies. Pedidos que falham juntos compartilham uma só renovação (o refresh token vale uma vez).
 // Devolve null se o login não pode ser renovado; falha de rede lança e não derruba a sessão.
 export function refreshSession() {
   renewing ??= renew().finally(() => {
@@ -37,13 +38,7 @@ export function refreshSession() {
 }
 
 async function renew(): Promise<Session | null> {
-  const current = readSession();
-  if (!current) return null;
-  const response = await fetch(`${API_URL}/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken: current.refreshToken }),
-  });
+  const response = await fetch(`${API_URL}/auth/refresh`, { method: "POST", credentials: "include" });
   if (!response.ok) return null;
   const session = (await response.json()) as Session;
   saveSession(session);
@@ -51,15 +46,15 @@ async function renew(): Promise<Session | null> {
 }
 
 export async function api<T>(path: string, options: Options = {}, canRetry = true): Promise<T> {
-  const { method = "GET", body, token, deviceToken, text } = options;
+  const { method = "GET", body, deviceToken, renew = !deviceToken, text } = options;
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (token) headers.Authorization = `Bearer ${token}`;
   if (deviceToken) headers["X-Table-Token"] = deviceToken;
 
   const response = await fetch(`${API_URL}${path}`, {
     method,
     headers,
+    credentials: "include",
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
@@ -68,10 +63,10 @@ export async function api<T>(path: string, options: Options = {}, canRetry = tru
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    if (response.status === 401 && token) {
+    if (response.status === 401 && renew) {
       // JWT de acesso vencido: renova uma vez e repete o pedido
       const fresh = canRetry ? await refreshSession() : null;
-      if (fresh) return api<T>(path, { ...options, token: fresh.token }, false);
+      if (fresh) return api<T>(path, options, false);
       // Sem renovação (usuário desativado ou refresh vencido): limpar a sessão manda a tela de volta ao login (RequireAuth)
       clearSession();
     }

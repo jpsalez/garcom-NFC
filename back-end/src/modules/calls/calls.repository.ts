@@ -26,10 +26,13 @@ export class CallRepository implements ICallRepository {
   }
 
   // Cards do balcão, por ordem de chegada
-  findMany(restaurantId: string, filter: { status?: call_state; since?: Date } = {}) {
+  findMany(restaurantId: string, filter: { status?: call_state; since?: Date; limit?: number; offset?: number } = {}) {
     return this.db.calls.findMany({
       where: { restaurant_id: restaurantId, status: filter.status, created_at: { gte: filter.since } },
-      orderBy: { created_at: "asc" },
+      // O id desempata para a paginação não repetir nem pular linhas
+      orderBy: [{ created_at: "asc" }, { id: "asc" }],
+      take: filter.limit,
+      skip: filter.offset,
       include: {
         table_session: { select: { id: true, table: { select: { id: true, label: true } } } },
       },

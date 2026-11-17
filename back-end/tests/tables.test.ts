@@ -132,3 +132,31 @@ describe("desativar a mesa", () => {
     expect((await api().patch(`/api/v1/tables/${other.id}`).set(auth(token)).send({ active: false })).status).toBe(200);
   });
 });
+
+describe("public_code (RN02)", () => {
+  it("tem 12 caracteres do alfabeto sem ambíguos e é diferente a cada mesa", async () => {
+    const { token } = await ownerOf("a");
+    const create = (label: string) => api().post("/api/v1/tables").set(auth(token)).send({ label });
+
+    const [one, two] = [(await create("Mesa 1")).body.public_code, (await create("Mesa 2")).body.public_code];
+
+    expect(one).toMatch(/^[abcdefghjkmnpqrstuvwxyz23456789]{12}$/);
+    expect(one).not.toBe(two);
+  });
+});
+
+describe("isolamento entre restaurantes (HTTP)", () => {
+  it("GET lista só as mesas do próprio restaurante; PATCH em mesa de outro dá 404 e não altera", async () => {
+    const a = await ownerOf("a");
+    const b = await ownerOf("b");
+    await createTable(a.restaurantId, "A-1");
+    const deB = await createTable(b.restaurantId, "B-1");
+
+    const list = await api().get("/api/v1/tables").set(auth(a.token));
+    const patch = await api().patch(`/api/v1/tables/${deB.id}`).set(auth(a.token)).send({ label: "invadida" });
+
+    expect(list.body.map((t: { label: string }) => t.label)).toEqual(["A-1"]);
+    expect(patch.status).toBe(404);
+    expect((await prisma.tables.findUniqueOrThrow({ where: { id: deB.id } })).label).toBe("B-1");
+  });
+});

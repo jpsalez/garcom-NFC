@@ -13,8 +13,8 @@ export default function Header() {
             w-full
             grid grid-cols-[1fr_auto_1fr]
             items-center
-            h-20 px-5
-            border-b-[0.5] shadow-lg shadow-foreground/30
+            h-12 px-5
+            shadow-lg
         ">
             <div></div>
 

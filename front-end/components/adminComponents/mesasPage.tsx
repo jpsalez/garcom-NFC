@@ -1,7 +1,6 @@
 'use client'
 import { FormEvent, useCallback, useEffect, useState } from "react"
 import { useAct } from "@/lib/useAct"
-import { useSession } from "@/lib/session"
 import type { Table } from "@/lib/types"
 import { createTable, listTables, removeTable, updateTable } from "@/services/tables"
 import QrModal from "./qrModal"
@@ -57,22 +56,21 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
 }
 
 export default function MesasPage() {
-    const token = useSession()?.token ?? ''
     const [tables, setTables] = useState<Table[]>([])
     const [loaded, setLoaded] = useState(false)
     const [label, setLabel] = useState('')
     const [qr, setQr] = useState<Table | null>(null)
 
     const reload = useCallback(async () => {
-        try { setTables(await listTables(token)) } finally { setLoaded(true) }
-    }, [token])
+        try { setTables(await listTables()) } finally { setLoaded(true) }
+    }, [])
     const { error, busy, act } = useAct(reload)
 
     useEffect(() => { reload().catch(() => {}) }, [reload])
 
     async function handleCreate(e: FormEvent) {
         e.preventDefault()
-        if (await act(() => createTable(token, label))) setLabel('')
+        if (await act(() => createTable(label))) setLabel('')
     }
 
     return(
@@ -94,14 +92,14 @@ export default function MesasPage() {
                 {tables.map((t) => (
                     <TableCard key={`${t.id}:${t.label}`} table={t}
                         onQr={() => setQr(t)}
-                        onRename={(newLabel) => act(() => updateTable(token, t.id, { label: newLabel }))}
-                        onActive={(active) => act(() => updateTable(token, t.id, { active }))}
-                        onDelete={() => act(() => removeTable(token, t.id))}/>
+                        onRename={(newLabel) => act(() => updateTable(t.id, { label: newLabel }))}
+                        onActive={(active) => act(() => updateTable(t.id, { active }))}
+                        onDelete={() => act(() => removeTable(t.id))}/>
                 ))}
             </div>
 
             {/* Gerar o QR de uma mesa inativa a reativa: recarrega a lista ao fechar */}
-            {qr && <QrModal token={token} table={qr} onClose={() => { setQr(null); void reload() }}/>}
+            {qr && <QrModal table={qr} onClose={() => { setQr(null); void reload() }}/>}
         </div>
     )
 }
