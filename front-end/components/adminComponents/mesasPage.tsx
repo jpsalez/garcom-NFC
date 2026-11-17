@@ -37,11 +37,56 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
                     mode === 'rename'
                     ?
                     <>
-                        <form onSubmit={(e) => { e.preventDefault(); onRename(label); back() }} className="w-full flex gap-2">
+                        {/* <form onSubmit={(e) => { e.preventDefault(); onRename(label); back() }} className="w-full flex gap-2">
                             <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={60} required autoFocus aria-label="Novo nome da mesa"/>
                             <button type="submit" className="w-auto px-3 btn-primary">Salvar</button>
                             <button type="button" onClick={() => { setLabel(table.label); back() }} className="w-auto px-3 border rounded-lg">Cancelar</button>
-                        </form>
+                        </form> */}
+
+                        <div 
+                        className={`
+                            w-full md:aspect-square
+                            transition-all ease-in-out duration-700
+                            ${mode === 'rename' ? 'max-h-80' : 'max-h-0'}
+                        `}
+                        >
+                            <form
+                                onSubmit={(e) => { e.preventDefault(); onRename(label); back() }} 
+                                className="h-full flex items-center gap-3 z-10
+                                md:flex-col md:justify-center
+                                ">
+                                    <input 
+                                    type="text"
+                                    value={label}
+                                    onChange={(e) => setLabel(e.target.value)}
+                                    placeholder="Ex: Mesa 1"
+                                    required
+                                    />
+
+                                    <div className="flex items-center justify-center">
+                                        <div
+                                        role=""
+                                        className="w-15 bg-green-500 text-white rounded-lg aspect-square flex items-center justify-center text-lg cursor-pointer scale-90
+                                        transition-all duration-300
+                                        hover:bg-white hover:text-green-500 hover:scale-100
+                                        ">
+                                            <button className="flex items-center justify-center">
+                                                <FaCheck />
+                                            </button>
+                                        </div>
+                                        <div
+                                        role="button"
+                                        onClick={() => { setLabel(table.label); back() }}
+                                        className="w-15 bg-red-500 text-white rounded-lg aspect-square flex items-center justify-center text-lg cursor-pointer scale-90
+                                        transition-all duration-300
+                                        hover:bg-white hover:text-red-500 hover:scale-100
+                                        ">
+                                            <IoMdCloseCircle />
+                                        </div>
+                                    </div>
+
+                                </form>
+                        </div>
                     </>
                     :
                     <>
@@ -150,7 +195,7 @@ export default function MesasPage() {
     }
 
     return(
-        <div className="page-div">
+        <div className="page-div flex-col">
             
             {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             {loaded && tables.length === 0 && <p className="text-gray-500">Nenhuma mesa cadastrada.</p>}
