@@ -15,35 +15,29 @@ function StaffCard({user, onCategory, onActive, onDelete}: {
     return(
         <div className={`w-full border py-3 px-5 rounded-lg shadow-lg space-y-3 ${user.active ? '' : 'border-red-400/50 bg-red-200/30 text-gray-500'}`}>
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="w-full grid
+            grid-cols-[35%_50%_15%] 
+            md:grid-cols-[20%_25%_5%_15%_auto_auto] gap-3 items-center justify-items-center">
 
-                <div className="w-full grid grid-cols-[40%_40%_15%]">
-                    <p 
-                    className={`
-                        flex-1 px-3 text-sm font-bold truncate border-r
-                        ${user.active ? '' : 'border-red-400/20'}
-                    `}
-                    >{user.name}</p>
-                    <p 
-                    className={`
-                        flex-1 px-3 text-sm font-bold truncate border-r
-                        ${user.active ? '' : 'border-red-400/20'}
-                    `}
-                    >{user.email}</p>
+                
+                <p 
+                className={`
+                    w-full md:text-center px-3 text-sm font-bold truncate border-r
+                    ${user.active ? '' : 'border-red-400/20'}
+                `}
+                >{user.name}</p>
+                <p 
+                className={`
+                    w-full text-center px-3 text-sm font-bold truncate border-r
+                    ${user.active ? '' : 'border-red-400/20'}
+                `}
+                >{user.email}</p>
 
-                    <div className="w-full flex items-center justify-center px-3">
-                        {user.active && <FaCheckCircle className="text-green-400"/>}
-                        {!user.active && <IoIosWarning className="text-yellow-400/80"/>}
-                    </div>
-
+                <div className="w-full bg-white flex items-center justify-center px-3">
+                    {user.active && <FaCheckCircle className="text-green-400"/>}
+                    {!user.active && <IoIosWarning className="text-yellow-400/80"/>}
                 </div>
 
-            </div>
-
-            <div className="grid 
-            grid-rows-2 gap-y-3
-            md:grid-cols-[40%_60%] md:grid-rows-1 md:gap-y-0 
-            ">
 
                 <select value={user.category ?? ''} onChange={(e) => onCategory((e.target.value || null) as StaffCategory | null)}
                 aria-label={`Categoria de ${user.name}`}
@@ -55,7 +49,7 @@ function StaffCard({user, onCategory, onActive, onDelete}: {
                     {Object.entries(CATEGORIES).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
                 </select>
 
-                <div className="flex md:px-5 gap-2 text-sm">
+                <div className="w-full flex md:px-5 md:col-span-2 gap-2 text-sm">
                     <button onClick={() => onActive(!user.active)}
                     className={`
                         flex-1 p-2 border rounded-lg
@@ -87,7 +81,6 @@ function StaffCard({user, onCategory, onActive, onDelete}: {
                 </div>
 
             </div>
-
         </div>
     )
 }
@@ -117,10 +110,10 @@ export default function EquipePage() {
     return(
         <div className="page-div h-full">
 
-            <div className="w-full md:max-w-300 py-15 grid md:grid-cols-2 gap-y-10 items-start justify-items-center overflow-hidden">
+            <div className="w-full md:max-w-300 py-15 grid md:grid-cols-1 gap-y-10 items-start justify-items-center overflow-hidden">
 
                 {/* formulario cadastrar funcionarios */}
-                <div className="form-background">
+                {/* <div className="form-background">
 
                     <form onSubmit={handleCreate} className="form-style">
                         <h2 className="text-xl">Cadastrar Funcionário</h2>
@@ -141,14 +134,14 @@ export default function EquipePage() {
                         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 
                     </form>
-                </div>
+                </div> */}
 
                 {/* tabela funcionarios */}
-                <div className="md:min-h-103! md:max-h-103! max-w-150! space-y-5 overflow-y-scroll no-scrollbar form-background">
+                <div className="md:max-h-150! max-w-300! space-y-5 overflow-y-scroll no-scrollbar form-background">
 
                     <h2 className="text-center text-xl">Funcionários Cadastrados</h2>
                     
-                    <div className="w-full max-w-200 gap-5 grid grid-cols-1">
+                    <div className="w-full md:max-w-300 gap-5 grid grid-cols-1">
 
                         {staff.map((u) => (
                             <StaffCard key={u.id} user={u}
