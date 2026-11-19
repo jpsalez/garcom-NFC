@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "database_engine": "PostgreSQL 16.14, compiled by Visual C++ build 1944, 64-bit",
+  "baseline_tests_passed": 132,
+  "backend_tests_passed": 137,
+  "backend_tests_failed": 0,
+  "sql_checks_passed": 32,
+  "typecheck": "passed",
+  "lint": "passed; two pre-existing warnings in tests/cookies.test.ts and existing deprecated config notice",
+  "prisma_validate": "passed",
+  "prisma_schema_drift": "none",
+  "schema_sha256": "8fee8ce4bd4c6f6b3cd5c227ea7764e1ae8c2cfcfdb6f9593938d2da6a8eb99c",
+  "migration_sha256": "42fd2dfc4539b51f2afd50846c6ea8c08a7b1a260a214a3682e093e95d7605a6",
+  "application_database_migrated": false,
+  "scope": "Temporary test databases only; no commit, push or deployment"
+}
