@@ -12,8 +12,8 @@ export const LINKS = {
 export const NAV = [
   { href: '#produto', label: 'Produto' },
   { href: '#funcionalidades', label: 'Funcionalidades' },
-  { href: '#plaquinhas', label: 'Plaquinhas' },
   { href: '#planos', label: 'Planos' },
+  { href: '#plaquinhas', label: 'Plaquinhas' },
   { href: '#faq', label: 'Dúvidas' },
 ];
 
@@ -52,12 +52,12 @@ export const PLANS = [
     price: 149,
     note: 'Preço de lançamento garantido para quem assinar agora',
     featured: true,
+    plaqueDiscount: 15,
     items: [
       'Tudo do Essencial',
       'PDV integrado aos chamados',
       'Cardápio digital personalizável',
       'Dashboard de métricas e balanços',
-      'Mais 10% de desconto nos pacotes de plaquinhas',
     ],
   },
 ];
@@ -65,7 +65,7 @@ export const PLANS = [
 export const FAQ = [
   ['O cliente precisa baixar algum aplicativo?', 'Não. Ao aproximar o celular da plaquinha, o Psiu abre direto no navegador.'],
   ['Funciona em qualquer celular?', 'Funciona em celulares com NFC. Para os que não têm, a plaquinha também traz um QR Code.'],
-  ['Quanto custam as plaquinhas?', 'Os pacotes vão de R$ 249 (10 unidades) a R$ 799 (40 unidades). Assinantes do Completo têm mais 10% de desconto, e a criação do layout não tem custo extra.'],
+  ['Quanto custam as plaquinhas?', 'Os pacotes vão de R$ 249 (10 unidades) a R$ 799 (40 unidades). Assinantes do Completo têm 15% de desconto na compra das plaquinhas, e a criação do layout não tem custo extra.'],
   ['Quanto custa criar o layout das plaquinhas?', 'Nada a mais. O designer do Psiu cria o layout com você pelo WhatsApp e você paga só as plaquinhas.'],
   ['Qual o prazo de entrega das plaquinhas?', '[Prazo de produção e entrega]'],
   ['Posso trocar de plano depois?', '[Regra de troca de plano]'],

@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import Lenis from 'lenis';
-import { gsap, ScrollTrigger, useGSAP, reducedMotion, scroller, scrollToHash } from './motion';
+import { gsap, ScrollTrigger, useGSAP, useReducedMotion, scrollToHash } from './motion';
 import Nav from './Nav';
 import Hero from './Hero';
 import Features from './Features';
@@ -10,41 +9,56 @@ import './landing.css';
 
 export default function Landing() {
   const root = useRef<HTMLDivElement>(null);
+  const motionReduced = useReducedMotion();
 
-  // Rolagem suave sincronizada com o GSAP (um único loop de animação)
+  // Rolagem nativa: mouse, teclado e toque mantêm o comportamento do navegador.
   useEffect(() => {
-    if (reducedMotion()) return;
-    const lenis = new Lenis({ lerp: 0.14, wheelMultiplier: 1.1, autoRaf: false });
-    const raf = (t: number) => lenis.raf(t * 1000);
-    lenis.on('scroll', ScrollTrigger.update);
-    gsap.ticker.add(raf);
-    gsap.ticker.lagSmoothing(0);
-    scroller.lenis = lenis;
-    document.fonts?.ready.then(() => ScrollTrigger.refresh());
-    return () => {
-      gsap.ticker.remove(raf);
-      lenis.destroy();
-      scroller.lenis = null;
-    };
+    let mounted = true;
+    document.fonts?.ready.then(() => { if (mounted) ScrollTrigger.refresh(); });
+    return () => { mounted = false; };
   }, []);
+
+  // A borda animada só repinta enquanto o plano está visível e a aba está ativa.
+  useEffect(() => {
+    if (motionReduced) return;
+    const visible = new Set<Element>();
+    const update = () => root.current?.querySelectorAll('.plan.featured').forEach((el) => {
+      el.toggleAttribute('data-motion-active', visible.has(el) && !document.hidden);
+    });
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(({ target, isIntersecting }) => { if (isIntersecting) visible.add(target); else visible.delete(target); });
+      update();
+    });
+    root.current?.querySelectorAll('.plan.featured').forEach((el) => observer.observe(el));
+    document.addEventListener('visibilitychange', update);
+    const container = root.current;
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', update);
+      container?.querySelectorAll('.plan.featured').forEach((el) => el.removeAttribute('data-motion-active'));
+    };
+  }, [motionReduced]);
 
   // Títulos entram palavra por palavra quando aparecem (o do hero é animado no Hero)
   useGSAP(
     () => {
-      if (reducedMotion()) return;
+      if (motionReduced) return;
       gsap.utils.toArray<HTMLElement>('.split').forEach((el) => {
         if (el.closest('.hero')) return;
         const words = el.querySelectorAll('.w > span');
-        gsap.set(words, { yPercent: 110 });
-        ScrollTrigger.create({
-          trigger: el,
-          start: 'top 85%',
-          once: true,
-          onEnter: () => gsap.to(words, { yPercent: 0, duration: 1.1, ease: 'expo.out', stagger: 0.06 }),
+        gsap.from(words, {
+          yPercent: 100, opacity: 0, duration: 0.8, ease: 'sine.out', stagger: 0.025,
+          scrollTrigger: { trigger: el, start: 'top 88%', end: 'bottom top', toggleActions: 'play reverse play reverse' },
+        });
+      });
+      gsap.utils.toArray<HTMLElement>('.kicker, .plaq .lead, .packs li, .btn-wa, .faq-item, .foot-btns').forEach((el) => {
+        gsap.from(el, {
+          y: 12, opacity: 0, duration: 0.7, ease: 'sine.out',
+          scrollTrigger: { trigger: el, start: 'top 94%', end: 'bottom top', toggleActions: 'play reverse play reverse' },
         });
       });
     },
-    { scope: root },
+    { scope: root, dependencies: [motionReduced], revertOnUpdate: true },
   );
 
   // Links internos (#secao) rolam suavemente
@@ -52,8 +66,9 @@ export default function Landing() {
     const a = (e.target as HTMLElement).closest<HTMLAnchorElement>('a[href^="#"]');
     const hash = a?.getAttribute('href');
     if (!a || !hash || hash.length < 2) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
-    scrollToHash(hash, Number(a.dataset.dur) || 1.6);
+    scrollToHash(hash);
   };
 
   return (
@@ -63,8 +78,8 @@ export default function Landing() {
         <Hero />
         <Manifesto />
         <Features />
-        <Plaquinhas />
         <Plans />
+        <Plaquinhas />
         <Faq />
       </main>
       <Footer />

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { gsap, ScrollTrigger, useGSAP, reducedMotion, Split } from './motion';
+import { gsap, useGSAP, useReducedMotion, Split } from './motion';
 import { Icon, Logo, type IconName } from './Icons';
 
 type Tile = { icon: IconName; label: string; title: string; text: string; caps: string[]; size?: 'wide' | 'full'; mock: React.ReactNode };
@@ -57,29 +57,31 @@ const TILES: Tile[] = [
 
 export default function Features() {
   const root = useRef<HTMLElement>(null);
+  const motionReduced = useReducedMotion();
 
   useGSAP(
     () => {
-      if (reducedMotion()) {
+      if (motionReduced) {
         gsap.set('.chart .line', { strokeDashoffset: 0 });
         return;
       }
-      gsap.set('.tile', { opacity: 0, y: 32 });
-      ScrollTrigger.batch('.tile', {
-        start: 'top 92%',
-        once: true,
-        onEnter: (els) => gsap.to(els, { opacity: 1, y: 0, duration: 0.7, ease: 'power3.out', stagger: 0.08, overwrite: true }),
+      gsap.utils.toArray<HTMLElement>('.tile').forEach((tile) => {
+        gsap.from(tile, {
+          opacity: 0, y: 24, duration: 0.75, ease: 'sine.out',
+          scrollTrigger: { trigger: tile, start: 'top 92%', end: 'bottom top', toggleActions: 'play reverse play reverse' },
+        });
       });
       gsap.timeline({ scrollTrigger: { trigger: '.chart', start: 'top 85%' } })
         .to('.chart .line', { strokeDashoffset: 0, duration: 2, ease: 'power2.inOut' })
         .from('.chart-end', { scale: 0, opacity: 0, duration: 0.5, ease: 'back.out(2)' }, '-=0.2');
       gsap.from('.aw-plq img', { y: 80, opacity: 0, stagger: 0.12, duration: 1.1, ease: 'expo.out', scrollTrigger: { trigger: '.aw-plq', start: 'top 90%' } });
     },
-    { scope: root },
+    { scope: root, dependencies: [motionReduced], revertOnUpdate: true },
   );
 
   // Brilho que segue o mouse no card
   const glow = (e: React.PointerEvent<HTMLElement>) => {
+    if (motionReduced || e.pointerType !== 'mouse') return;
     const r = e.currentTarget.getBoundingClientRect();
     e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`);
     e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`);
@@ -119,7 +121,7 @@ export default function Features() {
 function Window({ tab, children }: { tab: string; children: React.ReactNode }) {
   return (
     <div className="aw">
-      <div className="aw-bar"><Logo /><span className="aw-brand">Psiu</span><span className="aw-tab">{tab}</span><span className="aw-user">JS</span></div>
+      <div className="aw-bar"><Logo /><span className="aw-brand">Psiu</span><span className="aw-tab">{tab}</span><span className="aw-user" role="img" aria-label="Usuário"><Icon name="user" /></span></div>
       <div className="aw-in">{children}</div>
     </div>
   );
@@ -137,11 +139,12 @@ const TABLES = ['01', '02', '04', '06', '09', '10', '11', '14', '15'];
 
 /** Chamados chegando sozinhos enquanto o card está na tela. */
 function LiveCalls() {
+  const motionReduced = useReducedMotion();
   const [calls, setCalls] = useState(FIRST);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (reducedMotion()) return;
+    if (motionReduced) return;
     let n = 0, timer = 0, visible = false;
     const tick = () => {
       const k = n++;
@@ -160,7 +163,7 @@ function LiveCalls() {
     io.observe(ref.current!);
     document.addEventListener('visibilitychange', update);
     return () => { io.disconnect(); clearInterval(timer); document.removeEventListener('visibilitychange', update); };
-  }, []);
+  }, [motionReduced]);
 
   return (
     <>
@@ -186,16 +189,16 @@ function LiveCalls() {
 
 function Team() {
   const people = [
-    ['JS', 'João Silva', 'joao', 'Gerente', true],
-    ['AS', 'Ana Souza', 'ana', 'Garçom', true],
-    ['FD', 'Felipe Dias', 'felipe', 'Limpeza', false],
+    ['João Silva', 'joao', 'Gerente', true],
+    ['Ana Souza', 'ana', 'Garçom', true],
+    ['Felipe Dias', 'felipe', 'Limpeza', false],
   ] as const;
   return (
     <>
       <div className="aw-search"><Icon name="search" />Buscar funcionário</div>
-      {people.map(([ini, name, mail, role, on]) => (
+      {people.map(([name, mail, role, on]) => (
         <div key={name} className={`mr${on ? '' : ' off'}`}>
-          <i>{ini}</i>
+          <i aria-hidden="true"><Icon name="user" /></i>
           <div><b>{name}</b><small>{mail}@restaurante.com</small></div>
           <span className="role">{role}</span>
           <span className={`sts${on ? ' on' : ''}`}>{on ? 'Ativo' : 'Inativo'}</span>

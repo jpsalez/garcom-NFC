@@ -1,13 +1,13 @@
 'use client';
 import { useRef, useState } from 'react';
 import Image from 'next/image';
-import { gsap, ScrollTrigger, useGSAP, reducedMotion, Split } from './motion';
+import { gsap, ScrollTrigger, useGSAP, useReducedMotion, Split } from './motion';
 import HeroBackground, { type Pulse } from './HeroBackground';
 import { Icon } from './Icons';
 import { STEPS } from './content';
 
 /** Marcos da animação, em segundos. */
-const T = { touch: 1, menu: 1.05, press: 1.9, done: 2.3, end: 3.5 };
+const T = { touch: 0.65, menu: 0.7, press: 1.3, done: 1.65, end: 2.6 };
 /** Faixa de tempo de cada passo (enche a linha verde) e ponto ao clicar nele. */
 const SEG = [[0, T.menu], [T.menu, T.done], [T.done, T.end]];
 const TARGET = [T.touch * 0.5, T.press, T.end];
@@ -21,6 +21,7 @@ const POSE = {
 const pose = (p: (typeof POSE)[keyof typeof POSE]) => ({ '--x': p.x, '--y': p.y, '--r': p.r, '--ry': p.ry });
 
 export default function Hero() {
+  const motionReduced = useReducedMotion();
   const root = useRef<HTMLElement>(null);
   const pulse = useRef<Pulse>({ v: 0, x: 0.3, y: 0.5 });
   const [stage, setStage] = useState(0); // 0 bloqueado · 1 menu · 2 chamado enviado
@@ -33,8 +34,6 @@ export default function Hero() {
       const hero = root.current!;
       const [visual, phone, plaque, rings] = ['.visual', '.phone', '.plaque', '.rings'].map((s) => q(s)[0] as HTMLElement);
       const steps = q('.step') as HTMLElement[];
-
-      hero.classList.add('ready');
 
       // O celular acompanha o tamanho do quadrado; o pulso do fundo nasce no NFC
       const fit = () => {
@@ -63,37 +62,89 @@ export default function Hero() {
       );
 
       // Tela, passo e botão derivados do tempo: funciona igual indo ou voltando
+      let shownStage = -1;
+      let shownPress: boolean | undefined;
       const sync = () => {
         const t = tl.time();
-        setStage(t < T.menu ? 0 : t < T.done ? 1 : 2);
-        setPress(t >= T.press && t < T.press + 0.25);
+        const nextStage = t < T.menu ? 0 : t < T.done ? 1 : 2;
+        const nextPress = t >= T.press && t < T.press + 0.25;
+        if (shownStage !== nextStage) { shownStage = nextStage; setStage(nextStage); }
+        if (shownPress !== nextPress) { shownPress = nextPress; setPress(nextPress); }
         steps.forEach((el, i) => el.style.setProperty('--p', String(gsap.utils.clamp(0, 1, (t - SEG[i][0]) / (SEG[i][1] - SEG[i][0])))));
       };
       tl.eventCallback('onUpdate', sync);
-      goTo.current = (i) => tl.timeScale(1.4).tweenTo(TARGET[i]);
+      let seek: gsap.core.Tween | undefined;
+      let autoplay: gsap.core.Tween | undefined;
+      goTo.current = (i) => {
+        autoplay?.kill();
+        seek?.kill();
+        if (motionReduced) { tl.time(TARGET[i]); sync(); }
+        else seek = tl.tweenTo(TARGET[i], { duration: 0.45 });
+      };
 
-      if (reducedMotion()) {
+      if (motionReduced) {
         tl.progress(1);
         sync();
-        return () => ro.disconnect();
+        return () => { ro.disconnect(); goTo.current = () => {}; };
       }
 
-      const play = () => tl.timeScale(1).play();
-      // Prende o hero por um trecho curto e dispara com ~10px de rolagem; ao voltar ao topo, reverte
-      ScrollTrigger.create({ trigger: hero, start: 'top top', end: () => `+=${Math.round(innerHeight * 0.45)}`, pin: true, anticipatePin: 1, invalidateOnRefresh: true });
-      ScrollTrigger.create({ start: 8, end: 'max', onEnter: play, onLeaveBack: () => tl.timeScale(1.8).reverse() });
+      // A narrativa avança por tempo, sem fixação nem percurso extra de rolagem.
+      const bounds = hero.getBoundingClientRect();
+      let visible = bounds.bottom > 0 && bounds.top < innerHeight;
+      let started = false;
+      const play = () => {
+        started = true;
+        seek?.kill(); seek = undefined;
+        tl.timeScale(1).play();
+        if (!visible || document.hidden) tl.pause();
+      };
+      const rewind = () => {
+        started = true;
+        autoplay?.kill(); seek?.kill(); seek = undefined;
+        tl.timeScale(1.6).reverse();
+        if (!visible || document.hidden) tl.pause();
+      };
+      const update = () => {
+        hero.toggleAttribute('data-scene-active', visible && !document.hidden);
+        if (!visible || document.hidden) { tl.pause(); seek?.pause(); }
+        else if (started) { if (seek && seek.progress() < 1) seek.resume(); else tl.resume(); }
+      };
+      ScrollTrigger.create({
+        trigger: hero, start: 'top bottom', end: 'bottom top',
+        onToggle: (s) => { visible = s.isActive; update(); },
+        onEnterBack: rewind,
+      });
+      // Ao voltar ao topo, desfaz a cena. Ao rolar novamente, repete a narrativa.
+      ScrollTrigger.create({ start: 8, end: 'max', onEnter: play, onLeaveBack: rewind });
+      // A saída acompanha o scroll nativo; o fundo e o conteúdo se movem juntos.
+      gsap.set(pulse.current, { scroll: 0 });
+      gsap.timeline({
+        scrollTrigger: {
+          trigger: hero, start: 'top top', end: 'bottom top', scrub: 0.3,
+        },
+      })
+        .to(q('.stage'), { yPercent: -6, opacity: 0.3, ease: 'none' }, 0)
+        .to(q('.hero-copy'), { yPercent: -3, opacity: 0.4, ease: 'none' }, 0)
+        .to(pulse.current, { scroll: 1, ease: 'none' }, 0);
+      document.addEventListener('visibilitychange', update);
+      update();
+      autoplay = gsap.delayedCall(0.8, play);
 
       // Entrada; se ninguém rolar, a animação começa sozinha
       gsap.timeline({ delay: 0.1 })
-        .from(phone, { opacity: 0, '--in': '40px', duration: 1.2, ease: 'expo.out' })
-        .from(plaque, { y: 60, opacity: 0, duration: 1.4, ease: 'expo.out' }, '<')
-        .fromTo(q('h1 .w > span'), { y: 0, yPercent: 110 }, { yPercent: 0, duration: 1.2, ease: 'expo.out', stagger: 0.08 }, '<0.1')
-        .from(q('.hero-sub, .steps, .hero-btns'), { opacity: 0, y: 20, duration: 1, stagger: 0.1, ease: 'expo.out' }, '<0.3')
-        .call(() => void gsap.delayedCall(1.8, () => tl.progress() === 0 && play()));
+        .from(phone, { opacity: 0, '--in': '24px', duration: 0.8, ease: 'expo.out' })
+        .from(plaque, { y: 36, opacity: 0, duration: 0.9, ease: 'expo.out' }, '<')
+        .fromTo(q('h1 .w > span'), { y: 0, yPercent: 110 }, { yPercent: 0, duration: 0.8, ease: 'expo.out', stagger: 0.045 }, '<0.1')
+        .from(q('.hero-sub, .steps, .hero-btns'), { opacity: 0, y: 16, duration: 0.65, stagger: 0.06, ease: 'expo.out' }, '<0.15');
 
-      return () => ro.disconnect();
+      return () => {
+        ro.disconnect(); autoplay?.kill(); seek?.kill();
+        document.removeEventListener('visibilitychange', update);
+        hero.removeAttribute('data-scene-active');
+        goTo.current = () => {};
+      };
     },
-    { scope: root },
+    { scope: root, dependencies: [motionReduced], revertOnUpdate: true },
   );
 
   return (
@@ -113,7 +164,7 @@ export default function Hero() {
           </div>
           <div className="hero-btns">
             <a href="#planos" className="btn btn-solid">Ver planos</a>
-            <a href="#produto" className="btn btn-line" data-dur="2.8">Ver como funciona</a>
+            <a href="#produto" className="btn btn-line">Ver como funciona</a>
           </div>
         </div>
 

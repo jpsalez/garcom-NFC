@@ -1,9 +1,8 @@
 'use client';
-import { Fragment } from 'react';
+import { Fragment, useSyncExternalStore } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
-import type Lenis from 'lenis';
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
@@ -12,14 +11,23 @@ export { gsap, ScrollTrigger, useGSAP };
 export const reducedMotion = () =>
   typeof window !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** Instância do Lenis (criada em Landing) para menu e âncoras. */
-export const scroller: { lenis: Lenis | null } = { lenis: null };
+const subscribeMotion = (notify: () => void) => {
+  const query = matchMedia('(prefers-reduced-motion: reduce)');
+  query.addEventListener('change', notify);
+  return () => query.removeEventListener('change', notify);
+};
 
-export function scrollToHash(hash: string, duration = 1.6) {
-  const el = hash.length > 1 ? document.querySelector<HTMLElement>(hash) : null;
+/** Também reage a mudanças de preferência com a página aberta. */
+export const useReducedMotion = () => useSyncExternalStore(subscribeMotion, reducedMotion, () => false);
+
+export function scrollToHash(hash: string) {
+  const el = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
   if (!el) return;
-  if (scroller.lenis) scroller.lenis.scrollTo(el, { offset: -20, duration, force: true });
-  else el.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' });
+  el.scrollIntoView({ behavior: reducedMotion() ? 'instant' : 'smooth' });
+  el.setAttribute('tabindex', '-1');
+  el.setAttribute('data-scroll-target', '');
+  el.focus({ preventScroll: true });
+  history.replaceState(null, '', hash);
 }
 
 /** Texto quebrado em palavras (cada uma numa máscara) para animar a entrada. "\n" vira quebra de linha. */
