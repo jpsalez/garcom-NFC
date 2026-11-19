@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-RUN chown node:node /app
+RUN mkdir -p /data/media && chown node:node /app /data/media
 USER node
 
 # Dependências completas: a API roda com tsx e as migrations usam o CLI do Prisma (ambos são devDependencies)

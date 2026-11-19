@@ -41,7 +41,11 @@ export class UsersService implements IUsersService {
   async create(restaurantId: string, input: createRestaurantUserInput) {
     const restaurant = await this.restaurantRepository.findById(restaurantId);
     if (!restaurant) throw new NotFoundError("Restaurante não encontrado");
-    if (!restaurant.active) throw new ConflictError("Restaurante desativado: reative antes de criar usuários", "RESTAURANT_INACTIVE");
+    if (!restaurant.active)
+      throw new ConflictError(
+        "Restaurante desativado: reative antes de criar usuários",
+        "RESTAURANT_INACTIVE",
+      );
     if (await this.userRepository.findByEmail(input.email)) {
       // Mensagem genérica, como no cadastro: não confirma que o e-mail pertence a uma conta
       throw new ConflictError("Não foi possível criar o usuário");
@@ -67,10 +71,14 @@ export class UsersService implements IUsersService {
       }
       if (input.active === false) await this.ensureNotLastOwner(repository, restaurantId, user);
 
-      return repository.update(restaurantId, id, { name: input.name, category: input.category, active: input.active });
+      return repository.update(restaurantId, id, {
+        name: input.name,
+        category: input.category,
+        active: input.active,
+      });
     });
     this.authCache.invalidateUser(id);
-    if (input.active === false) this.notifier.disconnectUser(id);
+    if (input.active === false || input.category !== undefined) this.notifier.disconnectUser(id);
     return toPublicUser(updated);
   }
 
@@ -93,7 +101,12 @@ export class UsersService implements IUsersService {
     });
   }
 
-  private async findManaged(repository: IUserRepository, restaurantId: string, id: string, allowedRoles: role[]) {
+  private async findManaged(
+    repository: IUserRepository,
+    restaurantId: string,
+    id: string,
+    allowedRoles: role[],
+  ) {
     const user = await repository.findById(restaurantId, id);
     if (!user || !allowedRoles.includes(user.role)) throw new NotFoundError("Usuário não encontrado");
     return user;
@@ -103,7 +116,9 @@ export class UsersService implements IUsersService {
   private async ensureNotLastOwner(repository: IUserRepository, restaurantId: string, user: users) {
     if (user.role !== "OWNER" || !user.active) return;
     const team = await repository.findMany(restaurantId);
-    const otherOwners = team.filter((other) => other.role === "OWNER" && other.active && other.id !== user.id);
+    const otherOwners = team.filter(
+      (other) => other.role === "OWNER" && other.active && other.id !== user.id,
+    );
     if (otherOwners.length === 0) throw new ConflictError("O restaurante precisa de ao menos um OWNER ativo");
   }
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Geist, Geist_Mono, Montserrat } from "next/font/google";
 import "./globals.css";
-import Header from "@/components/header";
 import SessionBoot from "@/components/sessionBoot";
 
 const montserrat = Montserrat({
@@ -31,15 +31,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${montserrat.variable} h-full antialiased`}
     >
       <body className="min-h-dvh flex flex-col">
-        <SessionBoot />
-
-        <div className="w-full flex flex-none">
-          <Header />
-        </div>
-        
-        <div className="w-full flex flex-1">
-          {children}
-        </div>
+        {/* usePathname exige Suspense para não bloquear o prerender */}
+        <Suspense fallback={null}>
+          <SessionBoot />
+        </Suspense>
+        {children}
       </body>
     </html>
   );

@@ -29,7 +29,10 @@ import type {
   ISessionTokenRepository,
   ITableSessionRepository,
 } from "../../modules/sessions/sessions.repository.interface.ts";
-import { SessionTokenRepository, TableSessionRepository } from "../../modules/sessions/sessions.repository.ts";
+import {
+  SessionTokenRepository,
+  TableSessionRepository,
+} from "../../modules/sessions/sessions.repository.ts";
 import type { ISessionsService } from "../../modules/sessions/sessions.interfaces.ts";
 import { SessionsService } from "../../modules/sessions/sessions.service.ts";
 import type { ICallsService } from "../../modules/calls/calls.interfaces.ts";
@@ -38,11 +41,41 @@ import type { INotifier } from "../realtime/notifier.ts";
 import { SocketNotifier } from "../realtime/socket-notifier.ts";
 import type { ICallRepository } from "../../modules/calls/calls.repository.interface.ts";
 import { CallRepository } from "../../modules/calls/calls.repository.ts";
+import type { IRestaurantUnitOfWork } from "../transactions/restaurant-unit-of-work.interface.ts";
+import { RestaurantUnitOfWork } from "../transactions/restaurant-unit-of-work.ts";
+import { MenuRepository } from "../../modules/menu/menu.repository.ts";
+import type { IMenuRepository } from "../../modules/menu/menu.repository.interface.ts";
+import { MenuService } from "../../modules/menu/menu.service.ts";
+import type { IMenuService } from "../../modules/menu/menu.interfaces.ts";
+import { OrdersRepository } from "../../modules/orders/orders.repository.ts";
+import type { IOrdersRepository } from "../../modules/orders/orders.repository.interface.ts";
+import { OrdersService } from "../../modules/orders/orders.service.ts";
+import type { IOrdersService } from "../../modules/orders/orders.interfaces.ts";
+import { OrderSettingsRepository } from "../../modules/orders/order-settings.repository.ts";
+import type { IOrderSettingsRepository } from "../../modules/orders/order-settings.repository.interface.ts";
+import {
+  OrderSettingsService,
+  type IOrderSettingsService,
+} from "../../modules/orders/order-settings.service.ts";
+import { MediaRepository } from "../../modules/media/media.repository.ts";
+import { MediaService } from "../../modules/media/media.service.ts";
+import type { IMediaService } from "../../modules/media/media.interfaces.ts";
+import type { IStorageProvider } from "../storage/storage.interface.ts";
+import { LocalStorageProvider } from "../storage/local-storage.ts";
 
 export function registerDependencies() {
-
   // Infra
   container.register<DbClient>("DbClient", { useValue: prisma });
+  container.registerSingleton<IRestaurantUnitOfWork>("RestaurantUnitOfWork", RestaurantUnitOfWork);
+  container.registerSingleton<IMenuRepository>("MenuRepository", MenuRepository);
+  container.registerSingleton<IMenuService>("MenuService", MenuService);
+  container.registerSingleton<IOrdersRepository>("OrdersRepository", OrdersRepository);
+  container.registerSingleton<IOrdersService>("OrdersService", OrdersService);
+  container.registerSingleton<IOrderSettingsRepository>("OrderSettingsRepository", OrderSettingsRepository);
+  container.registerSingleton<IOrderSettingsService>("OrderSettingsService", OrderSettingsService);
+  container.registerSingleton("MediaRepository", MediaRepository);
+  container.registerSingleton<IMediaService>("MediaService", MediaService);
+  container.registerSingleton<IStorageProvider>("StorageProvider", LocalStorageProvider);
 
   // Repositories: nome -> implementação (quem injeta recebe a interface)
   container.registerSingleton<IRestaurantRepository>("RestaurantRepository", RestaurantRepository);
@@ -54,7 +87,6 @@ export function registerDependencies() {
   container.registerSingleton<IRefreshTokenRepository>("RefreshTokenRepository", RefreshTokenRepository);
   container.registerSingleton<IPasswordResetRepository>("PasswordResetRepository", PasswordResetRepository);
 
-  
   container.registerSingleton<IAuthCache>("AuthCache", AuthCache);
   container.registerSingleton<INotifier>("Notifier", SocketNotifier);
   container.register<IMailer>("Mailer", { useValue: createMailer() });

@@ -19,3 +19,9 @@ Quando o cliente vai embora, o garçom fecha a mesa e o link para de funcionar a
 ## Stack
 
 Node.js, Express, TypeScript, Prisma e PostgreSQL. Autenticação do staff com JWT.
+
+## Cardápio e pedidos
+
+O backend contempla catálogo editável, publicações, mídia local, envio de pedidos, andamento parcial, auditoria e permissões por categoria. Novos restaurantes recebem cardápio vazio e pedidos pelo cliente desabilitados na mesma transação do cadastro. Os contratos estão no Swagger e em [docs/menu/API.md](../docs/menu/API.md); as telas ficam para a etapa de frontend.
+
+Detalhes, verificação e roteiro em [docs/menu](../docs/menu/README.md). Armazenamento local persistente nesta versão; bucket Amazon S3 como evolução futura, sem dependência obrigatória de AWS no deploy inicial.

@@ -12,6 +12,7 @@ import { auth, cookieOf, ownerOf, staffToken } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
 import { passwordHash } from "../src/shared/utils/password.ts";
 import { createTable } from "./helpers/factories.ts";
+import { categoryToken } from "./helpers/menu.ts";
 
 let server: Server;
 let url: string;
@@ -54,6 +55,51 @@ const next = (socket: Socket, event: string) =>
     setTimeout(() => reject(new Error(`evento ${event} não chegou`)), 2000);
   });
 
+describe("sala autorizada de pedidos", () => {
+  it("avisa equipe operacional sem vazar para outros STAFF ou restaurante", async () => {
+    const a = await ownerOf("orders-a"),
+      b = await ownerOf("orders-b");
+    const waiter = await categoryToken(a.restaurantId, "WAITER"),
+      other = await categoryToken(a.restaurantId, "OTHER");
+    const ownSocket = await connectAs(a.token),
+      waiterSocket = await connectAs(waiter.token),
+      otherSocket = await connectAs(other.token),
+      foreignSocket = await connectAs(b.token);
+    const ownEvent = next(ownSocket, "order:created"),
+      waiterEvent = next(waiterSocket, "order:created");
+    const otherSilent = expectSilence(otherSocket, "order:created"),
+      foreignSilent = expectSilence(foreignSocket, "order:created");
+    container
+      .resolve<SocketNotifier>("Notifier")
+      .toOrders(a.restaurantId, "order:created", { order_id: "test-order", version: 1 });
+    expect(await ownEvent).toEqual({ order_id: "test-order", version: 1 });
+    expect(await waiterEvent).toEqual({ order_id: "test-order", version: 1 });
+    await otherSilent();
+    await foreignSilent();
+  });
+  it("trocar categoria derruba socket antes de permitir nova conexão sem capacidade", async () => {
+    const owner = await ownerOf("downgrade-socket"),
+      manager = await categoryToken(owner.restaurantId, "MANAGER");
+    const socket = await connectAs(manager.token);
+    const disconnected = new Promise<void>((resolve) => socket.once("disconnect", () => resolve()));
+    expect(
+      (
+        await api()
+          .patch(`/api/v1/staff/${manager.user.id}`)
+          .set(auth(owner.token))
+          .send({ category: "OTHER" })
+      ).status,
+    ).toBe(200);
+    await disconnected;
+    const reconnected = await connectAs(manager.token),
+      silent = expectSilence(reconnected, "order:updated");
+    container
+      .resolve<SocketNotifier>("Notifier")
+      .toOrders(owner.restaurantId, "order:updated", { order_id: "test-order", version: 2 });
+    await silent();
+  });
+});
+
 // Garante que nada chega ao socket durante um curto intervalo
 function expectSilence(socket: Socket, event: string) {
   let received = false;
@@ -81,7 +127,12 @@ describe("conexão", () => {
     const socket = connect(url, { auth: { token }, reconnection: false, forceNew: true });
     sockets.push(socket);
 
-    await expect(new Promise<void>((resolve, reject) => { socket.on("connect", () => resolve()); socket.on("connect_error", reject); })).rejects.toThrow();
+    await expect(
+      new Promise<void>((resolve, reject) => {
+        socket.on("connect", () => resolve());
+        socket.on("connect_error", reject);
+      }),
+    ).rejects.toThrow();
   });
 
   it("recusa SUPER_ADMIN (não tem restaurante) e aceita OWNER e STAFF", async () => {
@@ -132,7 +183,10 @@ describe("eventos do balcão", () => {
     const a = await ownerOf("a");
     const counter = await connectAs(a.token);
     const { deviceToken } = await tableWithDevice(a.restaurantId);
-    const call = await api().post("/api/v1/public/calls").set("X-Table-Token", deviceToken).send({ type: "WAITER" });
+    const call = await api()
+      .post("/api/v1/public/calls")
+      .set("X-Table-Token", deviceToken)
+      .send({ type: "WAITER" });
     const received = next(counter, "call:done");
 
     await api().patch(`/api/v1/calls/${call.body.id}/done`).set(auth(a.token));
@@ -173,7 +227,10 @@ describe("eventos do balcão", () => {
     const a = await ownerOf("a");
     const counter = await connectAs(a.token);
     const { table } = await tableWithDevice(a.restaurantId);
-    await prisma.table_sessions.updateMany({ where: { table_id: table.id }, data: { expires_at: new Date(Date.now() - 1000) } });
+    await prisma.table_sessions.updateMany({
+      where: { table_id: table.id },
+      data: { expires_at: new Date(Date.now() - 1000) },
+    });
     const closed = next(counter, "session:closed");
 
     await container.resolve<ISessionsService>("SessionsService").expireDue();
@@ -191,9 +248,19 @@ describe("desconexão ao perder o acesso", () => {
 
   it("desativar ou excluir o STAFF derruba o socket dele, mas não o do OWNER", async () => {
     const a = await ownerOf("a");
-    const staffA = await api().post("/api/v1/staff").set(auth(a.token)).send({ name: "G1", email: "g1@teste.com", password: "senha-forte-123" });
-    const staffB = await api().post("/api/v1/staff").set(auth(a.token)).send({ name: "G2", email: "g2@teste.com", password: "senha-forte-123" });
-    const tokenOf = async (email: string) => cookieOf(await api().post("/api/v1/auth/login").send({ email, password: "senha-forte-123" }), "access_token");
+    const staffA = await api()
+      .post("/api/v1/staff")
+      .set(auth(a.token))
+      .send({ name: "G1", email: "g1@teste.com", password: "senha-forte-123" });
+    const staffB = await api()
+      .post("/api/v1/staff")
+      .set(auth(a.token))
+      .send({ name: "G2", email: "g2@teste.com", password: "senha-forte-123" });
+    const tokenOf = async (email: string) =>
+      cookieOf(
+        await api().post("/api/v1/auth/login").send({ email, password: "senha-forte-123" }),
+        "access_token",
+      );
     const owner = await connectAs(a.token);
     const first = await connectAs(await tokenOf("g1@teste.com"));
     const second = await connectAs(await tokenOf("g2@teste.com"));
@@ -213,11 +280,24 @@ describe("desconexão ao perder o acesso", () => {
     const b = await ownerOf("b");
     const counterA = await connectAs(a.token);
     const counterB = await connectAs(b.token);
-    await prisma.users.create({ data: { name: "Super", email: "super@teste.com", password_hash: await passwordHash("senha-forte-123"), role: "SUPER_ADMIN" } });
-    const superToken = cookieOf(await api().post("/api/v1/auth/login").send({ email: "super@teste.com", password: "senha-forte-123" }), "access_token") as string;
+    await prisma.users.create({
+      data: {
+        name: "Super",
+        email: "super@teste.com",
+        password_hash: await passwordHash("senha-forte-123"),
+        role: "SUPER_ADMIN",
+      },
+    });
+    const superToken = cookieOf(
+      await api().post("/api/v1/auth/login").send({ email: "super@teste.com", password: "senha-forte-123" }),
+      "access_token",
+    ) as string;
     const gone = disconnected(counterA);
 
-    await api().patch(`/api/v1/admin/restaurants/${a.user.restaurant_id}`).set(auth(superToken)).send({ active: false });
+    await api()
+      .patch(`/api/v1/admin/restaurants/${a.user.restaurant_id}`)
+      .set(auth(superToken))
+      .send({ active: false });
 
     await gone;
     expect(counterB.connected).toBe(true);

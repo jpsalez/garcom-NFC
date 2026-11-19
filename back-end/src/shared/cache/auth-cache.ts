@@ -1,8 +1,8 @@
 import { injectable } from "tsyringe";
-import type { role } from "../../../generated/prisma/enums.ts";
+import type { ActorContext } from "../authorization/capabilities.ts";
 
 // Quem é o usuário autenticado: só guardamos usuários ATIVOS de restaurantes ativos
-export type AuthEntry = { id: string; restaurantId: string | null; role: role };
+export type AuthEntry = ActorContext;
 
 export interface IAuthCache {
   get(userId: string): AuthEntry | undefined;

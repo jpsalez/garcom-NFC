@@ -5,8 +5,8 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider            = "prisma-client"
+  output              = "../generated/prisma"
   importFileExtension = "ts"
 }
 
@@ -16,41 +16,54 @@ datasource db {
 }
 
 model restaurants {
-  id            String           @id @default(uuid())
-  name          String
-  slug          String           @unique
-  active        Boolean          @default(true)
-  created_at    DateTime         @default(now())
-  users         users[]
-  tables        tables[]
-  tableSessions table_sessions[]
-  calls         calls[]
+  id               String                        @id @default(uuid())
+  name             String
+  slug             String                        @unique
+  active           Boolean                       @default(true)
+  created_at       DateTime                      @default(now())
+  users            users[]
+  tables           tables[]
+  tableSessions    table_sessions[]
+  calls            calls[]
+  menus            menus[]                       @relation("menus_restaurant")
+  order_settings   restaurant_order_settings[]   @relation("restaurant_order_settings_restaurant")
+  media_assets     media_assets[]                @relation("media_assets_restaurant")
+  orders           orders[]                      @relation("orders_restaurant")
+  operation_events restaurant_operation_events[] @relation("restaurant_operation_events_restaurant")
 }
 
 model users {
-  id            String           @id @default(uuid())
-  name          String
-  restaurant_id String?
-  restaurant    restaurants?      @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
-  email         String           @unique
-  password_hash String
-  role          role
-  category      staff_category?
-  active       Boolean          @default(true)
-  tableSessions table_sessions[]
-  calls         calls[]
-  refresh_tokens refresh_tokens[]
-  password_resets password_resets[]
+  id                          String                        @id @default(uuid())
+  name                        String
+  restaurant_id               String?
+  restaurant                  restaurants?                  @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+  email                       String                        @unique
+  password_hash               String
+  role                        role
+  category                    staff_category?
+  active                      Boolean                       @default(true)
+  tableSessions               table_sessions[]
+  calls                       calls[]
+  refresh_tokens              refresh_tokens[]
+  password_resets             password_resets[]
+  ordering_settings_updates   restaurant_order_settings[]   @relation("restaurant_order_settings_updated_by_user")
+  created_media               media_assets[]                @relation("media_assets_created_by_user")
+  published_menus             menu_publications[]           @relation("menu_publications_published_by_user")
+  order_events                order_events[]                @relation("order_events_actor")
+  restaurant_operation_events restaurant_operation_events[] @relation("restaurant_operation_events_actor")
 }
 
 model tables {
-  id            String           @id @default(uuid())
-  restaurant_id String
-  restaurant    restaurants      @relation(fields: [restaurant_id], references: [id])
-  label         String
-  public_code   String           @unique
-  active        Boolean          @default(true)
-  tableSessions table_sessions[]
+  id              String           @id @default(uuid())
+  restaurant_id   String
+  restaurant      restaurants      @relation(fields: [restaurant_id], references: [id])
+  label           String
+  public_code     String           @unique
+  active          Boolean          @default(true)
+  tableSessions   table_sessions[]
+  tenant_sessions table_sessions[] @relation("table_sessions_tenant_table")
+
+  @@unique([restaurant_id, id])
   @@index([restaurant_id])
 }
 
@@ -73,17 +86,24 @@ model table_sessions {
   user           users?           @relation(fields: [closed_by], references: [id])
   session_tokens session_tokens[]
   calls          calls[]
+  tenant_table   tables           @relation("table_sessions_tenant_table", fields: [restaurant_id, table_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  orders         orders[]         @relation("orders_session")
+
+  @@unique([restaurant_id, id])
   @@index([restaurant_id, status])
   @@index([table_id])
 }
 
 model session_tokens {
-  id            String         @id @default(uuid())
-  session_id    String
-  table_session table_sessions @relation(fields: [session_id], references: [id])
-  token_hash    String         @unique
-  revoked_at    DateTime?
-  calls         calls[]
+  id               String         @id @default(uuid())
+  session_id       String
+  table_session    table_sessions @relation(fields: [session_id], references: [id])
+  token_hash       String         @unique
+  revoked_at       DateTime?
+  calls            calls[]
+  submitted_orders orders[]       @relation("orders_submitted_by_token")
+
+  @@unique([id, session_id])
   @@index([session_id])
 }
 
@@ -165,4 +185,435 @@ model password_resets {
   created_at DateTime  @default(now())
 
   @@index([user_id])
+}
+
+// Menu/orders review. SQL checks and immutability triggers are in the proposed migration.
+
+model restaurant_order_settings {
+  restaurant_id             String      @id
+  customer_ordering_enabled Boolean     @default(false)
+  version                   Int         @default(1)
+  updated_by                String?
+  created_at                DateTime    @default(now())
+  updated_at                DateTime    @default(now()) @updatedAt
+  restaurant                restaurants @relation("restaurant_order_settings_restaurant", fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updated_by_user           users?      @relation("restaurant_order_settings_updated_by_user", fields: [updated_by], references: [id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@index([updated_by])
+}
+
+model menus {
+  id                          String              @id @default(dbgenerated("(gen_random_uuid())::text"))
+  restaurant_id               String              @unique
+  published_revision_id       String?
+  draft_version               Int                 @default(1)
+  display_name                String              @db.VarChar(120)
+  description                 String?             @db.VarChar(3000)
+  logo_media_id               String?
+  cover_media_id              String?
+  presentation_schema_version Int                 @default(1)
+  presentation_config         Json                @default("{}")
+  created_at                  DateTime            @default(now())
+  updated_at                  DateTime            @default(now()) @updatedAt
+  restaurant                  restaurants         @relation("menus_restaurant", fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  categories                  menu_categories[]   @relation("menu_categories_menu")
+  logo                        media_assets?       @relation("menus_logo", fields: [restaurant_id, logo_media_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  cover                       media_assets?       @relation("menus_cover", fields: [restaurant_id, cover_media_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  publications                menu_publications[] @relation("menu_publications_menu")
+  published_revision          menu_publications?  @relation("menus_published_revision", fields: [restaurant_id, id, published_revision_id], references: [restaurant_id, menu_id, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([restaurant_id, id])
+  @@index([restaurant_id, logo_media_id])
+  @@index([restaurant_id, cover_media_id])
+}
+
+model menu_categories {
+  id            String          @id @default(uuid())
+  restaurant_id String
+  menu_id       String
+  name          String          @db.VarChar(120)
+  description   String?         @db.VarChar(3000)
+  position      Int             @default(0)
+  visible       Boolean         @default(true)
+  archived_at   DateTime?
+  created_at    DateTime        @default(now())
+  updated_at    DateTime        @default(now()) @updatedAt
+  menu          menus           @relation("menu_categories_menu", fields: [restaurant_id, menu_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  products      menu_products[] @relation("menu_products_category")
+
+  @@unique([restaurant_id, menu_id, id])
+  @@index([menu_id, position, id])
+}
+
+model menu_products {
+  id                   String                  @id @default(uuid())
+  restaurant_id        String
+  menu_id              String
+  category_id          String
+  name                 String                  @db.VarChar(120)
+  description          String?                 @db.VarChar(3000)
+  position             Int                     @default(0)
+  visible              Boolean                 @default(true)
+  archived_at          DateTime?
+  is_available         Boolean                 @default(true)
+  availability_version Int                     @default(1)
+  created_at           DateTime                @default(now())
+  updated_at           DateTime                @default(now()) @updatedAt
+  category             menu_categories         @relation("menu_products_category", fields: [restaurant_id, menu_id, category_id], references: [restaurant_id, menu_id, id], onDelete: Restrict, onUpdate: Restrict)
+  variants             menu_product_variants[] @relation("menu_product_variants_product")
+  option_groups        menu_option_groups[]    @relation("menu_option_groups_product")
+  images               menu_product_images[]   @relation("menu_product_images_product")
+
+  @@unique([restaurant_id, id])
+  @@index([category_id, position, id])
+  @@index([restaurant_id, menu_id, category_id])
+}
+
+model menu_product_variants {
+  id                   String                       @id @default(uuid())
+  restaurant_id        String
+  product_id           String
+  name                 String                       @db.VarChar(120)
+  price_cents          Int
+  position             Int                          @default(0)
+  visible              Boolean                      @default(true)
+  archived_at          DateTime?
+  is_available         Boolean                      @default(true)
+  availability_version Int                          @default(1)
+  created_at           DateTime                     @default(now())
+  updated_at           DateTime                     @default(now()) @updatedAt
+  product              menu_products                @relation("menu_product_variants_product", fields: [restaurant_id, product_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  option_group_links   menu_variant_option_groups[] @relation("menu_variant_option_groups_variant")
+  order_items          order_items[]                @relation("order_items_variant")
+
+  @@unique([restaurant_id, product_id, id])
+  @@index([product_id, position, id])
+}
+
+model menu_option_groups {
+  id             String                       @id @default(uuid())
+  restaurant_id  String
+  product_id     String
+  name           String                       @db.VarChar(120)
+  min_selections Int                          @default(0)
+  max_selections Int                          @default(1)
+  position       Int                          @default(0)
+  archived_at    DateTime?
+  created_at     DateTime                     @default(now())
+  updated_at     DateTime                     @default(now()) @updatedAt
+  product        menu_products                @relation("menu_option_groups_product", fields: [restaurant_id, product_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  options        menu_options[]               @relation("menu_options_group")
+  variant_links  menu_variant_option_groups[] @relation("menu_variant_option_groups_group")
+
+  @@unique([restaurant_id, product_id, id])
+  @@index([product_id, position, id])
+}
+
+model menu_options {
+  id                   String               @id @default(uuid())
+  restaurant_id        String
+  product_id           String
+  group_id             String
+  name                 String               @db.VarChar(120)
+  price_delta_cents    Int                  @default(0)
+  max_quantity         Int                  @default(1)
+  position             Int                  @default(0)
+  visible              Boolean              @default(true)
+  archived_at          DateTime?
+  is_available         Boolean              @default(true)
+  availability_version Int                  @default(1)
+  created_at           DateTime             @default(now())
+  updated_at           DateTime             @default(now()) @updatedAt
+  group                menu_option_groups   @relation("menu_options_group", fields: [restaurant_id, product_id, group_id], references: [restaurant_id, product_id, id], onDelete: Restrict, onUpdate: Restrict)
+  order_selections     order_item_options[] @relation("order_item_options_option")
+
+  @@unique([restaurant_id, product_id, id])
+  @@index([group_id, position, id])
+  @@index([restaurant_id, product_id, group_id])
+}
+
+model menu_variant_option_groups {
+  restaurant_id String
+  product_id    String
+  variant_id    String
+  group_id      String
+  variant       menu_product_variants @relation("menu_variant_option_groups_variant", fields: [restaurant_id, product_id, variant_id], references: [restaurant_id, product_id, id], onDelete: Restrict, onUpdate: Restrict)
+  group         menu_option_groups    @relation("menu_variant_option_groups_group", fields: [restaurant_id, product_id, group_id], references: [restaurant_id, product_id, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([variant_id, group_id])
+  @@index([restaurant_id, product_id, group_id])
+}
+
+model media_assets {
+  id                     String                   @id @default(uuid())
+  restaurant_id          String
+  storage_provider       media_storage_provider   @default(LOCAL)
+  storage_prefix         String                   @unique
+  status                 media_status             @default(PENDING)
+  original_mime_type     String?                  @db.VarChar(100)
+  original_byte_size     BigInt?
+  width                  Int?
+  height                 Int?
+  reserved_bytes         BigInt                   @default(0)
+  stored_bytes           BigInt                   @default(0)
+  created_by             String?
+  failure_code           String?                  @db.VarChar(80)
+  delete_attempts        Int                      @default(0)
+  last_delete_attempt_at DateTime?
+  created_at             DateTime                 @default(now())
+  updated_at             DateTime                 @default(now()) @updatedAt
+  restaurant             restaurants              @relation("media_assets_restaurant", fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  derivatives            media_derivatives[]      @relation("media_derivatives_asset")
+  menu_logos             menus[]                  @relation("menus_logo")
+  menu_covers            menus[]                  @relation("menus_cover")
+  product_links          menu_product_images[]    @relation("menu_product_images_media")
+  publication_links      menu_publication_media[] @relation("menu_publication_media_media")
+  created_by_user        users?                   @relation("media_assets_created_by_user", fields: [created_by], references: [id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@unique([restaurant_id, id])
+  @@index([restaurant_id, status, created_at])
+  @@index([status, updated_at])
+  @@index([created_by])
+}
+
+model media_derivatives {
+  id            String                @id @default(uuid())
+  restaurant_id String
+  media_id      String
+  kind          media_derivative_kind
+  storage_key   String                @unique
+  mime_type     String                @default("image/webp") @db.VarChar(100)
+  byte_size     BigInt
+  width         Int
+  height        Int
+  sha256        String                @db.VarChar(64)
+  created_at    DateTime              @default(now())
+  asset         media_assets          @relation("media_derivatives_asset", fields: [restaurant_id, media_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([media_id, kind])
+  @@index([restaurant_id, media_id])
+}
+
+model menu_product_images {
+  restaurant_id String
+  product_id    String
+  media_id      String
+  position      Int           @default(0)
+  alt_text      String?       @db.VarChar(250)
+  product       menu_products @relation("menu_product_images_product", fields: [restaurant_id, product_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  media         media_assets  @relation("menu_product_images_media", fields: [restaurant_id, media_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([product_id, media_id])
+  @@index([product_id, position])
+  @@index([restaurant_id, media_id])
+}
+
+model menu_publications {
+  id                  String                   @id @default(uuid())
+  restaurant_id       String
+  menu_id             String
+  revision_number     Int
+  schema_version      Int                      @default(1)
+  draft_version       Int
+  content             Json
+  published_by        String?
+  published_at        DateTime                 @default(now())
+  created_transaction BigInt                   @default(dbgenerated("txid_current()"))
+  menu                menus                    @relation("menu_publications_menu", fields: [restaurant_id, menu_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  current_for         menus[]                  @relation("menus_published_revision")
+  media_links         menu_publication_media[] @relation("menu_publication_media_publication")
+  orders              orders[]                 @relation("orders_publication")
+  published_by_user   users?                   @relation("menu_publications_published_by_user", fields: [published_by], references: [id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, menu_id, id])
+  @@unique([menu_id, revision_number])
+  @@unique([menu_id, draft_version])
+  @@index([published_by])
+}
+
+model menu_publication_media {
+  restaurant_id  String
+  publication_id String
+  media_id       String
+  publication    menu_publications @relation("menu_publication_media_publication", fields: [restaurant_id, publication_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  media          media_assets      @relation("menu_publication_media_media", fields: [restaurant_id, media_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([publication_id, media_id])
+  @@index([restaurant_id, media_id])
+}
+
+model orders {
+  id                    String             @id @default(uuid())
+  restaurant_id         String
+  source                order_source       @default(LOCAL_MENU)
+  fulfillment_type      order_fulfillment  @default(DINE_IN)
+  session_id            String?
+  publication_id        String?
+  submitted_by_token_id String?
+  table_label_snapshot  String             @db.VarChar(120)
+  submission_key        String             @db.VarChar(64)
+  request_hash          String             @db.VarChar(64)
+  currency              String             @default("BRL") @db.VarChar(3)
+  total_cents           Int
+  version               Int                @default(1)
+  last_event_sequence   Int                @default(1)
+  created_at            DateTime           @default(now())
+  updated_at            DateTime           @default(now()) @updatedAt
+  restaurant            restaurants        @relation("orders_restaurant", fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  session               table_sessions?    @relation("orders_session", fields: [restaurant_id, session_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  publication           menu_publications? @relation("orders_publication", fields: [restaurant_id, publication_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  submitted_by_token    session_tokens?    @relation("orders_submitted_by_token", fields: [submitted_by_token_id, session_id], references: [id, session_id], onDelete: Restrict, onUpdate: Restrict)
+  items                 order_items[]      @relation("order_items_order")
+  events                order_events[]     @relation("order_events_order")
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, submission_key])
+  @@index([restaurant_id, created_at, id])
+  @@index([restaurant_id, session_id, created_at])
+  @@index([restaurant_id, publication_id])
+  @@index([submitted_by_token_id, session_id])
+}
+
+model order_items {
+  id                    String                @id @default(uuid())
+  restaurant_id         String
+  order_id              String
+  product_id            String
+  variant_id            String
+  position              Int
+  product_name_snapshot String                @db.VarChar(120)
+  variant_name_snapshot String                @db.VarChar(120)
+  quantity              Int
+  base_price_cents      Int
+  unit_price_cents      Int
+  line_total_cents      Int
+  notes                 String?               @db.VarChar(500)
+  pending_quantity      Int
+  preparing_quantity    Int                   @default(0)
+  ready_quantity        Int                   @default(0)
+  delivered_quantity    Int                   @default(0)
+  cancelled_quantity    Int                   @default(0)
+  created_at            DateTime              @default(now())
+  order                 orders                @relation("order_items_order", fields: [restaurant_id, order_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  variant               menu_product_variants @relation("order_items_variant", fields: [restaurant_id, product_id, variant_id], references: [restaurant_id, product_id, id], onDelete: Restrict, onUpdate: Restrict)
+  selections            order_item_options[]  @relation("order_item_options_item")
+  events                order_events[]        @relation("order_events_item")
+
+  @@unique([restaurant_id, order_id, id])
+  @@unique([restaurant_id, product_id, id])
+  @@unique([order_id, position])
+  @@index([restaurant_id, order_id])
+  @@index([restaurant_id, product_id, variant_id])
+}
+
+model order_item_options {
+  id                   String       @id @default(uuid())
+  restaurant_id        String
+  product_id           String
+  order_item_id        String
+  option_id            String
+  group_name_snapshot  String       @db.VarChar(120)
+  option_name_snapshot String       @db.VarChar(120)
+  selected_quantity    Int
+  price_delta_cents    Int
+  item                 order_items  @relation("order_item_options_item", fields: [restaurant_id, product_id, order_item_id], references: [restaurant_id, product_id, id], onDelete: Restrict, onUpdate: Restrict)
+  option               menu_options @relation("order_item_options_option", fields: [restaurant_id, product_id, option_id], references: [restaurant_id, product_id, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([order_item_id, option_id])
+  @@index([restaurant_id, product_id, option_id])
+  @@index([restaurant_id, product_id, order_item_id])
+}
+
+model order_events {
+  id                      String             @id @default(uuid())
+  restaurant_id           String
+  order_id                String
+  order_item_id           String?
+  sequence                Int
+  action                  order_event_action
+  quantity                Int?
+  from_stage              order_item_stage?
+  to_stage                order_item_stage?
+  actor_user_id           String?
+  actor_type              audit_actor_type
+  actor_role_snapshot     role?
+  actor_category_snapshot staff_category?
+  actor_label_snapshot    String?            @db.VarChar(120)
+  reason                  String?            @db.VarChar(500)
+  resulting_order_version Int
+  created_at              DateTime           @default(now())
+  order                   orders             @relation("order_events_order", fields: [restaurant_id, order_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  item                    order_items?       @relation("order_events_item", fields: [restaurant_id, order_id, order_item_id], references: [restaurant_id, order_id, id], onDelete: Restrict, onUpdate: Restrict)
+  actor                   users?             @relation("order_events_actor", fields: [actor_user_id], references: [id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@unique([order_id, sequence])
+  @@index([restaurant_id, order_id, created_at, id])
+  @@index([restaurant_id, order_id, order_item_id])
+  @@index([actor_user_id])
+}
+
+model restaurant_operation_events {
+  id                      String           @id @default(uuid())
+  restaurant_id           String
+  entity_type             String           @db.VarChar(40)
+  entity_id               String
+  action                  String           @db.VarChar(80)
+  previous_value          Json?
+  new_value               Json?
+  actor_user_id           String?
+  actor_type              audit_actor_type
+  actor_role_snapshot     role?
+  actor_category_snapshot staff_category?
+  actor_label_snapshot    String?          @db.VarChar(120)
+  created_at              DateTime         @default(now())
+  restaurant              restaurants      @relation("restaurant_operation_events_restaurant", fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor                   users?           @relation("restaurant_operation_events_actor", fields: [actor_user_id], references: [id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@index([restaurant_id, created_at, id])
+  @@index([restaurant_id, entity_type, entity_id])
+  @@index([actor_user_id])
+}
+
+enum media_storage_provider {
+  LOCAL
+}
+
+enum media_status {
+  PENDING
+  READY
+  FAILED
+  DELETING
+}
+
+enum media_derivative_kind {
+  MAIN
+  THUMB
+}
+
+enum order_source {
+  LOCAL_MENU
+}
+
+enum order_fulfillment {
+  DINE_IN
+}
+
+enum order_item_stage {
+  PENDING
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum order_event_action {
+  CREATED
+  TRANSITIONED
+}
+
+enum audit_actor_type {
+  USER
+  TABLE_DEVICE
+  SYSTEM
 }

@@ -45,6 +45,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: 4000
+      MEDIA_ROOT: /data/media
       # Use caracteres seguros em URL na senha do banco (evite @ : / ? #)
       DATABASE_URL: postgresql://${POSTGRES_USER:-garcom}:${POSTGRES_PASSWORD:-garcom}@db:5432/${POSTGRES_DB:-garcom}?schema=public
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
@@ -58,6 +59,7 @@ services:
       - ./back-end:/app
       - api_node_modules:/app/node_modules # dependências ficam no volume, não na sua pasta
       - api_generated:/app/generated # client do Prisma gerado para Linux
+      - media_data:/data/media
       - npm_cache:/root/.npm
     # Instala dependências só se o package-lock mudou, gera o client do Prisma,
     # aplica as migrations e sobe a API reiniciando a cada mudança em src/.
@@ -158,3 +160,4 @@ volumes:
   web_node_modules:
   web_next:
   npm_cache:
+  media_data:

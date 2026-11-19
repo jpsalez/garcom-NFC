@@ -25,3 +25,4 @@
 
 # Dependências (cada projeto também ignora a sua; este vale para a raiz)
 node_modules/
+back-end/.media/
