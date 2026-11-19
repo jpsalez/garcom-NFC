@@ -2,11 +2,15 @@ import type { NextFunction, Request, Response } from "express";
 import { Prisma } from "../../../generated/prisma/client.ts";
 import { AppError } from "../errors/AppError.ts";
 import { BadRequestError, ConflictError, NotFoundError } from "../errors/http-errors.ts";
+import { ValidationError } from "../errors/http-errors.ts";
+import { ZodError } from "zod";
 
 // Handler global de erros: deve ser registrado DEPOIS das rotas.
 // Formato único de resposta: { error, code, message, details? }
 
 function sendAppError(res: Response, err: AppError) {
+  res.locals.error_code = err.code;
+  if (err.statusCode === 503) res.setHeader("Retry-After", "1");
   return res.status(err.statusCode).json({
     error: err.name,
     code: err.code,
@@ -15,7 +19,18 @@ function sendAppError(res: Response, err: AppError) {
   });
 }
 
-export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
+export function errorHandler(err: unknown, _req: Request, res: Response, next: NextFunction) {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  if (err instanceof ZodError)
+    return sendAppError(
+      res,
+      new ValidationError(
+        err.issues.map((issue) => ({ field: issue.path.join("."), message: issue.message })),
+      ),
+    );
   // Erros lançados pelos services/middlewares (NotFoundError, ConflictError, ...)
   if (err instanceof AppError) {
     return sendAppError(res, err);
@@ -35,12 +50,18 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   const bodyError = (err as { type?: string } | null)?.type;
   if (bodyError === "entity.parse.failed") return sendAppError(res, new BadRequestError("JSON inválido"));
   if (bodyError === "entity.too.large") {
-    return sendAppError(res, new AppError("Corpo da requisição grande demais", 413, undefined, "PAYLOAD_TOO_LARGE"));
+    return sendAppError(
+      res,
+      new AppError("Corpo da requisição grande demais", 413, undefined, "PAYLOAD_TOO_LARGE"),
+    );
   }
 
   // Qualquer outro erro é inesperado: loga e não vaza detalhes para o cliente.
   // Erros do Prisma levam os argumentos da query (e-mail, hash) na mensagem: registra só o tipo e o código.
   const isPrisma = err instanceof Error && err.name.startsWith("PrismaClient");
   console.error(isPrisma ? `${err.name} ${(err as { code?: string }).code ?? ""}` : err);
-  return res.status(500).json({ error: "InternalServerError", code: "INTERNAL_ERROR", message: "Erro interno do servidor" });
+  res.locals.error_code = "INTERNAL_ERROR";
+  return res
+    .status(500)
+    .json({ error: "InternalServerError", code: "INTERNAL_ERROR", message: "Erro interno do servidor" });
 }

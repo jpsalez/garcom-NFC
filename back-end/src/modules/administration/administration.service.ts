@@ -1,11 +1,14 @@
 import { inject, injectable } from "tsyringe";
 import type { IRestaurantRepository } from "../restaurants/restaurants.repository.interface.ts";
 import type { IAuthCache } from "../../shared/cache/auth-cache.ts";
-import type { ISessionsService } from "../sessions/sessions.interfaces.ts";
+import { closeSessionResources } from "../sessions/close-session.ts";
+import { TableSessionRepository } from "../sessions/sessions.repository.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
 import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
 import type { IAdministrationService } from "./administration.interfaces.ts";
 import type { createRestaurantInput } from "./administration.schema.ts";
+import type { IRestaurantUnitOfWork } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
+import { RestaurantRepository } from "../restaurants/restaurants.repository.ts";
 
 // Operações da plataforma (só SUPER_ADMIN): não filtram por restaurante do token
 @injectable()
@@ -13,18 +16,16 @@ export class AdministrationService implements IAdministrationService {
   private readonly restaurantRepository: IRestaurantRepository;
   private readonly authCache: IAuthCache;
   private readonly notifier: INotifier;
-  private readonly sessionsService: ISessionsService;
 
   constructor(
     @inject("RestaurantRepository") restaurantRepository: IRestaurantRepository,
     @inject("AuthCache") authCache: IAuthCache,
     @inject("Notifier") notifier: INotifier,
-    @inject("SessionsService") sessionsService: ISessionsService,
+    @inject("RestaurantUnitOfWork") private unit: IRestaurantUnitOfWork,
   ) {
     this.restaurantRepository = restaurantRepository;
     this.authCache = authCache;
     this.notifier = notifier;
-    this.sessionsService = sessionsService;
   }
 
   async createRestaurant(input: createRestaurantInput) {
@@ -42,14 +43,28 @@ export class AdministrationService implements IAdministrationService {
     if (!(await this.restaurantRepository.findById(id))) {
       throw new NotFoundError("Restaurante não encontrado");
     }
-    const restaurant = await this.restaurantRepository.update(id, { active });
+    const result = await this.unit.run(
+      id,
+      async ({ db, now }) => {
+        const restaurant = await new RestaurantRepository(db).update(id, { active });
+        const closedIds: string[] = [];
+        if (!active)
+          for (const session of await new TableSessionRepository(db).findMany(id, { status: "ACTIVE" })) {
+            if (await closeSessionResources(db, id, session.id, now, "STAFF", userId))
+              closedIds.push(session.id);
+          }
+        return { restaurant, closedIds };
+      },
+      { allowInactive: true },
+    );
     // Todos os usuários do restaurante precisam ser reavaliados
     this.authCache.invalidateRestaurant(id);
     if (!active) {
       // Desativado não mantém atendimentos abertos (reativar não os reabre); depois derruba os sockets
-      await this.sessionsService.closeAllActive(id, userId);
+      for (const sessionId of result.closedIds)
+        this.notifier.toRestaurant(id, "session:closed", { id: sessionId, reason: "STAFF" });
       this.notifier.disconnectRestaurant(id);
     }
-    return restaurant;
+    return result.restaurant;
   }
 }

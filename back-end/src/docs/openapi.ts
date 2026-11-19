@@ -1,10 +1,15 @@
 import { z } from "zod";
+import { menuPaths } from "./menu-openapi.ts";
 import { createRestaurantSchema, setActiveSchema } from "../modules/administration/administration.schema.ts";
 import { forgotPasswordSchema, resetPasswordSchema } from "../modules/auth/password-reset.schema.ts";
 import { changePasswordSchema, createUserSchema, loginUserSchema } from "../modules/auth/auth.schema.ts";
 import { createCallSchema } from "../modules/calls/calls.schemas.ts";
 import { createTableSchema, updateTableSchema } from "../modules/tables/tables.schemas.ts";
-import { createRestaurantUserSchema, createStaffSchema, updateUserSchema } from "../modules/users/users.schema.ts";
+import {
+  createRestaurantUserSchema,
+  createStaffSchema,
+  updateUserSchema,
+} from "../modules/users/users.schema.ts";
 
 type Options = {
   tag: string;
@@ -61,91 +66,230 @@ export const openApiSpec = {
       "Faça login em /auth/login: o navegador guarda o cookie de sessão e o Swagger o envia sozinho (o restaurantId vem do token).",
   },
   components: {
-    securitySchemes: { cookieAuth: { type: "apiKey", in: "cookie", name: "access_token" } },
+    securitySchemes: {
+      cookieAuth: { type: "apiKey", in: "cookie", name: "access_token" },
+      tableToken: { type: "apiKey", in: "header", name: "X-Table-Token" },
+    },
   },
   paths: {
+    ...menuPaths,
     "/health": { get: operation({ tag: "Sistema", summary: "Verifica se a API está no ar", auth: false }) },
     "/auth/register": {
-      post: operation({ tag: "Auth", summary: "Cadastra restaurante e dono", success: 201, body: createUserSchema, auth: false }),
+      post: operation({
+        tag: "Auth",
+        summary: "Cadastra restaurante e dono",
+        success: 201,
+        body: createUserSchema,
+        auth: false,
+      }),
     },
     "/auth/login": {
-      post: operation({ tag: "Auth", summary: "Login (grava os cookies httpOnly de acesso e de refresh e devolve o usuário)", body: loginUserSchema, auth: false }),
+      post: operation({
+        tag: "Auth",
+        summary: "Login (grava os cookies httpOnly de acesso e de refresh e devolve o usuário)",
+        body: loginUserSchema,
+        auth: false,
+      }),
     },
     "/auth/refresh": {
-      post: operation({ tag: "Auth", summary: "Troca o refresh token (cookie refresh_token) por um par novo nos cookies; o antigo deixa de valer", auth: false }),
+      post: operation({
+        tag: "Auth",
+        summary:
+          "Troca o refresh token (cookie refresh_token) por um par novo nos cookies; o antigo deixa de valer",
+        auth: false,
+      }),
     },
     "/auth/logout": {
-      post: operation({ tag: "Auth", summary: "Revoga o refresh token (cookie) e limpa os cookies de sessão", success: 204, auth: false }),
+      post: operation({
+        tag: "Auth",
+        summary: "Revoga o refresh token (cookie) e limpa os cookies de sessão",
+        success: 204,
+        auth: false,
+      }),
     },
     "/auth/forgot-password": {
-      post: operation({ tag: "Auth", summary: "Envia o link de redefinição de senha por e-mail (responde 202 para qualquer e-mail)", success: 202, body: forgotPasswordSchema, auth: false }),
+      post: operation({
+        tag: "Auth",
+        summary: "Envia o link de redefinição de senha por e-mail (responde 202 para qualquer e-mail)",
+        success: 202,
+        body: forgotPasswordSchema,
+        auth: false,
+      }),
     },
     "/auth/reset-password": {
-      post: operation({ tag: "Auth", summary: "Define a nova senha com o token do link (vale uma vez, 1 hora); encerra as sessões", success: 204, body: resetPasswordSchema, auth: false }),
+      post: operation({
+        tag: "Auth",
+        summary: "Define a nova senha com o token do link (vale uma vez, 1 hora); encerra as sessões",
+        success: 204,
+        body: resetPasswordSchema,
+        auth: false,
+      }),
     },
     "/auth/password": {
-      patch: operation({ tag: "Auth", summary: "Troca a senha do usuário logado (exige a senha atual); derruba as outras sessões e devolve um par novo", body: changePasswordSchema }),
+      patch: operation({
+        tag: "Auth",
+        summary:
+          "Troca a senha do usuário logado (exige a senha atual); derruba as outras sessões e devolve um par novo",
+        body: changePasswordSchema,
+      }),
     },
     "/auth/me": {
       get: operation({ tag: "Auth", summary: "Dados do usuário logado" }),
     },
     "/admin/restaurants": {
       get: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Lista restaurantes" }),
-      post: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Cria restaurante", success: 201, body: createRestaurantSchema }),
+      post: operation({
+        tag: "Administração (SUPER_ADMIN)",
+        summary: "Cria restaurante",
+        success: 201,
+        body: createRestaurantSchema,
+      }),
     },
     "/admin/restaurants/{restaurantId}": {
-      patch: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Ativa ou desativa restaurante", body: setActiveSchema, params: ["restaurantId"] }),
+      patch: operation({
+        tag: "Administração (SUPER_ADMIN)",
+        summary: "Ativa ou desativa restaurante",
+        body: setActiveSchema,
+        params: ["restaurantId"],
+      }),
     },
     [restaurantUsers]: {
-      get: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Lista usuários do restaurante", params: ["restaurantId"] }),
-      post: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Cria usuário (OWNER ou STAFF); 409 se o restaurante estiver desativado", success: 201, body: createRestaurantUserSchema, params: ["restaurantId"] }),
+      get: operation({
+        tag: "Administração (SUPER_ADMIN)",
+        summary: "Lista usuários do restaurante",
+        params: ["restaurantId"],
+      }),
+      post: operation({
+        tag: "Administração (SUPER_ADMIN)",
+        summary: "Cria usuário (OWNER ou STAFF); 409 se o restaurante estiver desativado",
+        success: 201,
+        body: createRestaurantUserSchema,
+        params: ["restaurantId"],
+      }),
     },
     [`${restaurantUsers}/{id}`]: {
-      patch: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Atualiza usuário", body: updateUserSchema, params: ["restaurantId", "id"] }),
-      delete: operation({ tag: "Administração (SUPER_ADMIN)", summary: "Remove usuário", success: 204, params: ["restaurantId", "id"] }),
+      patch: operation({
+        tag: "Administração (SUPER_ADMIN)",
+        summary: "Atualiza usuário",
+        body: updateUserSchema,
+        params: ["restaurantId", "id"],
+      }),
+      delete: operation({
+        tag: "Administração (SUPER_ADMIN)",
+        summary: "Remove usuário",
+        success: 204,
+        params: ["restaurantId", "id"],
+      }),
     },
     "/staff": {
       get: operation({ tag: "Equipe (OWNER)", summary: "Lista a equipe do restaurante" }),
-      post: operation({ tag: "Equipe (OWNER)", summary: "Cria funcionário (STAFF)", success: 201, body: createStaffSchema }),
+      post: operation({
+        tag: "Equipe (OWNER)",
+        summary: "Cria funcionário (STAFF)",
+        success: 201,
+        body: createStaffSchema,
+      }),
     },
     "/staff/{id}": {
-      patch: operation({ tag: "Equipe (OWNER)", summary: "Atualiza funcionário", body: updateUserSchema, params: ["id"] }),
-      delete: operation({ tag: "Equipe (OWNER)", summary: "Remove funcionário", success: 204, params: ["id"] }),
+      patch: operation({
+        tag: "Equipe (OWNER)",
+        summary: "Atualiza funcionário",
+        body: updateUserSchema,
+        params: ["id"],
+      }),
+      delete: operation({
+        tag: "Equipe (OWNER)",
+        summary: "Remove funcionário",
+        success: 204,
+        params: ["id"],
+      }),
     },
     "/tables": {
       get: operation({ tag: "Mesas", summary: "Lista mesas (OWNER ou STAFF)" }),
       post: operation({ tag: "Mesas", summary: "Cria mesa (OWNER)", success: 201, body: createTableSchema }),
     },
     "/tables/{id}": {
-      patch: operation({ tag: "Mesas", summary: "Atualiza mesa (OWNER)", body: updateTableSchema, params: ["id"] }),
-      delete: operation({ tag: "Mesas", summary: "Exclui mesa sem atendimentos; com histórico dá 409 (OWNER)", success: 204, params: ["id"] }),
+      patch: operation({
+        tag: "Mesas",
+        summary: "Atualiza mesa (OWNER)",
+        body: updateTableSchema,
+        params: ["id"],
+      }),
+      delete: operation({
+        tag: "Mesas",
+        summary: "Exclui mesa sem atendimentos; com histórico dá 409 (OWNER)",
+        success: 204,
+        params: ["id"],
+      }),
     },
     "/public/tables/{code}/scan": {
-      post: operation({ tag: "Atendimentos", summary: "Cliente escaneia o QR: abre ou reaproveita o atendimento e recebe o token do aparelho", success: 201, auth: false, params: ["code"] }),
+      post: operation({
+        tag: "Atendimentos",
+        summary: "Cliente escaneia o QR: abre ou reaproveita o atendimento e recebe o token do aparelho",
+        success: 201,
+        auth: false,
+        params: ["code"],
+      }),
     },
     "/sessions": {
-      get: operation({ tag: "Atendimentos", summary: "Lista atendimentos, mais recentes primeiro; ?status=ACTIVE (padrão) ou CLOSED, ?limit= (1 a 200, padrão 100) e ?offset= (OWNER ou STAFF)" }),
+      get: operation({
+        tag: "Atendimentos",
+        summary:
+          "Lista atendimentos, mais recentes primeiro; ?status=ACTIVE (padrão) ou CLOSED, ?limit= (1 a 200, padrão 100) e ?offset= (OWNER ou STAFF)",
+      }),
     },
     "/tables/{id}/session": {
-      post: operation({ tag: "Atendimentos", summary: "Abre o atendimento pelo balcão; 409 se já houver um ativo (OWNER ou STAFF)", success: 201, params: ["id"] }),
+      post: operation({
+        tag: "Atendimentos",
+        summary: "Abre o atendimento pelo balcão; 409 se já houver um ativo (OWNER ou STAFF)",
+        success: 201,
+        params: ["id"],
+      }),
     },
     "/sessions/{id}/close": {
-      post: operation({ tag: "Atendimentos", summary: "Encerra: revoga tokens e cancela chamados abertos (OWNER ou STAFF)", params: ["id"] }),
+      post: operation({
+        tag: "Atendimentos",
+        summary: "Encerra: revoga tokens e cancela chamados abertos (OWNER ou STAFF)",
+        params: ["id"],
+      }),
     },
     "/sessions/{id}/extend": {
-      post: operation({ tag: "Atendimentos", summary: "Estende o atendimento em mais 4 h (OWNER ou STAFF)", params: ["id"] }),
+      post: operation({
+        tag: "Atendimentos",
+        summary: "Estende o atendimento em mais 4 h (OWNER ou STAFF)",
+        params: ["id"],
+      }),
     },
     "/public/calls": {
-      post: operation({ tag: "Chamados", summary: "Cliente chama o garçom ou pede a conta (cabeçalho X-Table-Token); 201 novo, 200 se já havia um aberto do tipo", success: 201, body: createCallSchema, auth: false }),
+      post: operation({
+        tag: "Chamados",
+        summary:
+          "Cliente chama o garçom ou pede a conta (cabeçalho X-Table-Token); 201 novo, 200 se já havia um aberto do tipo",
+        success: 201,
+        body: createCallSchema,
+        auth: false,
+      }),
     },
     "/calls": {
-      get: operation({ tag: "Chamados", summary: "Lista chamados e serverTime; ?status=OPEN (padrão), DONE ou CANCELLED ?since=data e ?limit=/?offset= (padrão 500, máx. 1000) (OWNER ou STAFF)" }),
+      get: operation({
+        tag: "Chamados",
+        summary:
+          "Lista chamados e serverTime; ?status=OPEN (padrão), DONE ou CANCELLED ?since=data e ?limit=/?offset= (padrão 500, máx. 1000) (OWNER ou STAFF)",
+      }),
     },
     "/calls/{id}/done": {
-      patch: operation({ tag: "Chamados", summary: "Finaliza o chamado; 409 CALL_NOT_OPEN se não estiver mais aberto (OWNER ou STAFF)", params: ["id"] }),
+      patch: operation({
+        tag: "Chamados",
+        summary: "Finaliza o chamado; 409 CALL_NOT_OPEN se não estiver mais aberto (OWNER ou STAFF)",
+        params: ["id"],
+      }),
     },
     "/tables/{id}/qrcode": {
-      get: operation({ tag: "Mesas", summary: "QR Code da mesa em SVG; reativa a mesa se estiver inativa (OWNER)", params: ["id"] }),
+      get: operation({
+        tag: "Mesas",
+        summary: "QR Code da mesa em SVG; reativa a mesa se estiver inativa (OWNER)",
+        params: ["id"],
+      }),
     },
   },
 };

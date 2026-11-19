@@ -6,6 +6,7 @@ import { container } from "../container/container.ts";
 import { ForbiddenError, UnauthorizedError } from "../errors/http-errors.ts";
 import { ACCESS_COOKIE, readCookie } from "../utils/cookies.ts";
 import { type TokenPayload, verifyToken } from "../utils/jwt.ts";
+import { type Capability, requireCapability } from "../authorization/capabilities.ts";
 
 // O JWT de acesso vem no cookie httpOnly gravado no login
 function accessToken(req: Request) {
@@ -35,7 +36,7 @@ export async function authenticateToken(token: string) {
     if (!user?.active || user.restaurant?.active === false) {
       throw new UnauthorizedError("Token inválido ou expirado");
     }
-    entry = { id: user.id, restaurantId: user.restaurant_id, role: user.role };
+    entry = { id: user.id, restaurantId: user.restaurant_id, role: user.role, category: user.category };
     cache.set(entry, version);
   }
   return entry;
@@ -60,6 +61,18 @@ export function ensureRole(...roles: role[]) {
 export function userOf(req: Request): string {
   if (!req.user) throw new UnauthorizedError("Não autenticado");
   return req.user.id;
+}
+
+export function actorOf(req: Request) {
+  if (!req.user) throw new UnauthorizedError("Não autenticado");
+  return req.user;
+}
+
+export function ensureCapability(capability: Capability) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    requireCapability(actorOf(req), capability);
+    next();
+  };
 }
 
 // Rotas de restaurante: o restaurantId vem do token, nunca do cliente. Devolve-o já validado.

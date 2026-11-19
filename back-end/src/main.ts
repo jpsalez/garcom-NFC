@@ -15,6 +15,8 @@ import { SetupRoutes } from "./routes.ts";
 import { container, registerDependencies } from "./shared/container/container.ts";
 import type { SocketNotifier } from "./shared/realtime/socket-notifier.ts";
 import { errorHandler } from "./shared/middlewares/error.middleware.ts";
+import { startMediaCleanupJob } from "./shared/jobs/media-cleanup.job.ts";
+import type { IMediaService } from "./modules/media/media.interfaces.ts";
 
 function bootstrap() {
   // Sem o domínio os QR Codes sairiam apontando para o lugar errado
@@ -22,7 +24,9 @@ function bootstrap() {
   // Em produção, um segredo curto ou o padrão do compose deixaria os tokens forjáveis
   const secret = process.env.JWT_SECRET ?? "";
   if (process.env.NODE_ENV === "production" && (secret.length < 32 || secret.includes("desenvolvimento"))) {
-    throw new Error("JWT_SECRET fraco ou padrão de desenvolvimento: defina um segredo próprio com 32+ caracteres");
+    throw new Error(
+      "JWT_SECRET fraco ou padrão de desenvolvimento: defina um segredo próprio com 32+ caracteres",
+    );
   }
   registerDependencies();
   // A documentação só fica pública fora de produção
@@ -39,5 +43,6 @@ function bootstrap() {
   httpServer.listen(port, () => console.log(`rodando na ${port}`));
   startSessionExpiryJob(container.resolve<ISessionsService>("SessionsService"));
   startTokenCleanupJob(container.resolve<ITokenCleanupService>("TokenCleanupService"));
+  startMediaCleanupJob(container.resolve<IMediaService>("MediaService"));
 }
 bootstrap();
