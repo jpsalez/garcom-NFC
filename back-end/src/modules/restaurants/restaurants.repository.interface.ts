@@ -1,7 +1,8 @@
 import type { Prisma, restaurants } from "../../../generated/prisma/client.ts";
+import type { CreateRestaurantData } from "./restaurant-initialization.ts";
 
 export interface IRestaurantRepository {
-  create(data: Prisma.restaurantsCreateInput): Promise<restaurants>;
+  create(data: CreateRestaurantData): Promise<restaurants>;
   findAll(): Promise<restaurants[]>;
   findById(id: string): Promise<restaurants | null>;
   findBySlug(slug: string): Promise<restaurants | null>;
