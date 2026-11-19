@@ -33,7 +33,7 @@ function StaffCard({user, onCategory, onActive, onDelete}: {
                 `}
                 >{user.email}</p>
 
-                <div className="w-full bg-white flex items-center justify-center px-3">
+                <div className="w-full flex items-center justify-center px-3">
                     {user.active && <FaCheckCircle className="text-green-400"/>}
                     {!user.active && <IoIosWarning className="text-yellow-400/80"/>}
                 </div>

@@ -8,6 +8,7 @@ import { saveSession } from "@/lib/session";
 import { login } from "@/services/auth";
 import { FaUser } from "react-icons/fa";
 import Image from "next/image";
+import { IoIosArrowRoundForward } from "react-icons/io";
 
 function loginErrorMessage(err: unknown) {
     if (err instanceof ApiError && err.status === 401) return 'E-mail ou senha inválidos.'
@@ -50,7 +51,7 @@ export default function LoginPage() {
 
                 <div className="relative w-full max-w-200 aspect-4/3 rounded-l-xl bg-blue-600 hidden lg:flex items-center justify-center overflow-hidden">
                     <Image
-                    src={'/psiu_4_3.png'}
+                    src={'/login.png'}
                     fill
                     alt="Psiu logo"
                     />
@@ -61,48 +62,62 @@ export default function LoginPage() {
                     
                 
                     <form onSubmit={handleSubmit} className="form-style w-full h-full">
-                        <div className="flex flex-col items-center justify-center space-y-2 text-sm">
-
-                            <div className="relative w-15 flex items-center justify-center aspect-square border rounded-full">
-                                <BorderBeam colorFrom="#1D2540" colorTo="#1D2540"/>
-                                <FaUser className="text-2xl"/>
-                            </div>
+                        <div className="w-full flex flex-col items-start justify-center space-y-2 text-sm">
                             
-                            <h2 className="font-bold text-xl text-center">É bom ter você de volta!</h2>
-                            <p className="text-center">Faça Login para continuar</p>
+                            <h2 className="font-bold text-3xl ">É bom ter você de volta!</h2>
+                            <p className="text-gray-600">Faça Login para continuar.</p>
                         </div>
-                        <input type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="bg-none! bg-transparent! border-0! border-b-2! rounded-b-none border-foreground! shadow-none!"
-                        placeholder="E-mail"
-                        autoComplete="username"
-                        required
-                        />
-                        <input type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="bg-none! bg-transparent! border-0! border-b-2! rounded-b-none border-foreground! shadow-none!"
-                        placeholder="Senha"
-                        autoComplete="current-password"
-                        required
-                        />
-                        <button disabled={loading} className="btn-primary">{loading ? 'Entrando...' : 'Entrar'}</button>
-                        <p role="alert" className={`error ${error ? 'visible' : ''}`}>{error}</p>
+
+                        <div className="w-full">
+                            <p className="font-bold">E-mail</p>
+                            
+                            <input type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="bg-none! bg-transparent! border-0! border-b-2! rounded-b-none border-foreground! shadow-none!"
+                            placeholder="seu@email.com"
+                            autoComplete="username"
+                            required
+                            />
+                        </div>
+
+                        <div className="w-full">
+                            <p className="font-bold">Senha</p>
+                            <input type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="bg-none! bg-transparent! border-0! border-b-2! rounded-b-none border-foreground! shadow-none!"
+                            placeholder="Senha"
+                            autoComplete="current-password"
+                            required
+                            />
+                        </div>
 
                         <div className="w-full text-center space-y-2">
                             <div className="w-full flex items-center justify-between">
                                 <div className="flex items-center space-x-2">
-                                    <input type="checkbox" name="" id=""/>
+                                    <input type="checkbox" name="" id="" className="cursor-pointer"/>
                                     <span className="text-sm line-clamp-1">Salvar login</span>
                                 </div>
                                 <Link href="/esqueci-senha" className="font-extrabold text-sm line-clamp-1">Esqueci minha senha</Link>
                             </div>
-                            <div className="text-center">
-                                <p className="text-lg">Ainda não tem conta?</p>
-                                <Link href="/cadastro" className="font-extrabold text-sm">Cadastre seu restaurante aqui</Link>
-                            </div>
+                            
                         </div>
+
+                        <button disabled={loading} className="btn-primary font-bold gap-x-2">
+                            {loading && <span>Entrando...</span>}
+                            <div className="flex items-center justify-center">
+                                <span className="">Entrar</span>
+                                <IoIosArrowRoundForward className="text-lg text-green-500"/> 
+                            </div>
+                    </button>
+                        <p role="alert" className={`error ${error ? 'visible' : ''}`}>{error}</p>
+
+                        <div className="text-center">
+                            <p className="text-lg">Ainda não tem conta?</p>
+                            <Link href="/cadastro" className="font-extrabold text-sm">Cadastre seu restaurante aqui</Link>
+                        </div>
+
                     </form>
                 </div>
 

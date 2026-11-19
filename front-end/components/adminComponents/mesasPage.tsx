@@ -1,21 +1,24 @@
 'use client'
-import { FormEvent, useCallback, useEffect, useState } from "react"
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useAct } from "@/lib/useAct"
 import { useSession } from "@/lib/session"
 import type { Table } from "@/lib/types"
 import { createTable, listTables, removeTable, updateTable } from "@/services/tables"
 import QrModal from "./qrModal"
-import { FaCheck, FaPlus, FaTrash } from "react-icons/fa"
+import { FaCheck, FaPlus, FaSearch, FaTrash } from "react-icons/fa"
 import { IoIosWarning, IoMdCloseCircle } from "react-icons/io"
 import { Plus, QrCode } from "lucide-react"
 import { FaCircleCheck, FaPencil } from "react-icons/fa6"
 import { IoClose } from "react-icons/io5"
 import { MdClose, MdTableBar } from "react-icons/md"
+import { LuDot } from "react-icons/lu"
+import { GoDotFill } from "react-icons/go"
+import { FiPlus } from "react-icons/fi"
 
 type Mode = 'view' | 'rename' | 'confirmOff' | 'confirmDelete' | 'create'
 
-function TableCard({table, onQr, onRename, onActive, onDelete}: {
-    table: Table, onQr: () => void, onRename: (label: string) => void, onActive: (active: boolean) => void, onDelete: () => void
+function TableCard({table, onQr, onRename, onActive, onDelete, tableIndex}: {
+    table: Table, onQr: () => void, onRename: (label: string) => void, onActive: (active: boolean) => void, onDelete: () => void, tableIndex: number
 }) {
     const [mode, setMode] = useState<Mode>('view')
     const [label, setLabel] = useState(table.label)
@@ -27,108 +30,68 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
             kpi-card space-y-0! gap-y-2
             w-full border p-5 md:p-2 rounded-lg shadow-lg
             md:relative
-            ${table.active ? '' : 'bg-gray-100 text-gray-500'}
+            ${table.active ? '' : 'opacity-70'}
         `}
             
         >
 
-            <div>
-                {
-                    mode === 'rename'
-                    ?
-                    <>
-                        {/* <form onSubmit={(e) => { e.preventDefault(); onRename(label); back() }} className="w-full flex gap-2">
-                            <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={60} required autoFocus aria-label="Novo nome da mesa"/>
-                            <button type="submit" className="w-auto px-3 btn-primary">Salvar</button>
-                            <button type="button" onClick={() => { setLabel(table.label); back() }} className="w-auto px-3 border rounded-lg">Cancelar</button>
-                        </form> */}
+        
+            {/* <form onSubmit={(e) => { e.preventDefault(); onRename(label); back() }} className="w-full flex gap-2">
+                <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={60} required autoFocus aria-label="Novo nome da mesa"/>
+                <button type="submit" className="w-auto px-3 btn-primary">Salvar</button>
+                <button type="button" onClick={() => { setLabel(table.label); back() }} className="w-auto px-3 border rounded-lg">Cancelar</button>
+            </form> */}
 
-                        <div 
-                        className={`
-                            w-full md:aspect-square
-                            transition-all ease-in-out duration-700
-                            ${mode === 'rename' ? 'max-h-80' : 'max-h-0'}
-                        `}
-                        >
-                            <form
-                                onSubmit={(e) => { e.preventDefault(); onRename(label); back() }} 
-                                className="h-full flex items-center gap-3 z-10
-                                md:flex-col md:justify-center
-                                ">
-                                    <input 
-                                    type="text"
-                                    value={label}
-                                    onChange={(e) => setLabel(e.target.value)}
-                                    placeholder="Ex: Mesa 1"
-                                    required
-                                    />
+            <div
+            className="
+                w-full md:aspect-square grid grid-cols-[40px_auto_40px_40px_40px]
 
-                                    <div className="flex items-center justify-center">
-                                        <div
-                                        role=""
-                                        className="w-15 bg-green-500 text-white rounded-lg aspect-square flex items-center justify-center text-lg cursor-pointer scale-90
-                                        transition-all duration-300
-                                        hover:bg-white hover:text-green-500 hover:scale-100
-                                        ">
-                                            <button className="flex items-center justify-center">
-                                                <FaCheck />
-                                            </button>
-                                        </div>
-                                        <div
-                                        role="button"
-                                        onClick={() => { setLabel(table.label); back() }}
-                                        className="w-15 bg-red-500 text-white rounded-lg aspect-square flex items-center justify-center text-lg cursor-pointer scale-90
-                                        transition-all duration-300
-                                        hover:bg-white hover:text-red-500 hover:scale-100
-                                        ">
-                                            <IoMdCloseCircle />
-                                        </div>
-                                    </div>
+                md:grid-rows-[40px_auto_40px] md:grid-cols-4 
 
-                                </form>
+                [&>div]:flex [&>div]:items-center [&>div]:justify-center
+
+                [&>div>svg]:cursor-pointer [&>div>svg]:text-lg
+
+                [&>div>svg]:transition-all [&>div>svg]:duration-300
+
+                [&>div>svg]:hover:scale-110
+            "
+            >
+
+                <div className="w-full md:col-span-4 md:flex md:justify-start! md:opacity-80">
+                    {table.active
+                        ?
+                        <div className="flex items-center gap-x-1 bg-linear-130 from-white to-psiu-green/40 py-1 px-3 rounded-xl">
+                            <GoDotFill className="text-green-700"/> <span className="text-sm font-bold hidden md:block">Ativa</span>
                         </div>
-                    </>
-                    :
-                    <>
-                        <div
-                        className="
-                            w-full md:aspect-square grid grid-cols-[auto_40px_40px_40px_40px]
-                            md:grid-rows-[auto_40px] md:grid-cols-4 
-                            [&>div]:flex [&>div]:items-center [&>div]:justify-center
-                            [&>div>svg]:cursor-pointer [&>div>svg]:text-lg
-                            [&>div>svg]:transition-all [&>div>svg]:duration-300
-                            [&>div>svg]:hover:scale-110
-                        "
-                        >
-                            <div className="w-full md:col-span-4 md:flex md:flex-col md:items-center md:justify-center md:py-3">
-                                <MdTableBar className="hidden md:flex md:flex-1" size={50}/>
-                                <p className="text-2xl font-bold w-full md:text-center">{table.label}</p>
-                            </div>
-
-                            <div className="">
-                                {table.active
-                                    ?
-                                    <FaCircleCheck className="text-green-600" onClick={() => setMode('confirmOff')}/>
-                                    :
-                                    <IoIosWarning className="text-yellow-600/50" onClick={() => onActive(true)}/>
-                                }
-                            </div>
-
-                            <div>
-                                <QrCode onClick={onQr}/>
-                            </div>
-
-                            <div>
-                                <FaPencil onClick={() => setMode('rename')}/>
-                            </div>
-
-
-                            <div>
-                                <FaTrash onClick={() => setMode('confirmDelete')}/>
-                            </div>
+                        :
+                        // <IoIosWarning className="text-yellow-600/50" onClick={() => onActive(true)}/>
+                        <div className="flex items-center gap-x-1 bg-linear-130 from-white to-yellow-400/40 py-1 px-3 rounded-xl">
+                            <GoDotFill className="text-yellow-700"/> <span className="text-sm hidden md:block">Inativa</span>
                         </div>
-                    </>
-                }
+                    }
+                </div>
+                
+                <div className="w-full md:col-span-4 md:flex md:flex-col md:items-start! md:justify-center md:py-3 md:px-1">
+                    {/* <MdTableBar className="hidden md:flex md:flex-1" size={50}/> */}
+                    <p className="hidden md:text-3xl md:font-bold md:flex md:flex-1">{tableIndex < 10 && '0'}{tableIndex}</p>
+                    <p className="text-lg font-bold md:font-light text-foreground md:text-sm md:text-gray-600">{table.label}</p>
+                </div>
+
+                <div 
+                onClick={onQr}
+                className="md:col-span-2 md:flex md:gap-x-2 md:px-1 md:bg-foreground md:text-background md:rounded-lg cursor-pointer transition-all duration-300 scale-95 hover:scale-100 ">
+                    <QrCode /> <span className="hidden md:block text-xs text-center">QR Code</span>
+                </div>
+
+                <div>
+                    <FaPencil onClick={() => setMode('rename')}/>
+                </div>
+
+
+                <div>
+                    <FaTrash onClick={() => setMode('confirmDelete')}/>
+                </div>
             </div>
 
             <div 
@@ -175,7 +138,16 @@ function TableCard({table, onQr, onRename, onActive, onDelete}: {
 
 export default function MesasPage() {
     const token = useSession()?.token ?? ''
+
     const [tables, setTables] = useState<Table[]>([])
+
+    const [viewSelect, setViewSelect] = useState('all')
+    const [deskSearchOn, setDeskSearchOn] = useState(false)
+    const [searchValue, setSearchValue] = useState('')
+
+    const [mobileSearchOn, setMobileSearchOn] = useState(false)
+    const mobileSearchRef = useRef<HTMLInputElement>(null)
+
     const [loaded, setLoaded] = useState(false)
     const [label, setLabel] = useState('')
     const [qr, setQr] = useState<Table | null>(null)
@@ -186,6 +158,17 @@ export default function MesasPage() {
         try { setTables(await listTables(token)) } finally { setLoaded(true) }
     }, [token])
     const { error, busy, act } = useAct(reload)
+    
+    // autofocus search mobile
+    useEffect(() => {
+        if (mobileSearchOn) {
+            const timer = setTimeout(() => {
+                mobileSearchRef.current?.focus()
+            }, 300)
+
+            return () => clearTimeout(timer)
+        }
+    }, [mobileSearchOn])
 
     useEffect(() => { reload().catch(() => {}) }, [reload])
 
@@ -200,9 +183,9 @@ export default function MesasPage() {
             {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             {loaded && tables.length === 0 && <p className="text-gray-500">Nenhuma mesa cadastrada.</p>}
 
-            <div className="w-full md:max-w-300 mx-auto flex flex-col gap-5 z-5">
+            <div className="w-full md:max-w-350 mx-auto flex flex-col gap-5 z-5">
 
-                <div className="relative w-full h-25 rounded-lg overflow-hidden">
+                <div className="relative w-full h-full max-h-35 px-3 rounded-lg overflow-hidden">
 
                     {/* input add mesa */}
                     <div 
@@ -226,9 +209,9 @@ export default function MesasPage() {
 
                             <div 
                             role=""
-                            className="w-15 bg-green-500 text-white rounded-lg aspect-square flex items-center justify-center text-lg cursor-pointer scale-90
+                            className="w-15 bg-foreground text-psiu-green rounded-lg aspect-square flex items-center justify-center text-lg cursor-pointer scale-90
                             transition-all duration-300
-                            hover:bg-white hover:text-green-500 hover:scale-100
+                            hover:bg-white hover:text-psiu-green hover:scale-100 hover:border-foreground hover:border
                             ">
                                 <button className="flex items-center justify-center">
                                     <FaCheck />
@@ -256,25 +239,191 @@ export default function MesasPage() {
                         ${mode === 'create' ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}
                     `}
                     >
-                        <h2 className="text-2xl">Mesas Cadastradas</h2>
-                        <div className="w-10 md:w-12 aspect-square flex items-center justify-center bg-green-500 text-white text-lg md:text-2xl rounded-lg
+                        <div>
+                            <div className="flex items-center gap-x-2">
+                                <h2 className="text-lg md:text-4xl font-extrabold">Mesas Cadastradas</h2>
+                                <span className="opacity-70 rounded-xl shadow-lg md:py-1 px-3 md:px-5 bg-gray-300 text-gray-600 border border-gray-500/50 font-bold">{tables.length}</span>
+                            </div>
+
+                            <p className="text-sm text-gray-700 font-bold">Gerencie e acompanhe as mesas do seu estabelecimento.</p>
+                        </div>
+
+                        <div 
+                        onClick={() => setMode('create')}
+                        className="max-w-10 aspect-square md:max-w-50 md:aspect-auto flex items-center justify-center md:justify-around bg-foreground text-background text-lg md:text-2xl rounded-lg gap-x-2 p-2
                         cursor-pointer
                         transition-all duration-300
                         hover:scale-105
                         ">
-                            <FaPlus onClick={() => setMode('create')}/>
+                            <FaPlus className="text-sm text-psiu-green"/> <span className="hidden md:text-lg! md:block">Nova Mesa</span>
                         </div>
                     </div>
 
                 </div>
+
+                <div className="relative w-full h-15 flex items-center justify-between px-2 overflow-hidden">
+
+                    <div className={`
+                    w-fit flex items-center justify-around gap-x-5 rounded-3xl shadow-lg p-1 bg-gray-200/70 text-gray-600 border border-gray-400/50 font-bold
+
+                    [&>div]:flex [&>div]:items-center [&>div]:justify-center [&>div]:gap-x-1 [&>div]:md:gap-x-2 [&>div]:md:px-5 [&>div]:md:py-1 [&>div]:rounded-3xl [&>div]:cursor-pointer
+                    [&>div]:transition-all [&>div]:duration-500
+
+                    [&>div]:[&>p]:pl-1 [&>div]:[&>p]:text-sm
+
+                    [&>div]:[&>span]:text-sm [&>div]:[&>span]:px-3 [&>div]:[&>span]:rounded-3xl 
+                    [&>div]:[&>span]:transition-all [&>div]:[&>span]:duration-500
+                    
+                    `}
+                    >
+                    
+                        <div 
+                        onClick={async() => {
+                                setViewSelect('all')
+                                setTables(await listTables(token))
+                            }
+                        }
+                        className={` ${viewSelect === 'all' && 
+                            'bg-white! text-foreground [&>span]:bg-psiu-green/70 [&>span]:text-foreground/70'
+                            } 
+                        `}
+                        >
+                            <p>Todas </p>
+                            <span>
+                                {tables.length}
+                            </span>
+                        </div>
+                        
+                        <div 
+                        onClick={() => {
+                            setViewSelect('active')
+                            setTables( tables.filter(table => table.active) )
+                            }
+                        }
+                        className={` ${viewSelect === 'active' && 
+                            'bg-white! text-foreground [&>span]:bg-psiu-green/70 [&>span]:text-foreground/70'
+                            } 
+                        `}
+                        >
+                            <p>Ativas </p>
+                            <span>
+                                {tables.filter(table => table.active).length}
+                            </span>
+                        </div>
+                        
+                        <div 
+                        onClick={() => {
+                            setViewSelect('inactive')
+                            setTables( tables.filter(table => !table.active) )
+                            }
+                        }
+                        className={` ${viewSelect === 'inactive' && 
+                            'bg-white! text-foreground [&>span]:bg-psiu-green/70 [&>span]:text-foreground/70'
+                            } 
+                        `}
+                        >
+                            <p>Inativas </p>
+                            <span>
+                                {tables.filter(table => !table.active).length}
+                            </span>
+                        </div>
+
+                    </div>
+
+                    {/* busca mobile */}
+
+                    <div 
+                    onClick={() => {
+                        if (!mobileSearchOn) {
+                            setMobileSearchOn(true)
+                        } else {
+                            setMobileSearchOn(false)
+                        }
+                    }}
+                    className="relative w-fit md:hidden bg-foreground text-background p-2 text-lg rounded-lg">
+                        <FaSearch />
+                    </div>
+
+                    <div className="w-fit relative *:p-2 hidden md:block">
+                        <input type="search" name="" id="" 
+                        value={searchValue}
+                        onChange={(e) => {
+                            setSearchValue(e.target.value)
+                        }}
+                        onFocus={() => setDeskSearchOn(true)}
+                        onBlur={() => {
+                            if (searchValue.length === 0) {
+                                setDeskSearchOn(false)
+                            }
+                        }}
+                        className={`
+                            outline-none
+                            transition-all duration-300
+                            ${deskSearchOn ? 'opacity-100 bg-white' : 'text-opacity-0'}
+                            
+                            bg-gray-100 border border-gray-300 rounded-3xl caret-foreground/20 px-5! text-foreground/80
+                            
+                        `}
+                        />
+
+                        <label htmlFor="" 
+                        className={`
+                            absolute text-gray-600/60 text-sm inset-0 w-full h-full flex items-center p-3 gap-x-3 pointer-events-none
+                            transition-all duration-300
+                            ${(deskSearchOn || searchValue.length > 0) ? 'opacity-0' : 'opacity-100'}
+                        `}>
+                            <FaSearch /> <span>Buscar mesa</span>
+                        </label>
+                    </div>
+
+                    {/* input de busca mobile */}
+
+                    <div 
+                    className={`
+                        md:hidden
+                        absolute inset-0
+                        origin-right transition-all duration-300
+                        ${mobileSearchOn || searchValue.length > 0 ? 'visible pointer-events-auto scale-x-100' : 'invisible scale-x-0 pointer-events-none'}
+                    `}
+                    >
+                        <input type="search" name="" id="" 
+                        ref={mobileSearchRef}
+                        value={searchValue}
+                        onChange={(e) => {
+                            setSearchValue(e.target.value)
+                            if (e.target.value.length === 0) {
+                                setMobileSearchOn(false)
+                            }
+                        }}
+                        onFocus={() => setMobileSearchOn(true)}
+                        onBlur={() => {
+                            if (searchValue.length === 0) {
+                                setMobileSearchOn(false)
+                            }
+                        }}
+                        className={`
+                            w-full
+                            absolute inset-0 z-10 outline-none
+                            transition-all duration-300
+                            ${mobileSearchOn ? 'opacity-100 bg-white px-5! border border-gray-300 visible ' : 'text-opacity-0 opacity-0 invisible'}
+                            
+                            rounded-3xl caret-foreground/20 text-foreground/80
+                            focus:bg-white
+                        `}
+                        />
+                    </div>
+                    
+                </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-5 md:max-h-155 no-scrollbar overflow-y-scroll">
-                    {tables.map((t) => (
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-5 md:max-h-155 no-scrollbar overflow-y-scroll">
+                    {tables.map((t, i) => (
                         <TableCard key={`${t.id}:${t.label}`} table={t}
                             onQr={() => setQr(t)}
                             onRename={(newLabel) => act(() => updateTable(token, t.id, { label: newLabel }))}
                             onActive={(active) => act(() => updateTable(token, t.id, { active }))}
-                            onDelete={() => act(() => removeTable(token, t.id))}/>
+                            onDelete={() => act(() => removeTable(token, t.id))}
+                            tableIndex={i + 1}
+                            />
                     ))}
                 </div>
             </div>
