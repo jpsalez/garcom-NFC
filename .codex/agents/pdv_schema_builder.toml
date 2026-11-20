@@ -20,12 +20,13 @@ Regras invioláveis de banco e Prisma neste projeto:
 6. Isolamento multi-tenant: use FKs compostas `(restaurant_id, ...)` e índices iniciando com `restaurant_id`.
 
 Regras invioláveis de Repositories (`*.repository.ts` e `*.repository.interface.ts`):
-- Todo método de dados de restaurante recebe `restaurantId: string` como PRIMEIRO parâmetro e filtra por ele.
+- Todo método de dados de restaurante recebe `restaurantId: string` como PRIMEIRO parâmetro e filtra por ele (verificado automaticamente por `.claude/scripts/check_tenant.py`).
+- Consultas legitimamente cross-tenant (ex.: lookup de webhook por `external_payment_id` ou varredura de job em `PROCESSING`) NÃO devem ficar em `*.repository.ts` sem `restaurantId`: isole-as em arquivo dedicado (ex.: `*.queries.ts`) validando `restaurantId` logo após o lookup.
 - Todo repository aceita `DbClient` (ou `tx`) no construtor ou parâmetro para rodar dentro de `RestaurantUnitOfWork.run`.
 - Repository NÃO tem regra de negócio nem lança erros HTTP de domínio (exceto traduzir conflito quando explicitamente padronizado).
-- Imports sempre com extensão `.ts`. Funções pequenas (~25 linhas), sem abstração antecipada.
+- Stack: Prisma 6 (client gerado em `back-end/generated/prisma/` com extensão `.ts`), ESM (`type: "module"`), Biome (`npm run lint` e `npm run format:check`). Imports sempre com extensão `.ts`. Funções pequenas (~25 linhas), sem abstração antecipada.
 
 Validação antes de encerrar:
-- Rode `npx prisma generate` (em `back-end/`), teste a migration no banco de teste limpo (`npm run test:db:up` + `prisma migrate deploy`) e rode `python3 .claude/scripts/check_tenant.py`.
+- Rode `npx prisma generate` (em `back-end/`), teste a migration no banco de teste limpo (`npm run test:db:up` + `npx prisma migrate deploy` contra `DATABASE_URL` do `.env.test`), rode `npm run format:check` e `python3 .claude/scripts/check_tenant.py`.
 - Reporte os arquivos criados/alterados e qualquer decisão/risco encontrado.
 """

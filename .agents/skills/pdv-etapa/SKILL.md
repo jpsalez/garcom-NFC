@@ -20,9 +20,10 @@ Crie uma branch local dedicada: `pdv/etapa-<N>-<slug>` (a partir de `dev`; nunca
 2. **Banco e Repositories (`pdv_schema_builder`):** delegue alterações de `schema.prisma`, migrations SQL (seguindo `/pdv-migration`) e `*.repository.ts` da etapa.
 3. **Testes primeiro — TDD (`pdv_test_builder`):** delegue a escrita dos testes da matriz da etapa em `back-end/tests/`. Rode e confirme a falha pelo motivo certo.
 4. **Implementação principal** (escolha conforme a etapa):
-   - Etapas 0, 1, 2, 3 → **`pdv_domain_builder`** (`tabs`, `orders` PDV, `payments` N0, `cash-shifts`, `capabilities`, `Socket.IO`, OpenAPI).
-   - Etapas 4 e 6 → **`pdv_integrations_builder`** (`Mercado Pago Point`, `crypto.ts`, webhooks HMAC, `Notaas`/`Focus NFe`, jobs).
-   - Etapa 5 → **`pdv_analytics_builder`** (`reports`, `daily_sales`, `product_sales_daily`, KPIs SQL, `forecast.engine.ts`, `anomaly.engine.ts`).
+   - Etapas 0, 1 e 3 → **`pdv_domain_builder`** (`capabilities`, `restaurant/settings`, `tabs`, `orders` PDV, `cash-shifts`, `Socket.IO`, OpenAPI).
+   - Etapa 2 → **`pdv_domain_builder`** (`tab-adjustments`, `payment-requests`, `tabs.close/cancel`, `payments` N0 + `manual.provider.ts`).
+   - Etapas 4 e 6 → **`pdv_integrations_builder`** (`Mercado Pago Point`, `crypto.ts`, webhooks HMAC, `Notaas`/`Focus NFe`, jobs e ganchos em `payments`/`tabs`).
+   - Etapa 5 → **`pdv_analytics_builder`** (`reports`, `daily_sales`, `product_sales_daily`, KPIs SQL, `forecast.engine.ts`, `anomaly.engine.ts` e hook `applyTabDelta` em `tabs`/`payments`).
 5. **Verificação verde (`pdv_test_builder`):** rode toda a suíte afetada + regressão de `menu-orders`, `sessions`, `tables` e `tenant-isolation`.
 6. **Auditoria obrigatória (`pdv_auditor` — read-only):** rode o auditor sobre todo o diff + scripts (`verify.py`, `check_tenant.py`, `routes_inventory.py`, `doc_drift.py`). Corrija TODOS os achados `CRÍTICO` e `MÉDIO` antes de encerrar.
 7. **Commit local:** faça commit local limpo na branch da etapa (mensagem curta em português no imperativo). **NUNCA faça push, merge ou PR sem pedido explícito.**
