@@ -50,7 +50,7 @@ services:
       NODE_ENV: development
       NODE_OPTIONS: "--max-old-space-size=256"
       MALLOC_ARENA_MAX: "2"
-      API_WATCH: ${API_WATCH:-0}
+      API_WATCH: ${API_WATCH:-1}
       PORT: 4000
       MEDIA_ROOT: /data/media
       # Use caracteres seguros em URL na senha do banco (evite @ : / ? #)

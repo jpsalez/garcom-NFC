@@ -26,7 +26,7 @@ Criar o primeiro restaurante: `POST /auth/register` (pelo Swagger). Dados de exe
 
 Configure portas e JWT pelo `.env` da raiz (`JWT_SECRET`, `API_PORT`, `WEB_PORT`, `DB_PORT`). O segredo padrão serve só para desenvolvimento.
 
-Para desenvolver com atualização automática e manter o front compilado, rode `API_WATCH=1 docker compose up --build --watch` e deixe esse terminal aberto. Ao salvar, o Compose reconstrói só o front ou o Node recarrega só a API, conforme o arquivo alterado. Depois que o build do front terminar, recarregue a página no navegador.
+Para desenvolver com atualização automática e manter o front compilado, rode `docker compose up --build --watch` e deixe esse terminal aberto. Ao salvar, o Compose reconstrói só o front ou o Node recarrega só a API (`API_WATCH=1` já vem ativo por padrão; use `API_WATCH=0` para desativar), conforme o arquivo alterado. Depois que o build do front terminar, recarregue a página no navegador.
 
 Para hot reload instantâneo no navegador, pare o serviço `web` e rode `npm run dev` em `front-end/` com as dependências instaladas. Para testar redefinição de senha, use `SMTP_URL=smtp://mailpit:1025 docker compose --profile mail up -d api mailpit` e abra http://localhost:8025.
 
