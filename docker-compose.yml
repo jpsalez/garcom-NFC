@@ -149,6 +149,15 @@ services:
         condition: service_started
     ports:
       - "${WEB_PORT:-3000}:3000"
+    develop:
+      watch:
+        - path: ./front-end
+          action: rebuild
+          ignore:
+            - .next/
+            - node_modules/
+            - next-env.d.ts
+            - '*.tsbuildinfo'
 
 volumes:
   pgdata:
