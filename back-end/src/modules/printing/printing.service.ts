@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { inject, injectable } from "tsyringe";
-import type { print_destinations } from "../../../generated/prisma/client.ts";
+import type { print_delivery_mode, print_destinations } from "../../../generated/prisma/client.ts";
 import {
   type ActorContext,
   type Capability,
@@ -16,6 +16,7 @@ import type {
   IRestaurantUnitOfWork,
   RestaurantTransaction,
 } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
+import type { INotifier } from "../../shared/realtime/notifier.ts";
 import { encodeCursor } from "../../shared/utils/cursor.ts";
 import { OrdersRepository } from "../orders/orders.repository.ts";
 import {
@@ -30,9 +31,11 @@ import { hashToken } from "../../shared/utils/token.ts";
 import type { IPrintingService, PrintPayload, PrintingStatus } from "./printing.interfaces.ts";
 import type { IPrintingRepository } from "./printing.repository.interface.ts";
 import { PrintingRepository } from "./printing.repository.ts";
+import { readStationSocketTicket, signStationSocketTicket } from "./station-socket-ticket.ts";
 
+const browserHeartbeatMs = 30_000;
 const testTtlMs = 5 * 60 * 1000;
-const clearTest = { test_token: null, test_status: null, test_expires_at: null };
+const clearTest = { test_token: null, test_status: null, test_expires_at: null, browser_test_confirmed: false };
 
 function activeTest(row: print_destinations, now: Date) {
   return row.test_token && row.test_expires_at && row.test_expires_at > now &&
@@ -55,6 +58,10 @@ function status(row: print_destinations | null, now = new Date()): PrintingStatu
     paired: Boolean(row?.credential_hash),
     last_contact_at: row?.last_contact_at ?? null,
     test_status: testStatus,
+    mode: row?.mode ?? "CLOUDPRNT",
+    paper_width: row?.paper_width ?? 80,
+    test_confirmed: testStatus === "SENT" && (row?.mode !== "BROWSER" || row.browser_test_confirmed),
+    test_id: row?.test_token ?? null,
   };
 }
 
@@ -63,6 +70,7 @@ export class PrintingService implements IPrintingService {
   constructor(
     @inject("PrintingRepository") private repository: IPrintingRepository,
     @inject("RestaurantUnitOfWork") private unit: IRestaurantUnitOfWork,
+    @inject("Notifier") private notifier: INotifier,
   ) {}
 
   private tenant(actor: ActorContext, capability: Capability = "printing:configure") {
@@ -77,13 +85,13 @@ export class PrintingService implements IPrintingService {
 
   async setEnabled(actor: ActorContext, enabled: boolean) {
     const restaurantId = this.tenant(actor);
-    return this.unit.run(
+    const updated = await this.unit.run(
       restaurantId,
       async ({ db, now }) => {
         const repository = new PrintingRepository(db);
         const row = await repository.get(restaurantId, destination);
         if (enabled && !row?.enabled) {
-          if (!row?.credential_hash || row.test_status !== "SENT") {
+          if (!row?.credential_hash || !status(row, now).test_confirmed) {
             throw new ConflictError("Conclua a impressão de teste antes de ativar", "PRINT_TEST_REQUIRED");
           }
           if (!row.last_contact_at || row.last_contact_at <= offlineSince(now)) {
@@ -101,26 +109,40 @@ export class PrintingService implements IPrintingService {
       },
       { actor, capability: "printing:configure" },
     );
+    if (enabled && updated.mode === "BROWSER") this.notifier.wakePrintStation(restaurantId);
+    return updated;
   }
 
   async provision(actor: ActorContext) {
-    const restaurantId = this.tenant(actor);
     const serverUrl = new URL("/api/v1/printing/cloudprnt", process.env.PUBLIC_APP_URL);
     if (process.env.NODE_ENV === "production" && serverUrl.protocol !== "https:") {
       throw new ConflictError("O endereço público da API precisa usar HTTPS", "PRINT_HTTPS_REQUIRED");
     }
-    return this.unit.run(
+    const password = await this.rotateCredential(actor, "CLOUDPRNT", 80);
+    return { username: "psiu", password, url: serverUrl.href };
+  }
+
+  provisionBrowser(actor: ActorContext, paperWidth: 58 | 80) {
+    return this.rotateCredential(actor, "BROWSER", paperWidth);
+  }
+
+  private async rotateCredential(actor: ActorContext, mode: print_delivery_mode, paperWidth: number) {
+    const restaurantId = this.tenant(actor);
+    const credential = await this.unit.run(
       restaurantId,
       async ({ db, now }) => {
         const repository = new PrintingRepository(db);
-        const password = `cloud_${randomBytes(32).toString("base64url")}`;
+        const prefix = mode === "BROWSER" ? "station" : "cloud";
+        const credential = `${prefix}_${randomBytes(32).toString("base64url")}`;
         await repository.hold(restaurantId, destination);
         await repository.interruptSending(restaurantId, destination);
-        await repository.saveCredential(restaurantId, destination, hashToken(password), now);
-        return { username: "psiu", password, url: serverUrl.href };
+        await repository.saveCredential(restaurantId, destination, { hash: hashToken(credential), now, mode, paperWidth });
+        return credential;
       },
       { actor, capability: "printing:configure" },
     );
+    this.notifier.disconnectPrintStation(restaurantId);
+    return credential;
   }
 
   async revoke(actor: ActorContext) {
@@ -142,11 +164,12 @@ export class PrintingService implements IPrintingService {
       },
       { actor, capability: "printing:configure" },
     );
+    this.notifier.disconnectPrintStation(restaurantId);
   }
 
-  queueTest(actor: ActorContext) {
+  async queueTest(actor: ActorContext) {
     const restaurantId = this.tenant(actor);
-    return this.unit.run(
+    const updated = await this.unit.run(
       restaurantId,
       async ({ db, now }) => {
         const repository = new PrintingRepository(db);
@@ -156,6 +179,7 @@ export class PrintingService implements IPrintingService {
         }
         if (activeTest(row, now)) return status(row, now);
         const updated = await repository.update(restaurantId, destination, {
+          browser_test_confirmed: false,
           test_token: randomUUID(),
           test_status: "PENDING",
           test_expires_at: new Date(now.getTime() + testTtlMs),
@@ -164,10 +188,46 @@ export class PrintingService implements IPrintingService {
       },
       { actor, capability: "printing:configure" },
     );
+    if (updated.mode === "BROWSER" && updated.test_status === "PENDING") this.notifier.wakePrintStation(restaurantId);
+    return updated;
+  }
+
+  verifyBrowserTest(actor: ActorContext, testId: string) {
+    const restaurantId = this.tenant(actor);
+    return this.unit.run(
+      restaurantId,
+      async ({ db, now }) => {
+        const repository = new PrintingRepository(db);
+        const row = await repository.get(restaurantId, destination);
+        if (row?.mode !== "BROWSER" || row.test_status !== "SENT" || row.test_token !== testId) {
+          throw new ConflictError("Envie uma nova via de teste antes de confirmar", "PRINT_TEST_REQUIRED");
+        }
+        const verified = await repository.update(restaurantId, destination, { browser_test_confirmed: true });
+        return status(verified, now);
+      },
+      { actor, capability: "printing:configure" },
+    );
+  }
+
+  async issueStationSocketTicket(credential: string) {
+    const hash = hashToken(credential);
+    await this.stationRestaurant(hash);
+    return signStationSocketTicket(hash);
+  }
+
+  authenticateStationSocket(ticket: string) {
+    return this.stationRestaurant(readStationSocketTicket(ticket));
+  }
+
+  private async stationRestaurant(credentialHash: string) {
+    const scope = await this.repository.findByHash(credentialHash, { activeMode: "BROWSER" });
+    if (!scope) throw new UnauthorizedError("Credencial de impressão inválida");
+    return scope.restaurant_id;
   }
 
   private async withPrinter<T>(
     credential: string,
+    mode: print_delivery_mode,
     work: (context: RestaurantTransaction, row: print_destinations, hash: string) => Promise<T>,
   ) {
     const hash = hashToken(credential);
@@ -180,46 +240,66 @@ export class PrintingService implements IPrintingService {
         const { db, now, restaurant } = context;
         const repository = new PrintingRepository(db);
         const row = await repository.get(restaurantId, destination);
-        if (!restaurant.active || row?.credential_hash !== hash)
+        if (!restaurant.active || row?.credential_hash !== hash || row.mode !== mode)
           throw new UnauthorizedError("Credencial de impressão inválida");
         await repository.expire(restaurantId, destination, now);
         await repository.hold(restaurantId, destination, offlineSince(now));
-        await repository.update(restaurantId, destination, { last_contact_at: now });
+        if (mode !== "BROWSER" || !row.last_contact_at || now.getTime() - row.last_contact_at.getTime() >= browserHeartbeatMs) {
+          await repository.update(restaurantId, destination, { last_contact_at: now });
+        }
         return work(context, row, hash);
       },
       { allowInactive: true },
     );
   }
 
+  private async nextToken({ db, now }: RestaurantTransaction, row: print_destinations) {
+    const repository = new PrintingRepository(db);
+    const { restaurant_id: restaurantId, destination } = row;
+    if (await repository.sending(restaurantId, destination)) return null;
+    if (activeTest(row, now)) return row.test_status === "PENDING" ? row.test_token : null;
+    if (!row.enabled) return null;
+    await repository.suppressCancelled(restaurantId, destination, now);
+    return (await repository.next(restaurantId, destination, now))?.id ?? null;
+  }
+
   poll(credential: string, ready: boolean) {
-    return this.withPrinter(credential, async ({ db, now }, row) => {
-      if (!ready) return null;
-      const repository = new PrintingRepository(db);
-      const { restaurant_id: restaurantId, destination } = row;
-      if (await repository.sending(restaurantId, destination)) return null;
-      if (activeTest(row, now)) return row.test_status === "PENDING" ? row.test_token : null;
-      if (!row.enabled) return null;
-      await repository.suppressCancelled(restaurantId, destination, now);
-      return (await repository.next(restaurantId, destination, now))?.id ?? null;
-    });
+    return this.withPrinter(credential, "CLOUDPRNT", (context, row) =>
+      ready ? this.nextToken(context, row) : Promise.resolve(null),
+    );
   }
 
   async download(credential: string, token: string) {
-    const payload = await this.withPrinter(credential, async ({ db, now }, row, hash) => {
-      const repository = new PrintingRepository(db);
-      const { restaurant_id: restaurantId, destination } = row;
-      if (token !== row.test_token) return this.downloadOrder({ db, now }, row, hash, token);
-      if (!activeTest(row, now) || await repository.sending(restaurantId, destination)) return null;
-      if (row.test_status === "PENDING") {
-        await repository.update(restaurantId, destination, {
-          test_status: "SENDING",
-          test_expires_at: new Date(now.getTime() + reservationTtlMs),
-        });
-      }
-      return "TEST" as const;
-    });
+    const payload = await this.withPrinter(credential, "CLOUDPRNT", (context, row, hash) =>
+      this.reserveDocument(context, row, hash, token),
+    );
     if (!payload) throw new NotFoundError("Comanda indisponível");
     return payload;
+  }
+
+  claimBrowser(credential: string) {
+    return this.withPrinter(credential, "BROWSER", async (context, row, hash) => {
+      const token = await this.nextToken(context, row);
+      if (!token) return null;
+      // A estação recebe o documento só na transação que o reservou.
+      const document = await this.reserveDocument(context, row, hash, token);
+      return document ? { token, document, paper_width: row.paper_width, valid_for_ms: reservationTtlMs } : null;
+    });
+  }
+
+  private async reserveDocument(context: RestaurantTransaction, row: print_destinations, hash: string, token: string) {
+    if (token !== row.test_token) return this.downloadOrder(context, row, hash, token);
+    const { db, now } = context;
+    const repository = new PrintingRepository(db);
+    const { restaurant_id: restaurantId, destination } = row;
+    if (!activeTest(row, now) || await repository.sending(restaurantId, destination)) return null;
+    if (row.test_status === "PENDING") {
+      await repository.update(restaurantId, destination, {
+        test_status: "SENDING",
+        test_expires_at: new Date(now.getTime() + reservationTtlMs),
+      });
+    }
+    return "TEST" as const;
   }
 
   private async downloadOrder(
@@ -255,12 +335,21 @@ export class PrintingService implements IPrintingService {
       reservation_expires_at: new Date(now.getTime() + reservationTtlMs),
       reservation_credential_hash: hash,
       reported_outcome: null,
+      delivery_mode: row.mode,
     });
     return payload;
   }
 
-  async confirm(credential: string, token: string, success: boolean) {
-    await this.withPrinter(credential, async ({ db, now }, row, hash) => {
+  confirm(credential: string, token: string, success: boolean) {
+    return this.report(credential, "CLOUDPRNT", token, success);
+  }
+
+  reportBrowser(credential: string, token: string, submitted: boolean) {
+    return this.report(credential, "BROWSER", token, submitted);
+  }
+
+  private async report(credential: string, mode: print_delivery_mode, token: string, success: boolean) {
+    await this.withPrinter(credential, mode, async ({ db, now }, row, hash) => {
       const repository = new PrintingRepository(db);
       const { restaurant_id: restaurantId, destination } = row;
       const result = success ? "SENT" : "UNCERTAIN";
@@ -298,9 +387,9 @@ export class PrintingService implements IPrintingService {
     );
   }
 
-  review(actor: ActorContext, input: PrintReview) {
+  async review(actor: ActorContext, input: PrintReview) {
     const restaurantId = this.tenant(actor);
-    return this.unit.run(
+    const updated = await this.unit.run(
       restaurantId,
       async ({ db, now }) => {
         const repository = new PrintingRepository(db);
@@ -321,11 +410,15 @@ export class PrintingService implements IPrintingService {
       },
       { actor, capability: "printing:configure" },
     );
+    if (input.decision === "RELEASE" && updated.enabled && updated.mode === "BROWSER") {
+      this.notifier.wakePrintStation(restaurantId);
+    }
+    return updated;
   }
 
-  reprint(actor: ActorContext, orderId: string, input: PrintReprint) {
+  async reprint(actor: ActorContext, orderId: string, input: PrintReprint) {
     const restaurantId = this.tenant(actor, "printing:operate");
-    return this.unit.run(
+    const result = await this.unit.run(
       restaurantId,
       async ({ db, now }) => {
         const repository = new PrintingRepository(db);
@@ -334,17 +427,17 @@ export class PrintingService implements IPrintingService {
         if (existing) {
           if (existing.reason !== input.reason || existing.requested_by !== actor.id)
             throw new ConflictError("Chave de segunda via já utilizada", "PRINT_REPRINT_KEY_CONFLICT");
-          return { job: jobView(existing), replayed: true };
+          return { job: existing, replayed: true };
         }
         return {
-          job: jobView(
-            await this.createReprint(restaurantId, { db, now }, orderId, actor.id, sourceEvent, input.reason),
-          ),
+          job: await this.createReprint(restaurantId, { db, now }, orderId, actor.id, sourceEvent, input.reason),
           replayed: false,
         };
       },
       { actor, capability: "printing:operate" },
     );
+    if (!result.replayed && result.job.status === "PENDING") this.notifier.wakePrintStation(restaurantId);
+    return { job: jobView(result.job), replayed: result.replayed };
   }
 
   private async createReprint(

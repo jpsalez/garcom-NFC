@@ -208,7 +208,7 @@ export default function PrintJobsPanel({ enabled, orders }: { enabled: boolean; 
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(job.status)}`}>
-                      {printJobStatusLabel[job.status]}
+                      {job.status === "SENT" && job.delivery_mode === "BROWSER" ? "Enviada pelo navegador" : printJobStatusLabel[job.status]}
                     </span>
                     {tableLabel && <span className="text-sm font-bold">{tableLabel}</span>}
                     <span className="text-xs font-medium text-slate-700">

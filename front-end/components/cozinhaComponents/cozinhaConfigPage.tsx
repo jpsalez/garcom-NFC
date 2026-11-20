@@ -4,14 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { isPrinterRecentlyOnline } from "@/lib/printingState";
-import type { PrinterSetup, PrintingStatus, PrintJob, PrintReviewDecision } from "@/lib/printingTypes";
+import type { PrintDeliveryMode, PrinterSetup, PrintingStatus, PrintJob, PrintPaperWidth, PrintReviewDecision } from "@/lib/printingTypes";
 import {
+  connectBrowserPrintStation,
   getKitchenPrinting,
   provisionKitchenPrinter,
   listPrintJobs,
   revokeKitchenPrinter,
   queueKitchenPrintTest,
   updateKitchenPrinting,
+  verifyBrowserPrintTest,
 } from "@/services/printing";
 
 const button = "rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
@@ -33,6 +35,12 @@ export default function CozinhaConfigPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [chosenMode, setChosenMode] = useState<PrintDeliveryMode | null>(null);
+  const [chosenWidth, setChosenWidth] = useState<PrintPaperWidth | null>(null);
+
+  const mode = chosenMode ?? status?.mode ?? "CLOUDPRNT";
+  const paperWidth = chosenWidth ?? status?.paper_width ?? 80;
+  const browserStation = status?.mode === "BROWSER";
 
   const load = useCallback(async () => {
     try {
@@ -108,10 +116,25 @@ export default function CozinhaConfigPage() {
   function handleProvision() {
     setConfirmation(null);
     setSetup(null);
+    if (mode === "BROWSER") {
+      void runAction(async () => {
+        await connectBrowserPrintStation(paperWidth);
+        await load();
+      }, "Navegador vinculado. Abra a estação neste computador para receber as comandas.");
+      return;
+    }
     void runAction(async () => {
       setSetup(await provisionKitchenPrinter());
       await load();
     }, "Credenciais geradas. Configure a impressora para conectá-la.");
+  }
+
+  function handleVerifyTest() {
+    if (!status?.test_id) return;
+    const token = status.test_id;
+    void runAction(async () => {
+      setStatus(await verifyBrowserPrintTest(token));
+    }, "Via de teste confirmada.");
   }
 
   function handleTest() {
@@ -170,6 +193,7 @@ export default function CozinhaConfigPage() {
 
   const testInProgress = status?.test_status === "PENDING" || status?.test_status === "SENDING";
   const testPassed = status?.test_status === "SENT";
+  const testConfirmed = status?.test_confirmed ?? false;
 
   return (
     <main className="mx-auto w-full max-w-4xl space-y-6 p-5 pb-16 sm:p-8">
@@ -178,7 +202,7 @@ export default function CozinhaConfigPage() {
           <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Configurações da cozinha</p>
           <h1 className="mt-1 text-3xl font-bold">Impressão automática</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Conecte uma Star mC-Print3 de 80 mm com CloudPRNT HTTP à internet.
+            Escolha como a cozinha vai receber as comandas.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -202,7 +226,7 @@ export default function CozinhaConfigPage() {
             <h2 className="text-lg font-bold">Estado do serviço</h2>
             <dl className="mt-4 grid gap-4 sm:grid-cols-3">
               <div className="rounded-xl bg-slate-50 p-3">
-                <dt className="text-xs text-slate-500">Impressora</dt>
+                <dt className="text-xs text-slate-500">{browserStation ? "Navegador da cozinha" : "Impressora de rede"}</dt>
                 <dd className="mt-1 font-semibold">
                   {online ? "Conectada" : status.paired ? "Aguardando conexão" : "Não configurada"}
                 </dd>
@@ -216,7 +240,7 @@ export default function CozinhaConfigPage() {
                 <dd className="mt-1 text-sm font-semibold">{formatDateTime(status.last_contact_at)}</dd>
                 {status.paired && status.last_contact_at && (
                   <p className="mt-1 text-xs text-slate-600">
-                    {online ? "Impressora online recentemente" : "Sem contato nos últimos 5 minutos"}
+                    {online ? "Contato recente" : "Sem contato nos últimos 5 minutos"}
                   </p>
                 )}
               </div>
@@ -226,20 +250,54 @@ export default function CozinhaConfigPage() {
           <section aria-label="Conexão da impressora" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div>
               <h2 className="text-lg font-bold">Conexão da impressora</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Use firmware 3.2 ou posterior. Na configuração CloudPRNT da impressora, informe a URL do servidor, o usuário e a senha abaixo.
-              </p>
+              <label className="mt-3 block text-sm font-medium">
+                Modo de impressão
+                <select value={mode} onChange={(event) => {
+                  setChosenMode(event.target.value === "BROWSER" ? "BROWSER" : "CLOUDPRNT");
+                  setConfirmation(null);
+                  setSetup(null);
+                }} disabled={busy} className="mt-1 block rounded-lg border border-slate-300 bg-white p-2">
+                  <option value="CLOUDPRNT">Star CloudPRNT</option>
+                  <option value="BROWSER">Navegador da cozinha · USB ou Bluetooth</option>
+                </select>
+              </label>
+              {mode === "BROWSER" ? (
+                <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-slate-600">
+                  <li>Neste computador, conecte a térmica e defina-a como impressora padrão no Windows.</li>
+                  <li>Use o Edge 144 ou posterior com a política de impressão silenciosa habilitada.</li>
+                  <li>Vincule o navegador, abra a estação e mantenha a aba aberta.</li>
+                </ol>
+              ) : (
+                <p className="mt-3 text-sm text-slate-600">
+                  Na Star mC-Print3 de 80 mm, use firmware 3.2 ou posterior e informe a URL e as credenciais no painel CloudPRNT.
+                </p>
+              )}
+              {mode === "BROWSER" && (
+                <label className="mt-3 block text-sm font-medium">
+                  Largura da bobina
+                  <select value={paperWidth} onChange={(event) => setChosenWidth(event.target.value === "58" ? 58 : 80)}
+                    disabled={busy} className="mt-1 block rounded-lg border border-slate-300 bg-white p-2">
+                    <option value={58}>58 mm</option>
+                    <option value={80}>80 mm</option>
+                  </select>
+                </label>
+              )}
             </div>
             <div className="flex flex-wrap gap-3">
               <button type="button" onClick={() => status.paired ? setConfirmation("replace") : handleProvision()} disabled={busy} className={button}>
-                {status.paired ? "Gerar novas credenciais" : "Gerar credenciais"}
+                {mode === "BROWSER" ? "Vincular este navegador" : status.paired ? "Gerar novas credenciais" : "Gerar credenciais"}
               </button>
               {status.paired && (
                 <button type="button" onClick={() => setConfirmation("revoke")} disabled={busy} className={secondary}>
-                  Desconectar impressora
+                  {browserStation ? "Desvincular estação" : "Desconectar impressora"}
                 </button>
               )}
             </div>
+            {browserStation && status.paired && (
+              <Link href="/estacao-impressao" target="_blank" rel="noopener" className={secondary + " inline-block"}>
+                Abrir estação de impressão
+              </Link>
+            )}
             {confirmation && (
               <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
                 <p>A credencial atual será revogada e a impressão automática ficará pausada.</p>
@@ -266,14 +324,24 @@ export default function CozinhaConfigPage() {
             <button type="button" onClick={handleTest} disabled={busy || !online || testInProgress} className={secondary}>
               Imprimir via de teste
             </button>
-            {testInProgress && <p role="status" className="text-sm">Aguardando confirmação da impressora.</p>}
-            {testPassed && <p role="status" className="text-sm text-emerald-800">A impressora confirmou a via de teste.</p>}
+            {testInProgress && <p role="status" className="text-sm">
+              {browserStation ? "Aguardando envio pela estação." : "Aguardando confirmação da impressora."}
+            </p>}
+            {browserStation && testPassed && !testConfirmed && (
+              <div className="space-y-2">
+                <p className="text-sm">Confirme se a via saiu no papel sem abrir uma janela de impressão.</p>
+                <button type="button" onClick={handleVerifyTest} disabled={busy} className={secondary}>A via saiu automaticamente</button>
+              </div>
+            )}
+            {testConfirmed && <p role="status" className="text-sm text-emerald-800">
+              {browserStation ? "Via de teste confirmada." : "A impressora confirmou a via de teste."}
+            </p>}
             {status.test_status === "FAILED" && <p role="status" className="text-sm text-amber-800">O teste expirou antes de ser retirado. Verifique a impressora e tente novamente.</p>}
             {status.test_status === "UNCERTAIN" && <p role="status" className="text-sm text-amber-800">Resultado do teste incerto. Confira o papel antes de tentar novamente.</p>}
             <button
               type="button"
               onClick={() => handleToggle(!status.enabled)}
-              disabled={busy || (!status.enabled && (!online || !testPassed))}
+              disabled={busy || (!status.enabled && (!online || !testConfirmed))}
               className={status.enabled ? secondary : button}
             >
               {status.enabled ? "Pausar impressão automática" : "Ativar impressão automática"}

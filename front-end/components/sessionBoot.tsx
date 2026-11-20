@@ -4,11 +4,11 @@ import { useEffect } from "react";
 import { restoreSession } from "@/services/auth";
 
 // Roda ao abrir o app: pergunta à API quem está logado pelos cookies.
-// A tela do cliente (/m/...) não tem login: não toca em /auth.
+// A mesa e a estação usam credenciais próprias, sem consultar o login da equipe.
 export default function SessionBoot() {
     const pathname = usePathname()
-    const isCustomerPage = pathname.startsWith('/m/')
+    const needsUserSession = !pathname.startsWith('/m/') && pathname !== '/estacao-impressao'
 
-    useEffect(() => { if (!isCustomerPage) void restoreSession() }, [isCustomerPage])
+    useEffect(() => { if (needsUserSession) void restoreSession() }, [needsUserSession])
     return null
 }

@@ -1,6 +1,8 @@
 import { api } from "@/lib/api";
 import type {
+  BrowserPrintJob,
   PrinterSetup,
+  PrintPaperWidth,
   PrintingStatus,
   PrintJob,
   PrintJobPage,
@@ -45,4 +47,26 @@ export function listPrintJobs(query: PrintJobsQuery = {}) {
 // Reutilize a mesma idempotency_key e o mesmo motivo ao repetir uma tentativa de segunda via.
 export function requestOrderReprint(orderId: string, body: PrintReprintInput) {
   return api<PrintJob>(`/orders/${encodeURIComponent(orderId)}/reprints`, { method: "POST", body });
+}
+
+export function connectBrowserPrintStation(paperWidth: PrintPaperWidth) {
+  return api<void>("/printing/station/connect", { method: "POST", body: { paper_width: paperWidth } });
+}
+
+export function verifyBrowserPrintTest(token: string) {
+  return api<PrintingStatus>("/printing/station/verify-test", { method: "POST", body: { token } });
+}
+
+export function getPrintStationSocketTicket() {
+  return api<{ ticket: string }>("/printing/station/socket-ticket", {
+    method: "POST", renew: false, signal: AbortSignal.timeout(10_000),
+  });
+}
+
+export function claimBrowserPrintJob() {
+  return api<BrowserPrintJob | undefined>("/printing/station/next", { method: "POST", renew: false, signal: AbortSignal.timeout(10_000) });
+}
+
+export function reportBrowserPrintJob(token: string, submitted: boolean) {
+  return api<void>("/printing/station/result", { method: "POST", body: { token, submitted }, renew: false, signal: AbortSignal.timeout(10_000) });
 }

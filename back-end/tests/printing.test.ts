@@ -67,6 +67,10 @@ it("deixa OWNER e MANAGER gerenciar somente a própria cozinha", async () => {
     paired: false,
     last_contact_at: null,
     test_status: null,
+    mode: "CLOUDPRNT",
+    paper_width: 80,
+    test_confirmed: false,
+    test_id: null,
   });
   expect((await status(kitchen.token)).status).toBe(403);
   expect((await provision(kitchen.token)).status).toBe(403);
@@ -434,4 +438,115 @@ it("retém pedidos pendentes e interrompe a reserva ao trocar a impressora", asy
   expect((await poll(rotated)).body.jobReady).toBe(false);
   expect((await list(f.token, { status: "UNCERTAIN" })).body.jobs).toMatchObject([{ id: sending.id }]);
   expect((await list(f.token, { status: "REVIEW_REQUIRED" })).body.jobs).toHaveLength(1);
+});
+
+
+const station = "/api/v1/printing/station";
+const connectStation = (token: string, paper_width = 58) =>
+  api().post(`${station}/connect`).set(auth(token)).send({ paper_width });
+const nextStationJob = (cookie: string) => api().post(`${station}/next`).set("Cookie", cookie);
+const stationResult = (cookie: string, token: string, submitted: boolean) =>
+  api().post(`${station}/result`).set("Cookie", cookie).send({ token, submitted });
+const verifyStationTest = (owner: string, token: string) =>
+  api().post(`${station}/verify-test`).set(auth(owner)).send({ token });
+
+function stationCookie(response: { headers: Record<string, unknown> }) {
+  const cookies = response.headers["set-cookie"] as string[];
+  expect(cookies[0]).toMatch(/^kitchen_print_station=station_/);
+  expect(cookies[0]).toContain("HttpOnly");
+  expect(cookies[0]).toContain("SameSite=Strict");
+  expect(cookies[0]).toContain("Path=/api/v1/printing/station");
+  return cookies[0]?.split(";")[0] as string;
+}
+
+it("vincula só o navegador autorizado e exige conferência física da via de teste antes de ativar", async () => {
+  const f = await menuFixture();
+  const originalPrinter = await enablePrinting(f.token);
+  const kitchen = await categoryToken(f.restaurantId, "KITCHEN");
+  expect((await connectStation(kitchen.token)).status).toBe(403);
+  expect((await connectStation(f.token, 60)).status).toBe(400);
+  const connected = await connectStation(f.token);
+  expect(connected.status).toBe(204);
+  expect(connected.headers["cache-control"]).toBe("no-store");
+  expect(connected.body).toEqual({});
+  const cookie = stationCookie(connected);
+  expect((await poll(originalPrinter)).status).toBe(401);
+  expect((await api().post(`${station}/next`).set(auth(f.token))).status).toBe(401);
+  expect((await nextStationJob(cookie)).status).toBe(204);
+  expect((await status(f.token)).body).toMatchObject({ mode: "BROWSER", paper_width: 58, enabled: false });
+  const test = await queueTest(f.token);
+  expect(test.body.test_status).toBe("PENDING");
+  expect((await verifyStationTest(f.token, test.body.test_id)).status).toBe(409);
+  const arrivals = await Promise.all([nextStationJob(cookie), nextStationJob(cookie)]);
+  expect(arrivals.map((response) => response.status).sort()).toEqual([200, 204]);
+  const job = arrivals.find((response) => response.status === 200)?.body;
+  expect(job).toMatchObject({ token: test.body.test_id, document: "TEST", paper_width: 58, valid_for_ms: 120_000 });
+  expect((await stationResult(cookie, job.token, true)).status).toBe(204);
+  expect((await status(f.token)).body).toMatchObject({ test_status: "SENT", test_confirmed: false });
+  expect((await setEnabled(f.token, true)).status).toBe(409);
+  expect((await verifyStationTest(kitchen.token, job.token)).status).toBe(403);
+  expect((await verifyStationTest(f.token, randomUUID())).status).toBe(409);
+  expect((await verifyStationTest(f.token, job.token)).body.test_confirmed).toBe(true);
+  expect((await setEnabled(f.token, true)).body.enabled).toBe(true);
+
+  const order = await queueOrder(f);
+  const attempts = await Promise.all([nextStationJob(cookie), nextStationJob(cookie)]);
+  expect(attempts.map((response) => response.status).sort()).toEqual([200, 204]);
+  const claimed = attempts.find((response) => response.status === 200)?.body;
+  expect(claimed.document).toMatchObject({ order_id: order.id, table_label: f.table.label });
+  expect((await stationResult(cookie, claimed.token, true)).status).toBe(204);
+  expect((await stationResult(cookie, claimed.token, false)).status).toBe(204);
+  expect((await list(f.token, { order_id: order.id })).body.jobs).toMatchObject([
+    { status: "SENT", delivery_mode: "BROWSER", attempts: 1 },
+  ]);
+  expect((await nextStationJob(cookie)).status).toBe(204);
+});
+
+it("preserva resultado incerto após perda da estação, isola tenants e revoga no retorno ao CloudPRNT", async () => {
+  const f = await menuFixture();
+  const other = await menuFixture();
+  const cookie = stationCookie(await connectStation(f.token, 80));
+  const foreignCookie = stationCookie(await connectStation(other.token, 80));
+  await nextStationJob(cookie);
+  const test = await queueTest(f.token);
+  await nextStationJob(cookie);
+  await stationResult(cookie, test.body.test_id, true);
+  await verifyStationTest(f.token, test.body.test_id);
+  expect((await setEnabled(f.token, true)).status).toBe(200);
+
+  const order = await queueOrder(f);
+  const claim = await nextStationJob(cookie);
+  expect(claim.body.document.order_id).toBe(order.id);
+  expect((await nextStationJob(foreignCookie)).status).toBe(204);
+  expect((await stationResult(foreignCookie, claim.body.token, true)).status).toBe(204);
+  expect((await list(f.token, { order_id: order.id })).body.jobs[0].status).toBe("SENDING");
+  await prisma.print_jobs.update({
+    where: { id: claim.body.token }, data: { reservation_expires_at: new Date(0) },
+  });
+  expect((await nextStationJob(cookie)).status).toBe(204);
+  expect((await stationResult(cookie, claim.body.token, true)).status).toBe(204);
+  expect((await list(f.token, { order_id: order.id })).body.jobs[0].status).toBe("UNCERTAIN");
+
+  const cloudPassword = (await provision(f.token)).body.password;
+  expect((await nextStationJob(cookie)).status).toBe(401);
+  expect((await poll(cloudPassword)).body.jobReady).toBe(false);
+  expect((await status(f.token)).body).toMatchObject({
+    mode: "CLOUDPRNT", paper_width: 80, enabled: false, test_confirmed: false,
+  });
+});
+
+it("atualiza presença da estação no máximo uma vez por janela de trinta segundos", async () => {
+  const owner = await ownerOf("presenca-estacao");
+  const cookie = stationCookie(await connectStation(owner.token));
+  expect((await nextStationJob(cookie)).status).toBe(204);
+  const initial = (await status(owner.token)).body.last_contact_at;
+  expect(initial).toEqual(expect.any(String));
+  expect((await nextStationJob(cookie)).status).toBe(204);
+  expect((await status(owner.token)).body.last_contact_at).toBe(initial);
+  const older = new Date(Date.now() - 45_000);
+  await prisma.print_destinations.updateMany({
+    where: { restaurant_id: owner.restaurantId }, data: { last_contact_at: older },
+  });
+  expect((await nextStationJob(cookie)).status).toBe(204);
+  expect(new Date((await status(owner.token)).body.last_contact_at).getTime()).toBeGreaterThan(older.getTime());
 });

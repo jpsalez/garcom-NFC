@@ -210,6 +210,16 @@ A comanda original é criada na transação do pedido quando a impressão está 
 
 Os testes em `back-end/tests/printing.test.ts` simulam a impressora por HTTP usando PostgreSQL real. O adaptador HTTP fica em `cloudprnt.routes.ts` e a comanda em `print-ticket.ts`. A referência de protocolo é o [guia CloudPRNT da Star](https://star-m.jp/products/s_print/sdk/StarCloudPRNT/manual/en/index.html).
 
+### Impressão automática pelo navegador
+
+O destino usa um modo por vez. O modo Navegador da cozinha usa a impressora padrão do Windows e o Edge com impressão silenciosa. A credencial é um cookie HttpOnly restrito à estação e o banco guarda apenas seu hash. O gerente vincula o computador pela tela de configurações, seleciona bobina de 58 ou 80 mm e valida uma via de teste antes de ativar os pedidos. A troca de modo revoga a credencial anterior, pausa o destino e retém as comandas pendentes.
+
+`browser-printing.routes.ts` recebe as requisições sob `/api/v1/printing/station`. `POST /connect` e `POST /verify-test` exigem permissão de configuração. `POST /next` reserva a comanda na mesma transação que a entrega à estação. Uma segunda aba recebe fila vazia enquanto a reserva estiver ativa. `POST /result` distingue envio pelo navegador de resultado incerto. O evento de impressão do navegador não comprova saída em papel. Um resultado desconhecido não provoca novo envio automático.
+
+A estação se autentica no namespace Socket.IO `/print-station` com um ingresso de um minuto. O endpoint `POST /socket-ticket` exige o cookie da estação. O ingresso só autoriza a sala do restaurante e é validado contra a configuração ativa no banco. Após gravar uma comanda ou liberar trabalho, a API publica `print:available` sem dados do pedido. Conexão, reconexão e a consulta de segurança de 30 segundos também verificam a fila. O PostgreSQL continua reservando cada comanda e a presença do navegador é escrita no máximo a cada 30 segundos. O ingresso é assinado em `station-socket-ticket.ts`.
+
+`print_delivery_mode` identifica o modo configurado em `print_destinations` e o modo da entrega em `print_jobs`. A lógica compartilhada fica em `printing.routes.ts`, `printing.controller.ts`, `printing.schemas.ts`, `printing.interfaces.ts`, `printing.service.ts`, `printing.repository.interface.ts`, `printing.repository.ts` e `print-job.ts`. O enum `print_job_outcome` registra o resultado da reserva. `print_destination` e `print_job_status` descrevem o destino e os estados da fila.
+
 ### Limites e erros
 
 50 linhas por pedido, 1–20 unidades por linha, seleção máxima de 50 unidades por grupo, até 20 grupos/produto, 50 opções/grupo, 20 variantes/produto e 8 imagens/produto. Rascunho: até 100 categorias e 1000 produtos ativos. Nome até 120 caracteres; descrição 3000; observação 500. Payload JSON das rotas novas até 256 KiB; publicação validada com margem de representação para o CHECK de 2 MiB no PostgreSQL.

@@ -1,5 +1,5 @@
 import { inject, injectable } from "tsyringe";
-import type { print_destination, print_job_status, Prisma } from "../../../generated/prisma/client.ts";
+import type { print_delivery_mode, print_destination, print_job_status, Prisma } from "../../../generated/prisma/client.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import { decodeCursor } from "../../shared/utils/cursor.ts";
 import type { PrintingJobsQuery } from "./printing.schemas.ts";
@@ -10,9 +10,12 @@ export class PrintingRepository implements IPrintingRepository {
   constructor(@inject("DbClient") private db: DbClient) {}
 
   // Descobre o escopo pela prova opaca. O service a confere novamente sob o lock do restaurante.
-  findByHash(credentialHash: string) {
+  findByHash(credentialHash: string, options?: { activeMode: print_delivery_mode }) {
     return this.db.print_destinations.findUnique({
-      where: { credential_hash: credentialHash },
+      where: {
+        credential_hash: credentialHash,
+        ...(options && { mode: options.activeMode, restaurant: { active: true } }),
+      },
       select: { restaurant_id: true, destination: true },
     });
   }
@@ -23,12 +26,17 @@ export class PrintingRepository implements IPrintingRepository {
     });
   }
 
-  saveCredential(restaurantId: string, destination: print_destination, hash: string, now: Date) {
+  saveCredential(restaurantId: string, destination: print_destination,
+    setup: { hash: string; now: Date; mode: print_delivery_mode; paperWidth: number },
+  ) {
     const data = {
-      credential_hash: hash,
+      credential_hash: setup.hash,
       last_contact_at: null,
       enabled: false,
-      interrupted_at: now,
+      interrupted_at: setup.now,
+      mode: setup.mode,
+      paper_width: setup.paperWidth,
+      browser_test_confirmed: false,
       test_token: null,
       test_status: null,
       test_expires_at: null,

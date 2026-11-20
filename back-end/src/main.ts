@@ -16,6 +16,7 @@ import { container, registerDependencies } from "./shared/container/container.ts
 import type { SocketNotifier } from "./shared/realtime/socket-notifier.ts";
 import { errorHandler } from "./shared/middlewares/error.middleware.ts";
 import { startMediaCleanupJob } from "./shared/jobs/media-cleanup.job.ts";
+import type { IPrintingService } from "./modules/printing/printing.interfaces.ts";
 import type { IMediaService } from "./modules/media/media.interfaces.ts";
 
 function bootstrap() {
@@ -39,7 +40,10 @@ function bootstrap() {
   const port = Number(process.env.PORT) || 4000;
   // Servidor HTTP próprio: o Socket.IO divide a mesma porta com a API
   const httpServer = createServer(app);
-  container.resolve<SocketNotifier>("Notifier").attach(httpServer, authenticateToken, allowedOrigins);
+  const printing = container.resolve<IPrintingService>("PrintingService");
+  container.resolve<SocketNotifier>("Notifier").attach(
+    httpServer, authenticateToken, allowedOrigins, (ticket) => printing.authenticateStationSocket(ticket),
+  );
   httpServer.listen(port, () => console.log(`rodando na ${port}`));
   startSessionExpiryJob(container.resolve<ISessionsService>("SessionsService"));
   startTokenCleanupJob(container.resolve<ITokenCleanupService>("TokenCleanupService"));

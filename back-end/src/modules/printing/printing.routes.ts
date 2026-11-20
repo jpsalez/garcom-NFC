@@ -7,6 +7,7 @@ import {
   validateUuidParams,
 } from "../../shared/middlewares/validator.middleware.ts";
 import { cloudPrntRoutes } from "./cloudprnt.routes.ts";
+import { browserPrintingRoutes } from "./browser-printing.routes.ts";
 import { PrintingController } from "./printing.controller.ts";
 import {
   printingJobsQuery,
@@ -28,6 +29,7 @@ export function printingRoutes() {
   router.delete("/printing/kitchen/printer", ...managers, controller.revoke);
   router.post("/printing/kitchen/test", ...managers, controller.test);
   router.use("/printing/cloudprnt", cloudPrntRoutes());
+  router.use("/printing/station", browserPrintingRoutes());
   const operators = [ensureAuthenticated, ensureCapability("printing:operate")];
   router.get("/print-jobs", ...operators, validateQuery(printingJobsQuery), controller.list);
   router.post(

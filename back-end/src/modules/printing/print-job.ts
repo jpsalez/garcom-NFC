@@ -35,8 +35,10 @@ export function printPayload(order: OrderRecord, reprint: boolean) {
 export async function enqueueOriginal(db: DbClient, order: OrderRecord) {
   const restaurantId = order.restaurant_id;
   const repository = new PrintingRepository(db);
-  if (!(await repository.get(restaurantId, kitchenDestination))?.enabled) return;
+  const destination = await repository.get(restaurantId, kitchenDestination);
+  if (!destination?.enabled) return false;
   await repository.createOriginal(restaurantId, order.id, kitchenDestination, printPayload(order, false));
+  return destination.mode === "BROWSER";
 }
 
 export function jobView(job: print_jobs) {
@@ -45,6 +47,7 @@ export function jobView(job: print_jobs) {
     order_id: job.order_id,
     destination: job.destination,
     status: job.status,
+    delivery_mode: job.delivery_mode,
     order_version: job.order_version,
     attempts: job.attempts,
     next_attempt_at: job.next_attempt_at,

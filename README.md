@@ -43,6 +43,9 @@ Detalhes do back-end em [`back-end/README.md`](back-end/README.md).
 
 ## Impressão da cozinha
 
-A impressora consulta a API do Psiu via HTTPS. O modelo de referência é a Star mC-Print3 de 80 mm com CloudPRNT HTTP e firmware 3.2 ou posterior.
+O Psiu oferece dois modos de impressão automática em **Configurações → Impressão da cozinha**.
 
-Em **Configurações → Impressão da cozinha**, gere as credenciais e informe a URL, o usuário e a senha no painel CloudPRNT da impressora. Aguarde a conexão, imprima a via de teste e ative a impressão automática. A homologação em hardware ainda está pendente.
+- **Navegador da cozinha**. Use uma impressora instalada como padrão no Windows e o Edge 144 ou posterior com a política [SilentPrintingEnabled](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies/silentprintingenabled). Defina também o papel de 58 ou 80 mm nas preferências da impressora. Vincule o navegador nesse computador, abra a estação, envie uma via de teste e confirme que saiu sem abrir a janela de impressão. Mantenha a estação aberta e o computador ligado. A estação recebe avisos pelo Socket.IO e consulta a fila a cada 30 segundos como segurança. A fila registra o envio pelo navegador, e a equipe confere o papel quando o resultado fica incerto.
+- **Star CloudPRNT**. A impressora consulta a API via HTTPS. O modelo de referência é a Star mC-Print3 de 80 mm com CloudPRNT HTTP e firmware 3.2 ou posterior. Gere as credenciais, configure-as na impressora e envie uma via de teste antes de ativar.
+
+A compatibilidade física de cada combinação de impressora e modo precisa ser testada.

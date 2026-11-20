@@ -402,3 +402,144 @@ test('configuração aguarda confirmação da impressora e exibe revisão de pen
   assert.match(html, /Liberar selecionadas \(1\)/);
   assert.match(html, /Descartar selecionadas \(1\)/);
 });
+
+test('a via de teste e a comanda são formatadas para a bobina e enviadas sem imprimir a tela da estação', async () => {
+  const { printKitchenReceipt } = load('../lib/browserPrint.ts', {}, {
+    document: { createElement: () => frame, body: { append: (value) => assert.equal(value, frame) } },
+    window: { setTimeout, clearTimeout },
+  });
+  const printed = [];
+  const styles = [];
+  const text = [];
+  let afterPrint;
+  let removed = 0;
+  const frame = {
+    style: {},
+    setAttribute() {},
+    remove() { removed++; },
+    contentDocument: {
+      documentElement: {},
+      head: { append: (style) => styles.push(style.textContent) },
+      body: { append: (paragraph) => text.push(paragraph.textContent) },
+      createElement: () => ({}),
+      fonts: { ready: Promise.resolve() },
+    },
+    contentWindow: {
+      addEventListener: (event, handler) => { if (event === 'afterprint') afterPrint = handler; },
+      removeEventListener: () => { afterPrint = undefined; },
+      print: () => { printed.push([...text]); afterPrint(); },
+    },
+  };
+
+  assert.equal(await printKitchenReceipt({ paper_width: 58, document: 'TEST' }, () => true), true);
+  assert.match(printed[0][0], /Bobina de 58 mm/);
+  assert.match(styles[0], /width: 48mm/);
+
+  text.length = 0;
+  const order = {
+    order_id: '123', table_label: 'Mesa Açucena', created_at: '2026-11-20T00:00:00Z',
+    reprint: { label: 'SEGUNDA VIA' }, items: [{
+      product_name: 'Café', variant_name: 'Médio', quantity: 2, notes: '<sem açúcar>',
+      selections: [{ group_name: 'Acompanhamento', option_name: 'Pão', quantity: 1 }],
+    }],
+  };
+  assert.equal(await printKitchenReceipt({ paper_width: 80, document: order }, () => true), true);
+  assert.match(printed[1][0], /SEGUNDA VIA\nMesa Açucena/);
+  assert.match(printed[1][1], /2x Café.*Médio\n.*Acompanhamento: Pão\nObs\.: <sem açúcar>/);
+  assert.match(styles[1], /width: 72mm/);
+  assert.equal(await printKitchenReceipt({ paper_width: 80, document: order }, () => false), false);
+  assert.equal(printed.length, 2);
+  assert.equal(removed, 3);
+});
+
+test('estação drena a fila por aviso, agrupa avisos simultâneos e consulta após reconectar ou perder um aviso', async () => {
+  const listeners = new Map();
+  const events = new Map();
+  const queue = [];
+  const printed = [];
+  const reported = [];
+  let requests = 0;
+  let initial;
+  let fallback;
+  let clearedInterval;
+  let cleanup;
+  let release;
+  const firstPrint = new Promise((resolve) => { release = resolve; });
+  const socket = {
+    active: false,
+    on: (event, listener) => listeners.set(event, listener),
+    connect: () => { socket.active = true; },
+    disconnect: () => { socket.active = false; },
+    removeAllListeners: () => listeners.clear(),
+  };
+  const { default: Station } = load('../components/cozinhaComponents/printStationPage.tsx', {
+    react: {
+      useEffect: (effect) => { cleanup = effect(); },
+      useState: (value) => [value, () => {}],
+    },
+    'next/link': { default: () => null },
+    'socket.io-client': {
+      io: (url, options) => {
+        assert.equal(url, 'https://psiu.test/print-station');
+        assert.equal(options.autoConnect, false);
+        return socket;
+      },
+    },
+    '@/lib/api': { API_URL: 'https://psiu.test/api/v1', ApiError: MockApiError },
+    '@/lib/browserPrint': {
+      printKitchenReceipt: async (job, shouldPrint) => {
+        assert.equal(shouldPrint(), true);
+        printed.push(job.token);
+        if (job.token === 'first') await firstPrint;
+        return true;
+      },
+    },
+    '@/services/printing': {
+      claimBrowserPrintJob: async () => { requests++; return queue.shift(); },
+      getPrintStationSocketTicket: async () => ({ ticket: 'test' }),
+      reportBrowserPrintJob: async (token, submitted) => { assert.equal(submitted, true); reported.push(token); },
+    },
+  }, {
+    URL, performance,
+    window: {
+      setTimeout: (callback, ms) => { assert.equal(ms, 0); initial = callback; return 1; },
+      clearTimeout: () => {},
+      setInterval: (callback, ms) => { assert.equal(ms, 30_000); fallback = callback; return 2; },
+      clearInterval: (id) => { clearedInterval = id; },
+      addEventListener: (event, callback) => events.set(event, callback),
+      removeEventListener: (event) => events.delete(event),
+    },
+  });
+  const job = (token) => ({ token, document: {}, valid_for_ms: 120_000 });
+  renderToStaticMarkup(React.createElement(Station));
+
+  initial();
+  await tick();
+  assert.equal(requests, 1);
+  assert.equal(socket.active, true);
+
+  queue.push(job('first'), job('second'));
+  const drain = listeners.get('print:available')();
+  await tick();
+  await listeners.get('print:available')();
+  await listeners.get('print:available')();
+  assert.deepEqual(printed, ['first']);
+  assert.equal(requests, 2);
+  release();
+  await drain;
+  assert.deepEqual(printed, ['first', 'second']);
+  assert.deepEqual(reported, printed);
+  assert.equal(requests, 4);
+
+  queue.push(job('missed'));
+  fallback();
+  await tick();
+  assert.deepEqual(printed, ['first', 'second', 'missed']);
+  queue.push(job('reconnected'));
+  await listeners.get('connect')();
+  assert.deepEqual(printed, ['first', 'second', 'missed', 'reconnected']);
+  cleanup();
+  assert.equal(clearedInterval, 2);
+  assert.equal(events.size, 0);
+  assert.equal(listeners.size, 0);
+});

@@ -5,10 +5,12 @@ import { ACCESS_COOKIE, readCookie } from "../utils/cookies.ts";
 import type { INotifier } from "./notifier.ts";
 import { type ActorContext, hasCapability } from "../authorization/capabilities.ts";
 
+type AuthenticatePrintStation = (ticket: string) => Promise<string>;
 type Authenticate = (token: string) => Promise<ActorContext>;
 
 const roomOf = (restaurantId: string) => `restaurant:${restaurantId}`;
 const userRoomOf = (userId: string) => `user:${userId}`;
+const stationNamespace = "/print-station";
 const ordersRoomOf = (restaurantId: string) => `restaurant:${restaurantId}:orders`;
 
 // Uma sala por restaurante: o isolamento do tempo real é o mesmo do HTTP. Sem servidor ligado (testes), não envia nada.
@@ -18,7 +20,7 @@ export class SocketNotifier implements INotifier {
 
   // Só OWNER e STAFF entram (SUPER_ADMIN não tem restaurante); o JWT vem do cookie httpOnly do handshake, nunca na URL.
   // authenticate e origins chegam de fora (main.ts) para o notifier não depender do HTTP.
-  attach(httpServer: HttpServer, authenticate: Authenticate, origins: string[]) {
+  attach(httpServer: HttpServer, authenticate: Authenticate, origins: string[], authenticatePrintStation: AuthenticatePrintStation) {
     this.io = new Server(httpServer, { cors: { origin: origins, credentials: true } });
     this.io.use(async (socket, next) => {
       try {
@@ -31,6 +33,26 @@ export class SocketNotifier implements INotifier {
         next(new Error("Não autorizado"));
       }
     });
+
+    this.io.of(stationNamespace).use(async (socket, next) => {
+      try {
+        const ticket = socket.handshake.auth?.ticket;
+        if (typeof ticket !== "string" || ticket.length > 512) throw new Error("Ingresso inválido");
+        const restaurantId = await authenticatePrintStation(ticket);
+        socket.join(roomOf(restaurantId));
+        next();
+      } catch {
+        next(new Error("Estação não autorizada"));
+      }
+    });
+  }
+
+  wakePrintStation(restaurantId: string) {
+    this.io?.of(stationNamespace).to(roomOf(restaurantId)).emit("print:available");
+  }
+
+  disconnectPrintStation(restaurantId: string) {
+    this.io?.of(stationNamespace).in(roomOf(restaurantId)).disconnectSockets(true);
   }
 
   toRestaurant(restaurantId: string, event: string, payload: unknown) {
@@ -47,6 +69,7 @@ export class SocketNotifier implements INotifier {
 
   disconnectRestaurant(restaurantId: string) {
     this.io?.in(roomOf(restaurantId)).disconnectSockets(true);
+    this.disconnectPrintStation(restaurantId);
   }
 
   close() {

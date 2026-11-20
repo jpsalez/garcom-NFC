@@ -47,7 +47,7 @@ export class OrdersService implements IOrdersService {
           previous.request_hash !== hash
         )
           throw new ConflictError("Chave de envio já utilizada", "IDEMPOTENCY_CONFLICT");
-        return { record: previous, replayed: true };
+        return { record: previous, replayed: true, wakeStation: false };
       }
       const settings = await new OrderSettingsRepository(db).get(context.restaurantId);
       if (!settings.customer_ordering_enabled)
@@ -70,10 +70,11 @@ export class OrdersService implements IOrdersService {
         total,
         lines,
       );
-      await enqueueOriginal(db, record);
-      return { record, replayed: false };
+      const wakeStation = await enqueueOriginal(db, record);
+      return { record, replayed: false, wakeStation };
     });
     if (!result.replayed) this.notify(result.record, "order:created");
+    if (result.wakeStation) this.notifier.wakePrintStation(context.restaurantId);
     return { order: orderView(result.record), replayed: result.replayed };
   }
   private page(

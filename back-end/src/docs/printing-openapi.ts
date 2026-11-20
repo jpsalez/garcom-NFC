@@ -1,5 +1,8 @@
 import { z } from "zod";
 import {
+  browserStationResultSchema,
+  browserStationSetupSchema,
+  browserTestConfirmSchema,
   cloudPollSchema,
   printingPatchSchema,
   printingJobsQuery,
@@ -10,6 +13,9 @@ import {
 const tag = ["Impressão"];
 const cookie = [{ cookieAuth: [] }];
 const printer = [{ cloudPrinterAuth: [] }];
+const station = [{ printStationCookie: [] }];
+const mode = { type: "string", enum: ["CLOUDPRNT", "BROWSER"] };
+const paperWidth = { type: "integer", enum: [58, 80] };
 const kitchen = { type: "string", enum: ["KITCHEN"] };
 const string = { type: "string" };
 const integer = { type: "integer" };
@@ -25,13 +31,17 @@ const object = <T extends object>(properties: T) => ({
 const dateTime = { type: "string", format: "date-time" };
 const status = {
   type: "object",
-  required: ["destination", "enabled", "paired", "last_contact_at", "test_status"],
+  required: ["destination", "enabled", "paired", "last_contact_at", "test_status", "mode", "paper_width", "test_confirmed", "test_id"],
   properties: {
     destination: kitchen,
     enabled: { type: "boolean" },
     paired: { type: "boolean" },
     last_contact_at: { ...dateTime, nullable: true },
     test_status: { type: "string", nullable: true },
+    mode,
+    paper_width: paperWidth,
+    test_confirmed: { type: "boolean" },
+    test_id: nullable(uuid),
   },
 };
 const json = <T extends object>(schema: T) => ({ "application/json": { schema } });
@@ -56,6 +66,7 @@ const job = object({
   order_id: uuid,
   destination: kitchen,
   status: jobStatus,
+  delivery_mode: nullable(mode),
   order_version: nullable(integer),
   attempts: integer,
   next_attempt_at: nullable(dateTime),
@@ -121,6 +132,59 @@ export const printingPaths = {
       summary: "Coloca uma via de teste na fila, inclusive durante a pausa",
       security: cookie,
       responses: { 200: stateResponse, ...errors, 409: { description: "PRINT_PRINTER_OFFLINE" } },
+    },
+  },
+  "/printing/station/connect": {
+    post: {
+      tags: tag,
+      summary: "Vincula o navegador atual e pausa o destino até validar a impressão",
+      security: cookie,
+      requestBody: body(browserStationSetupSchema),
+      responses: { 204: { description: "Estação vinculada via cookie HttpOnly" }, ...errors },
+    },
+  },
+  "/printing/station/verify-test": {
+    post: {
+      tags: tag,
+      summary: "Confirma que a via de teste da estação saiu sem intervenção",
+      security: cookie,
+      requestBody: body(browserTestConfirmSchema),
+      responses: { 200: stateResponse, ...errors, 409: { description: "PRINT_TEST_REQUIRED" } },
+    },
+  },
+  "/printing/station/socket-ticket": {
+    post: {
+      tags: tag,
+      summary: "Emite ingresso de um minuto para o namespace Socket.IO /print-station",
+      security: station,
+      responses: {
+        200: { description: "Ingresso da estação", content: json(object({ ticket: string })) },
+        401: errors[401],
+      },
+    },
+  },
+  "/printing/station/next": {
+    post: {
+      tags: tag,
+      summary: "Reserva e entrega uma comanda de forma exclusiva à estação",
+      security: station,
+      responses: {
+        200: { description: "Comanda reservada", content: json(object({
+          token: uuid, paper_width: paperWidth, valid_for_ms: integer,
+          document: { oneOf: [{ type: "string", enum: ["TEST"] }, { type: "object" }] },
+        })) },
+        204: { description: "Estação conectada, sem comanda disponível" },
+        401: errors[401],
+      },
+    },
+  },
+  "/printing/station/result": {
+    post: {
+      tags: tag,
+      summary: "Registra envio ao navegador ou resultado incerto",
+      security: station,
+      requestBody: body(browserStationResultSchema),
+      responses: { 204: { description: "Resultado recebido" }, 401: errors[401] },
     },
   },
   "/printing/cloudprnt": {

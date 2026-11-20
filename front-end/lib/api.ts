@@ -19,6 +19,7 @@ type Options = {
   method?: string;
   body?: unknown;
   cache?: RequestCache;
+  signal?: AbortSignal;
   // Token do aparelho da mesa (X-Table-Token); a sessão do balcão vai nos cookies
   deviceToken?: string;
   // false: 401 não é login vencido (login, rotas públicas), então não tenta renovar
@@ -49,7 +50,7 @@ async function renew(): Promise<Session | null> {
 }
 
 export async function api<T>(path: string, options: Options = {}, canRetry = true): Promise<T> {
-  const { method = "GET", body, cache, deviceToken, renew = !deviceToken, text, blob } = options;
+  const { method = "GET", body, cache, signal, deviceToken, renew = !deviceToken, text, blob } = options;
   const headers: Record<string, string> = {};
   const multipart = typeof FormData !== "undefined" && body instanceof FormData;
   if (body !== undefined && !multipart) headers["Content-Type"] = "application/json";
@@ -59,6 +60,7 @@ export async function api<T>(path: string, options: Options = {}, canRetry = tru
     method,
     headers,
     cache,
+    signal,
     credentials: "include",
     body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
   });

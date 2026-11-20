@@ -38,3 +38,8 @@ export const printingPatchSchema = z.union([printingSettingsSchema, printingRevi
 export type PrintingJobsQuery = z.infer<typeof printingJobsQuery>;
 export type PrintReprint = z.infer<typeof reprintSchema>;
 export type PrintReview = z.infer<typeof printingReviewSchema>["review"];
+
+export const browserStationCredentialSchema = z.string().regex(/^station_[A-Za-z0-9_-]{43}$/);
+export const browserStationSetupSchema = z.strictObject({ paper_width: z.union([z.literal(58), z.literal(80)]) });
+export const browserStationResultSchema = z.strictObject({ token: z.uuid(), submitted: z.boolean() });
+export const browserTestConfirmSchema = z.strictObject({ token: z.uuid() });

@@ -630,6 +630,9 @@ model print_destinations {
   test_token          String?
   test_status         print_job_status?
   test_expires_at     DateTime?
+  mode                print_delivery_mode @default(CLOUDPRNT)
+  paper_width         Int                 @default(80)
+  browser_test_confirmed Boolean          @default(false)
   restaurant          restaurants       @relation(fields: [restaurant_id], references: [id], onDelete: Cascade, onUpdate: Restrict)
   jobs                print_jobs[]
 
@@ -653,6 +656,7 @@ model print_jobs {
   reservation_expires_at      DateTime?
   reservation_credential_hash String?            @db.VarChar(64)
   reported_outcome            print_job_outcome?
+  delivery_mode               print_delivery_mode?
   original_job_id             String?
   requested_by                String?
   reason                      String?            @db.VarChar(500)
@@ -665,6 +669,11 @@ model print_jobs {
   @@unique([restaurant_id, order_id, destination, id], map: "print_jobs_original_reference_key")
   @@index([restaurant_id, created_at, id])
   @@index([restaurant_id, destination, status, created_at, id], map: "print_jobs_claim_idx")
+}
+
+enum print_delivery_mode {
+  CLOUDPRNT
+  BROWSER
 }
 
 enum print_destination {

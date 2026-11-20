@@ -71,6 +71,7 @@ export const openApiSpec = {
       cookieAuth: { type: "apiKey", in: "cookie", name: "access_token" },
       tableToken: { type: "apiKey", in: "header", name: "X-Table-Token" },
       cloudPrinterAuth: { type: "http", scheme: "basic" },
+      printStationCookie: { type: "apiKey", in: "cookie", name: "kitchen_print_station" },
     },
   },
   paths: {

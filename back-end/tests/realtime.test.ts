@@ -4,6 +4,7 @@ import { io as connect, type Socket } from "socket.io-client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/server.ts";
 import { authenticateToken } from "../src/shared/middlewares/auth.middleware.ts";
+import type { IPrintingService } from "../src/modules/printing/printing.interfaces.ts";
 import type { ISessionsService } from "../src/modules/sessions/sessions.interfaces.ts";
 import { container } from "../src/shared/container/container.ts";
 import type { SocketNotifier } from "../src/shared/realtime/socket-notifier.ts";
@@ -22,7 +23,10 @@ const sockets: Socket[] = [];
 beforeAll(async () => {
   api();
   server = createServer(app);
-  container.resolve<SocketNotifier>("Notifier").attach(server, authenticateToken, []);
+  const printing = container.resolve<IPrintingService>("PrintingService");
+  container.resolve<SocketNotifier>("Notifier").attach(
+    server, authenticateToken, [], (ticket) => printing.authenticateStationSocket(ticket),
+  );
   await new Promise<void>((resolve) => server.listen(0, resolve));
   url = `http://localhost:${(server.address() as AddressInfo).port}`;
 });
@@ -382,5 +386,79 @@ describe("desconexão ao perder o acesso", () => {
 
     await gone;
     expect(counterB.connected).toBe(true);
+  });
+});
+
+describe("avisos de impressão da estação", () => {
+  const settings = "/api/v1/printing/kitchen";
+  const station = "/api/v1/printing/station";
+
+  async function bindStation(ownerToken: string) {
+    const response = await api().post(`${station}/connect`).set(auth(ownerToken)).send({ paper_width: 80 });
+    expect(response.status).toBe(204);
+    const cookie = `kitchen_print_station=${cookieOf(response, "kitchen_print_station")}`;
+    const ticket = await api().post(`${station}/socket-ticket`).set("Cookie", cookie);
+    expect(ticket.status).toBe(200);
+    return { cookie, ticket: ticket.body.ticket as string };
+  }
+
+  function connectStation(ticket?: string) {
+    const socket = connect(`${url}/print-station`, {
+      auth: { ticket }, reconnection: false, forceNew: true,
+    });
+    sockets.push(socket);
+    return new Promise<Socket>((resolve, reject) => {
+      socket.once("connect", () => resolve(socket));
+      socket.once("connect_error", reject);
+    });
+  }
+
+  it("avisa no próprio restaurante após commit e desconecta ao revogar a credencial", async () => {
+    const f = await menuFixture();
+    const other = await ownerOf("estacao-externa");
+    const localStation = await bindStation(f.token);
+    const foreignStation = await bindStation(other.token);
+    await expect(connectStation(f.token)).rejects.toThrow("Estação não autorizada");
+    expect((await api().post(`${station}/socket-ticket`).set(auth(f.token))).status).toBe(401);
+
+    const local = await connectStation(localStation.ticket);
+    const foreign = await connectStation(foreignStation.ticket);
+    const staff = await connectAs(f.token);
+    const foreignSilence = expectSilence(foreign, "print:available");
+    const staffSilence = expectSilence(staff, "print:available");
+    const claim = () => api().post(`${station}/next`).set("Cookie", localStation.cookie);
+    const report = (token: string) => api().post(`${station}/result`).set("Cookie", localStation.cookie)
+      .send({ token, submitted: true });
+
+    expect((await claim()).status).toBe(204);
+    const testSignal = next(local, "print:available");
+    expect((await api().post(`${settings}/test`).set(auth(f.token))).status).toBe(200);
+    expect(await testSignal).toBeUndefined();
+    const test = (await claim()).body;
+    expect(test.document).toBe("TEST");
+    expect((await report(test.token)).status).toBe(204);
+
+    expect((await api().post(`${station}/verify-test`).set(auth(f.token)).send({ token: test.token })).status).toBe(200);
+    const enabledSignal = next(local, "print:available");
+    expect((await api().patch(settings).set(auth(f.token)).send({ enabled: true })).status).toBe(200);
+    await enabledSignal;
+    const submit = (data: ReturnType<typeof f.submission>) =>
+      api().post("/api/v1/public/orders").set("X-Table-Token", f.deviceToken).send(data);
+    const original = f.submission();
+    const orderSignal = next(local, "print:available");
+    const created = await submit(original);
+    expect(created.status).toBe(201);
+    expect(await orderSignal).toBeUndefined();
+    const job = (await claim()).body;
+    expect(job.document.order_id).toBe(created.body.order.id);
+    expect((await report(job.token)).status).toBe(204);
+    const replaySilence = expectSilence(local, "print:available");
+    expect((await submit(original)).status).toBe(200);
+    await Promise.all([replaySilence(), foreignSilence(), staffSilence()]);
+
+    const disconnected = next(local, "disconnect");
+    expect((await api().delete(`${settings}/printer`).set(auth(f.token))).status).toBe(204);
+    await disconnected;
+    await expect(connectStation(localStation.ticket)).rejects.toThrow("Estação não autorizada");
   });
 });
