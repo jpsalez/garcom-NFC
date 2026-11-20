@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "@/lib/session";
+import { canAccessKitchen } from "@/lib/kitchenQueue";
 
-// Menu do painel: STAFF só vê os chamados; OWNER também gerencia mesas e equipe; SUPER_ADMIN gerencia os restaurantes
 export default function AdminNav() {
     const session = useSession()
     const pathname = usePathname()
@@ -15,6 +15,8 @@ export default function AdminNav() {
     if (session.user.role === 'OWNER' || (session.user.role === 'STAFF' && session.user.category === 'MANAGER')) items.push({ href: '/admin/cardapio', label: 'Cardápio' })
 
     if (session.user.role === 'OWNER' || (session.user.role === 'STAFF' && ['MANAGER', 'WAITER', 'KITCHEN'].includes(session.user.category ?? ''))) items.push({ href: '/admin/pedidos', label: 'Pedidos' })
+
+    if (canAccessKitchen(session.user)) items.push({ href: '/admin/cozinha', label: 'Cozinha' })
 
     items.push({ href: '/admin/senha', label: 'Senha' })
 

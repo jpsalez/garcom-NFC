@@ -41,6 +41,17 @@ export function listOrders(query: OrderQuery = {}) {
   return api<OrderPage>(`/orders${queryString(query)}`);
 }
 
+export async function listOpenOrders(): Promise<Pick<OrderPage, "items" | "server_time">> {
+  const items: Order[] = [];
+  let page = await listOrders({ progress: "open", limit: 100 });
+  items.push(...page.items);
+  while (page.next_cursor) {
+    page = await listOrders({ progress: "open", limit: 100, cursor: page.next_cursor });
+    items.push(...page.items);
+  }
+  return { items, server_time: page.server_time };
+}
+
 export function getOrder(id: string) {
   return api<Order>(`/orders/${encodeURIComponent(id)}`);
 }
