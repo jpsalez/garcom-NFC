@@ -7,6 +7,7 @@ import { createStaff, listStaff, removeStaff, updateStaff } from "@/services/sta
 import { FaCheckCircle, FaPlus, FaRegTrashAlt, FaSearch } from "react-icons/fa"
 import { IoIosWarning } from "react-icons/io"
 import { GoDotFill } from "react-icons/go"
+import { FaPencil } from "react-icons/fa6"
 
 function StaffCard({user, onCategory, onActive, onDelete, rowI}: {
     user: StaffUser, onCategory: (category: StaffCategory | null) => void, onActive: (active: boolean) => void, onDelete: () => void, rowI: number
@@ -185,16 +186,26 @@ function MobileStaffCard({user, onCategory, onActive, onDelete, rowI}: {
             initials += name[0].toUpperCase()
         }
     return(
-        <div className="w-full grid-rows-2">
+        <div className={`
+            w-full grid-rows-2 space-y-1
+            py-5
+            ${rowI % 2 !== 0 && 'border-y border-foreground/30'}
+            ${user.active ? '' : 'opacity-50'}
+        `}>
 
             {/* first row */}
-            <div className="w-full grid grid-cols-[45%_45%_auto]">
-
-                <p className="w-full bg-pink-100">{user.name}</p>
-
-                <p>{user.email}</p>
+            <div className="w-full grid grid-cols-[1fr_10%] gap-x-1">
 
                 <div>
+                    <div className="w-full flex items-center px-2 text-sm truncate line-clamp-1">
+                        <p >{user.name}</p>
+                    </div>
+                    <div className="w-full flex items-center text-xs truncate line-clamp-1 px-2">
+                        <p className="">{user.email}</p>
+                    </div>
+                </div>
+
+                <div className="w-8 aspect-square flex items-center justify-center">
                     {user.active ?
                     (
                         <div className="w-fit flex items-center justify-center gap-x-1 bg-linear-130 from-white to-psiu-green/40 rounded-full p-1">
@@ -213,23 +224,23 @@ function MobileStaffCard({user, onCategory, onActive, onDelete, rowI}: {
             </div>
                 
             {/* second row */}
-            <div className="w-full flex items-center">
+            <div className="w-full grid grid-cols-[80%_1fr_10%_10%] gap-x-1">
 
-                <select>
-                    <option value="">Sem categoria</option>
-                    {Object.entries(CATEGORIES).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
-                </select>
+                <div className="w-full flex items-center justify-center px-2">
+                    <select className="w-full border border-foreground rounded-lg px-2 py-1 text-sm">
+                        <option value="">Sem categoria</option>
+                        {Object.entries(CATEGORIES).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+                    </select>
+                </div>
                 
-                <div className="w-full flex items-center justify-between gap-x-3
-                [&>button]:border [&>button]:py-1!
-                ">
-                    <button>
-                        {user.active ? 'Desativar' : 'Ativar'}
-                    </button>
+                <div></div>
+            
+                <div className="w-8 aspect-square flex items-center justify-center text-lg rounded-lg shadow-lg border border-foreground">
+                    <FaPencil />
+                </div>
 
-                    <button>
-                        Excluir
-                    </button>
+                <div className="w-8 aspect-square flex items-center justify-center text-lg rounded-lg shadow-lg border border-foreground">
+                    <FaRegTrashAlt />
                 </div>
             </div>
         </div>
@@ -266,7 +277,7 @@ export default function EquipePage() {
     }
 
     return(
-        <div className="page-div">
+        <div className="page-div p-2!">
 
             <div className="w-full md:max-w-300 py-15 grid md:grid-cols-1 gap-y-10 items-start justify-items-center overflow-hidden">
 
@@ -390,7 +401,7 @@ export default function EquipePage() {
                     </div>
 
                     {/* table mobile */}
-                    <div className="md:hidden">
+                    <div className="md:hidden space-y-2">
                         {staff.map((employee, i) => (
                             <MobileStaffCard
                                 key={employee.id}

@@ -18,14 +18,16 @@ export default function BalcaoPage() {
     const { error, act } = useAct(reload)
 
     return(
-        <div className="w-full flex flex-col">
-            <div className="w-full flex items-center justify-between px-5 pt-5 text-sm">
-                <span className="flex items-center gap-2 whitespace-nowrap">
-                    <span className={`inline-block w-2 h-2 rounded-full ${live && !stale ? 'hidden' : 'bg-gray-400'}`}/>
-                    {stale ? 'Dados desatualizados, tentando de novo...' : live ? '' : 'Reconectando...'}
-                </span>
+        <div className="w-full md:max-w-300 mx-auto flex flex-col">
+            <div className="w-full  flex items-center justify-between">
+            
+                <div className="">
+                    <h2 className="text-3xl font-bold">Chamados</h2>
+                    <p className="text-sm text-gray-600">Marque o chamado como atendido e finalize quando a mesa for liberada.</p>
+                </div>
+
                 <button onClick={() => setSoundOn(!soundOn)} className="w-auto p-0 underline cursor-pointer">
-                    {soundOn ? 
+                    {soundOn ?
                     <div className="p-2 border rounded-lg shadow-lg">
                         <FaBell className="text-2xl"/>
                     </div>
@@ -35,6 +37,7 @@ export default function BalcaoPage() {
                     </div>
                     }
                 </button>
+
             </div>
             {error && <p role="alert" className="px-5 pt-3 text-sm text-red-600">{error}</p>}
 
