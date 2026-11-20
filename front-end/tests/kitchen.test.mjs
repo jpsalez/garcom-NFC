@@ -7,7 +7,7 @@ import * as jsx from 'react/jsx-runtime';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
-function load(path, dependencies = {}) {
+function load(path, dependencies = {}, globals = {}) {
   const exports = {};
   const source = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
@@ -20,6 +20,9 @@ function load(path, dependencies = {}) {
       return dependencies[name];
     },
     URLSearchParams,
+    setTimeout,
+    clearTimeout,
+    ...globals,
   });
   return exports;
 }
@@ -114,6 +117,7 @@ test('cartão mostra a espera e os três estágios da mesma linha com variante, 
     id: '1587c93d-4d34-424d-ac44-30e20ab13012',
     table_label: 'Mesa 12',
     created_at: '2026-11-19T18:00:00Z',
+    progress: { pending: 2, preparing: 3, ready: 1 },
     items: [{
       id: 'mixed', name: 'Hambúrguer', variant_name: 'Grande', notes: 'Sem cebola',
       selections: [{ option_id: 'cheese', name: 'Queijo', quantity: 2 }],
@@ -123,13 +127,15 @@ test('cartão mostra a espera e os três estágios da mesma linha com variante, 
       pending_quantity: 0, preparing_quantity: 0, ready_quantity: 0, delivered_quantity: 1,
     }],
   };
-  const state = [{ production: [order], pickup: [] }, Date.parse('2026-11-19T19:02:09Z'), ''];
+  const feedback = load('../components/orderComponents/orderQueueFeedback.tsx');
   const { default: CozinhaPage } = load('../components/cozinhaComponents/cozinhaPage.tsx', {
-    react: { useEffect: () => {}, useState: () => [state.shift()] },
-    '@/lib/api': {},
+    react: { useEffect: () => {}, useState: () => [0] },
+    '@/components/orderComponents/orderQueueFeedback': feedback,
+    '@/hooks/useOrderQueue': { useOrderQueue: () => ({
+      snapshot: { items: [order], server_time: '2026-11-19T19:02:09Z', loadedAt: 0 },
+    }) },
     '@/lib/format': load('../lib/format.ts'),
     '@/lib/kitchenQueue': load('../lib/kitchenQueue.ts'),
-    '@/services/orders': {},
   });
   const card = renderToStaticMarkup(React.createElement(CozinhaPage));
   for (const label of ['Mesa 12', order.id, 'Espera 1:02:09', 'Hambúrguer', 'Grande', '2× Queijo', 'Sem cebola']) {
@@ -138,5 +144,225 @@ test('cartão mostra a espera e os três estágios da mesma linha com variante, 
   assert.match(card, /<dt>Novas<\/dt><dd[^>]*>2<\/dd>/);
   assert.match(card, /<dt>Em preparo<\/dt><dd[^>]*>3<\/dd>/);
   assert.match(card, /<dt>Prontas<\/dt><dd[^>]*>1<\/dd>/);
-  assert.doesNotMatch(card, /Item entregue/);
+  assert.match(card, /<input[^>]*max="2"/);
+  assert.match(card, /<input[^>]*max="3"/);
+  assert.match(card, /Iniciar preparo/);
+  assert.match(card, /Marcar pronto/);
+  assert.doesNotMatch(card, /Item entregue|Marcar entregue|Cancelar itens/);
+});
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((ok, fail) => { resolve = ok; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function queueHarness() {
+  const { createOrderQueue } = load('../lib/orderQueue.ts');
+  const reads = [];
+  let state;
+  const queue = createOrderQueue(() => {
+    const read = deferred();
+    reads.push(read);
+    return read.promise;
+  }, (next) => { state = next; }, (err) => err.status === 403, 10);
+  return { queue, reads, state: () => state };
+}
+
+test('rajadas invalidam a leitura em curso e disparam uma única reconciliação completa', async () => {
+  const { queue, reads, state } = queueHarness();
+  try {
+    queue.refresh();
+    queue.event();
+    queue.event();
+    queue.event();
+    await tick(20);
+    assert.equal(reads.length, 1);
+    reads[0].resolve({ items: ['antigo'] });
+    await tick();
+    assert.equal(state()?.snapshot ?? null, null);
+    assert.equal(reads.length, 2);
+    reads[1].resolve({ items: ['atual'] });
+    await tick();
+    assert.equal(state().snapshot.items[0], 'atual');
+  } finally {
+    queue.stop();
+  }
+});
+
+test('reconciliação obrigatória bloqueia ações até atualizar; acesso negado esvazia a fila', async () => {
+  const { queue, reads, state } = queueHarness();
+  try {
+    queue.refresh();
+    reads[0].resolve({ items: ['pedido'] });
+    await tick();
+    assert.equal(queue.canOperate(), true);
+    queue.requireRefresh();
+    assert.equal(queue.canOperate(), false);
+    reads[1].reject(new Error('rede'));
+    await tick();
+    assert.equal(state().degraded, true);
+    assert.equal(state().snapshot.items[0], 'pedido');
+    assert.equal(queue.canOperate(), false);
+    queue.refresh();
+    reads[2].reject({ status: 403 });
+    await tick();
+    assert.equal(state().denied, true);
+    assert.equal(state().snapshot, null);
+    assert.equal(queue.canOperate(), false);
+    queue.refresh();
+    reads[3].resolve({ items: ['recuperado'] });
+    await tick();
+    assert.equal(queue.canOperate(), true);
+    assert.equal(state().snapshot.items[0], 'recuperado');
+  } finally {
+    queue.stop();
+  }
+});
+
+test('um ciclo encerrado ignora respostas que chegaram depois da troca de sessão', async () => {
+  const { queue, reads, state } = queueHarness();
+  queue.refresh();
+  queue.stop();
+  reads[0].resolve({ items: ['outra sessão'] });
+  await tick();
+  assert.equal(state()?.snapshot ?? null, null);
+  assert.equal(queue.canOperate(), false);
+});
+
+test('o painel reconcilia no foco, polling e reconexão e bloqueia após mudança de categoria', async () => {
+  const { createOrderQueue, emptyOrderQueue } = load('../lib/orderQueue.ts');
+  const window = new EventTarget();
+  const document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
+  const handlers = new Map();
+  const socket = {
+    active: true,
+    connected: false,
+    on: (name, listener) => handlers.set(name, listener),
+    connect() {},
+    disconnect() {},
+    removeAllListeners: () => handlers.clear(),
+  };
+  class ApiError extends Error {
+    constructor(status, code, message) { super(message); this.status = status; this.code = code; }
+  }
+  const user = { id: 'employee', restaurant_id: 'restaurant', role: 'STAFF', category: 'KITCHEN' };
+  const current = { ...user };
+  const { canAccessKitchen } = load('../lib/kitchenQueue.ts');
+  const ref = { current: null };
+  const state = [];
+  let stateIndex = 0;
+  let cleanup;
+  let poll;
+  let reads = 0;
+  const writes = [];
+  let version = 1;
+  const { useOrderQueue: evaluateOrderQueue } = load('../hooks/useOrderQueue.ts', {
+    react: {
+      useRef: () => ref,
+      useEffect: (effect) => { cleanup ??= effect(); },
+      useState: () => {
+        const index = stateIndex++;
+        return [state[index], (next) => { state[index] = typeof next === 'function' ? next(state[index]) : next; }];
+      },
+    },
+    'socket.io-client': { io: () => socket },
+    '@/lib/api': { API_URL: 'http://localhost:4000/api/v1', ApiError },
+    '@/lib/orderQueue': {
+      emptyOrderQueue,
+      createOrderQueue: (read, publish, isDenied) => createOrderQueue(read, publish, isDenied, 0),
+    },
+    '@/lib/session': { useSession: () => ({ user }) },
+    '@/services/auth': { getCurrentUser: async () => ({ ...current }) },
+    '@/services/orders': {
+      listOpenOrders: async () => {
+        reads++;
+        return { items: [{ id: 'order', version }], server_time: new Date().toISOString() };
+      },
+      transitionOrder: async (id, body) => {
+        writes.push({ id, ...body });
+        if (body.expected_version !== version) throw new ApiError(409, 'ORDER_VERSION_CONFLICT', 'Pedido mudou');
+        version++;
+      },
+    },
+  }, { window, document, URL, performance, setInterval: (callback) => { poll = callback; }, clearInterval: () => {} });
+  function render() {
+    stateIndex = 0;
+    return evaluateOrderQueue(canAccessKitchen);
+  }
+  const operation = { item_id: 'item', from_stage: 'PENDING', to_stage: 'PREPARING', quantity: 1 };
+  try {
+    render();
+    await tick();
+    assert.equal(reads, 1);
+    assert.equal(render().degraded, true);
+
+    socket.connected = true;
+    handlers.get('connect')();
+    await tick();
+    assert.equal(reads, 2);
+    assert.equal(render().degraded, false);
+
+    document.visibilityState = 'hidden';
+    poll();
+    handlers.get('order:created')();
+    assert.equal(reads, 2);
+    document.visibilityState = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('focus'));
+    await tick(10);
+    assert.equal(reads, 3);
+    poll();
+    await tick();
+    assert.equal(reads, 4);
+
+    const previous = render().snapshot.items[0];
+    version++;
+    await render().change(previous, operation);
+    await tick();
+    const refreshed = render();
+    assert.equal(refreshed.snapshot.items[0].version, 2);
+    assert.equal(refreshed.conflict.version, 1);
+    assert.equal(writes.length, 1, 'a ação não é reenviada automaticamente');
+    await refreshed.change(refreshed.snapshot.items[0], operation);
+    await tick();
+    assert.equal(writes[1].expected_version, 2);
+
+    current.category = 'WAITER';
+    socket.connected = false;
+    handlers.get('disconnect')('io server disconnect');
+    assert.equal(render().disabled, true);
+    await tick();
+    const denied = render();
+    assert.equal(denied.denied, true);
+    assert.equal(denied.snapshot, null);
+    await denied.change(previous, operation);
+    assert.equal(writes.length, 2);
+  } finally {
+    cleanup?.();
+  }
+});
+
+test('a confirmação apresenta as quantidades da nova versão ou permite descartar sem confirmar', () => {
+  const { default: Feedback } = load('../components/orderComponents/orderQueueFeedback.tsx');
+  const conflict = {
+    orderId: 'order', version: 1,
+    operation: { item_id: 'item', from_stage: 'PREPARING', to_stage: 'READY', quantity: 3 },
+  };
+  const order = { id: 'order', version: 2, table_label: 'Mesa 1',
+    items: [{ id: 'item', name: 'Lanche', preparing_quantity: 1 }] };
+  const render = (queue) => renderToStaticMarkup(React.createElement(Feedback, { queue }));
+  const waiting = render({ conflict, waiting: true, disabled: true, snapshot: { items: [order] } });
+  assert.match(waiting, /Atualizando quantidades/);
+  assert.doesNotMatch(waiting, /Confirmar: Marcar pronto/);
+  const review = render({ conflict, snapshot: { items: [order] } });
+  assert.match(review, /Mesa 1 · Lanche · Em preparo: 1/);
+  assert.match(review, /max="1"[^>]*value="1"/);
+  assert.match(review, /Confirmar: Marcar pronto/);
+  const unavailable = render({ conflict, snapshot: { items: [] } });
+  assert.match(unavailable, /Descartar ação/);
+  assert.doesNotMatch(unavailable, /Confirmar: Marcar pronto/);
 });

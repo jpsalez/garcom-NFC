@@ -1,13 +1,13 @@
 'use client'
 
 import { useEffect, useState } from "react";
-import { ApiError } from "@/lib/api";
+import OrderQueueFeedback, { preparationStages } from "@/components/orderComponents/orderQueueFeedback";
+import { type OrderQueue, useOrderQueue } from "@/hooks/useOrderQueue";
 import { formatDuration } from "@/lib/format";
-import { groupKitchenOrders } from "@/lib/kitchenQueue";
+import { canAccessKitchen, groupKitchenOrders } from "@/lib/kitchenQueue";
 import type { Order } from "@/lib/orderTypes";
-import { listOpenOrders } from "@/services/orders";
 
-function KitchenOrderCard({ order, now }: { order: Order; now: number }) {
+function KitchenOrderCard({ order, now, queue }: { order: Order; now: number; queue: OrderQueue }) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <header className="mb-4 flex flex-wrap items-start justify-between gap-2">
@@ -43,6 +43,30 @@ function KitchenOrderCard({ order, now }: { order: Order; now: number }) {
                 <dt>Prontas</dt><dd className="text-lg font-bold tabular-nums">{item.ready_quantity}</dd>
               </div>
             </dl>
+            <div className="mt-3 flex flex-wrap gap-3 empty:hidden">
+              {preparationStages.map((stage) => {
+                const available = item[stage.key];
+                if (!available) return null;
+                return (
+                  <form key={stage.id} className="flex flex-wrap items-center gap-2" onSubmit={(event) => {
+                    event.preventDefault();
+                    const quantity = Number(new FormData(event.currentTarget).get("quantity"));
+                    void queue.change(order, { item_id: item.id, from_stage: stage.id, to_stage: stage.next, quantity });
+                  }}>
+                    <label className="text-xs">
+                      Quantidade
+                      <input aria-label={`Quantidade para ${stage.action.toLowerCase()} · ${item.name}`}
+                        name="quantity" type="number" required min={1} max={available} defaultValue={1}
+                        disabled={queue.disabled || !!queue.conflict} className="ml-1 w-16 rounded border bg-white p-1" />
+                    </label>
+                    <button disabled={queue.disabled || !!queue.conflict}
+                      className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                      {stage.action}
+                    </button>
+                  </form>
+                );
+              })}
+            </div>
           </li>
         ))}
       </ul>
@@ -51,58 +75,34 @@ function KitchenOrderCard({ order, now }: { order: Order; now: number }) {
 }
 
 export default function CozinhaPage() {
-  const [queue, setQueue] = useState<ReturnType<typeof groupKitchenOrders> | null>(null);
-  const [now, setNow] = useState(0);
-  const [error, setError] = useState("");
-
+  const queue = useOrderQueue(canAccessKitchen);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setInterval> | undefined;
-
-    async function load() {
-      if (!active) return;
-      try {
-        const { items, server_time } = await listOpenOrders();
-        if (!active) return;
-        const serverNow = Date.parse(server_time);
-        const loadedAt = performance.now();
-        setNow(serverNow);
-        setQueue(groupKitchenOrders(items));
-        if (items.length > 0) {
-          timer = setInterval(() => setNow(serverNow + performance.now() - loadedAt), 1000);
-        }
-      } catch (err) {
-        if (!active) return;
-        setError(err instanceof ApiError && err.status === 403
-          ? "Você não tem permissão para consultar pedidos."
-          : "Não foi possível carregar os pedidos.");
-      }
-    }
-
-    void Promise.resolve().then(load);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
+    const timer = setInterval(() => setTick(performance.now()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  const sections = queue && [
-    { title: "Produção", orders: queue.production },
-    { title: "Retirada", orders: queue.pickup },
+  const snapshot = queue.snapshot;
+  const now = snapshot ? Date.parse(snapshot.server_time) + Math.max(0, tick - snapshot.loadedAt) : 0;
+  const grouped = snapshot && groupKitchenOrders(snapshot.items);
+  const sections = grouped && [
+    { title: "Produção", orders: grouped.production },
+    { title: "Retirada", orders: grouped.pickup },
   ];
 
   return (
     <main className="mx-auto w-full max-w-6xl space-y-6 p-5 sm:p-8">
       <h1 className="text-3xl font-bold">Cozinha</h1>
-      {error ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>
-        : !sections ? <p role="status">Carregando pedidos...</p>
+      <OrderQueueFeedback queue={queue} />
+      {queue.denied ? null
+        : !sections ? (!queue.degraded && <p role="status">Carregando pedidos...</p>)
         : sections.every(({ orders }) => orders.length === 0)
           ? <p className="rounded-2xl border bg-white p-8 text-center text-slate-600">Não há pedidos em andamento.</p>
           : sections.map(({ title, orders }) => orders.length > 0 && (
             <section key={title} className="space-y-3">
               <h2 className="text-xl font-bold">{title}</h2>
               <div className="grid items-start gap-4 lg:grid-cols-2">
-                {orders.map((order) => <KitchenOrderCard key={order.id} order={order} now={now} />)}
+                {orders.map((order) => <KitchenOrderCard key={`${order.id}/${order.version}`} order={order} now={now} queue={queue} />)}
               </div>
             </section>
           ))}
