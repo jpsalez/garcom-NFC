@@ -14,11 +14,13 @@ export type PrintingStatus = {
   enabled: boolean;
   paired: boolean;
   last_contact_at: string | null;
+  test_status: PrintJobStatus | null;
 };
 
-export type PairingCode = {
-  code: string;
-  expires_at: string;
+export type PrinterSetup = {
+  url: string;
+  username: string;
+  password: string;
 };
 
 export type PrintJob = {

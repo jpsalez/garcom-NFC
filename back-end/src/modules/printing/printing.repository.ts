@@ -3,16 +3,16 @@ import type { print_destination, print_job_status, Prisma } from "../../../gener
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import { decodeCursor } from "../../shared/utils/cursor.ts";
 import type { PrintingJobsQuery } from "./printing.schemas.ts";
-import type { AgentProof, IPrintingRepository } from "./printing.repository.interface.ts";
+import type { IPrintingRepository } from "./printing.repository.interface.ts";
 
 @injectable()
 export class PrintingRepository implements IPrintingRepository {
   constructor(@inject("DbClient") private db: DbClient) {}
 
   // Descobre o escopo pela prova opaca. O service a confere novamente sob o lock do restaurante.
-  findByHash(proof: AgentProof) {
+  findByHash(credentialHash: string) {
     return this.db.print_destinations.findUnique({
-      where: proof,
+      where: { credential_hash: credentialHash },
       select: { restaurant_id: true, destination: true },
     });
   }
@@ -23,12 +23,27 @@ export class PrintingRepository implements IPrintingRepository {
     });
   }
 
-  savePairingCode(restaurantId: string, destination: print_destination, hash: string, expiresAt: Date) {
-    const pairing = { pairing_code_hash: hash, pairing_expires_at: expiresAt };
+  saveCredential(restaurantId: string, destination: print_destination, hash: string, now: Date) {
+    const data = {
+      credential_hash: hash,
+      last_contact_at: null,
+      enabled: false,
+      interrupted_at: now,
+      test_token: null,
+      test_status: null,
+      test_expires_at: null,
+    };
     return this.db.print_destinations.upsert({
       where: { restaurant_id_destination: { restaurant_id: restaurantId, destination } },
-      create: { restaurant_id: restaurantId, destination, ...pairing },
-      update: pairing,
+      create: { restaurant_id: restaurantId, destination, ...data },
+      update: data,
+    });
+  }
+
+  interruptSending(restaurantId: string, destination: print_destination) {
+    return this.db.print_jobs.updateMany({
+      where: { restaurant_id: restaurantId, destination, status: "SENDING" },
+      data: { status: "UNCERTAIN" },
     });
   }
 

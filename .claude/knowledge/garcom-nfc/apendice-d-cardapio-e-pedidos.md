@@ -185,48 +185,30 @@ A tela sinaliza desconexão do Socket.IO ou falha da leitura REST. Em indisponib
 - O acesso direto de WAITER à Cozinha redirecionou para Chamados e o perfil manteve o atalho de Pedidos. Alterar uma sessão de KITCHEN para WAITER retirou a fila e as ações da Cozinha aberta e exibiu a mensagem de permissão. `back-end/tests/realtime.test.ts` cobre evento real de pedido criado pelo fluxo de scan, atualizações, corrida 200/409, entrega parcial, eventos perdidos e fila recuperada por REST após reconectar. Também cobre a recusa de OTHER e a fila vazia para um segundo restaurante. `back-end/tests/menu-orders.test.ts` valida a permanência de pedidos abertos de sessões vencidas.
 - `front-end/tests/kitchen.test.mjs` cobre toda a paginação, acesso direto, confirmação com as quantidades vigentes, consolidação de eventos, descarte de leituras antigas, foco, polling, reconexão e bloqueio após perda de acesso. O aceite usou a base descartável do navegador e a suíte de integração usou PostgreSQL de teste separado.
 
-### Configuração de impressão e comanda original [Implementado]
+### Impressão da cozinha via CloudPRNT
 
-A migration `20261119110000_kitchen_printing` cria `print_destinations` e `print_jobs`, com os enums `print_destination` e `print_job_status`. Cada restaurante começa com a impressão de `KITCHEN` pausada. A primeira emissão de código persiste a configuração. A pausa conserva o agente pareado e retém as tarefas pendentes para revisão.
+A API do Psiu recebe consultas HTTPS da própria impressora. O modelo de referência é a Star mC-Print3 de 80 mm com firmware 3.2 ou posterior e CloudPRNT HTTP. A validação em hardware está pendente.
 
-| Operação sob `/api/v1` | Contrato |
-| --- | --- |
-| GET `/printing/kitchen` | OWNER/MANAGER. Retorna `{ destination, enabled, paired, last_contact_at }`. O último contato é um horário UTC ou `null`. |
-| PATCH `/printing/kitchen` | OWNER/MANAGER. Recebe `{ enabled }` e devolve o estado. Ativar exige pareamento, com `409 PRINT_AGENT_NOT_PAIRED` se faltar. |
-| POST `/printing/kitchen/pairing` | OWNER/MANAGER. Retorna `201` com `{ code, expires_at }`. O código hexadecimal de 20 caracteres vale 10 minutos e substitui o código pendente anterior. |
-| DELETE `/printing/kitchen/pairing` | OWNER/MANAGER. Retorna `204`, revoga a credencial e o código pendente, limpa o último contato e pausa. |
-| POST `/print-agent/pair` | Recebe apenas `{ code }`. Retorna `201` com `{ destination, credential }`. Consome o código no mesmo commit que grava a credencial, registra contato, substitui o pareamento anterior e deixa a impressão pausada. Código vencido, usado ou desconhecido retorna `401`. Limite de 20 tentativas por IP a cada 10 minutos. |
-| POST `/print-agent/contact` | Recebe `Authorization: Bearer <credential>`. Registra contato mesmo durante a pausa e retorna `204`. Credencial inválida ou revogada retorna `401`. |
-
-O servidor deriva restaurante e destino a partir do hash exclusivo do código ou da credencial. O banco guarda apenas os hashes e a API devolve os segredos somente na emissão, com `Cache-Control: no-store`. Configuração, troca de credencial, contato e envio de pedido usam o mesmo lock transacional por restaurante.
-
-Um pedido novo criado com a impressão ativa grava uma tarefa `PENDING` de origem `ORDER_CREATED` na mesma transação do pedido, dos itens e do evento de auditoria. Replay de envio retorna antes da gravação da comanda. A chave única usa restaurante, pedido, destino e evento de origem. Chaves estrangeiras compostas ligam tarefa, pedido e destino ao mesmo restaurante.
-
-O payload versão 1 reúne `order_id`, `created_at` em UTC, `table_label` e `items`. Cada item contém `item_id`, `product_name`, `variant_name`, `quantity`, `notes` e `selections` com `group_name`, `option_name` e `quantity` por unidade. A comanda usa snapshots persistidos na confirmação do pedido. A ativação vale para novos envios.
-
-### Reserva, resultado e segunda via [Implementado]
+1. Em **Configurações → Impressão da cozinha**, OWNER ou MANAGER gera a URL e as credenciais. A senha é exibida uma vez. Configure esses dados no CloudPRNT da impressora e conecte a impressora à rede.
+2. Quando a impressora aparecer conectada, envie uma via de teste. O botão de ativação é liberado após a confirmação pelo equipamento. Confira a via no papel.
+3. Em **Configurações → Fila de impressão**, OWNER, MANAGER e KITCHEN acompanham as comandas e solicitam segunda via. OWNER e MANAGER podem liberar ou descartar as pendências retidas na tela de configuração.
 
 | Operação sob `/api/v1` | Contrato |
 | --- | --- |
-| POST `/print-jobs/claim` | Bearer do agente. Corpo ausente ou `{}`. Retorna `200` com `{ id, destination, reservation_id, expires_at, payload_version, order_version, payload }`. Retorna `204` quando pausada, sem trabalho elegível ou com reserva vigente. |
-| POST `/print-jobs/:id/result` | Bearer do agente que reservou e corpo `{ reservation_id, outcome }`. Aceita `SENT`, `FAILED_BEFORE_SEND` ou `UNCERTAIN`. Retorna `204` no registro ou replay idêntico da última reserva. Retorna `404` fora do restaurante/destino e `409 PRINT_RESERVATION_CONFLICT` quando vencida, substituída ou divergente. |
-| GET `/print-jobs` | OWNER/MANAGER/KITCHEN. Filtros opcionais `status`, `destination` e `order_id`. `limit` de 1 a 100, padrão 50. Use `next_cursor` como `cursor` para percorrer `{ jobs, next_cursor, server_time }` em ordem decrescente de criação e ID. |
-| POST `/orders/:id/reprints` | OWNER/MANAGER/KITCHEN. Recebe `{ idempotency_key, reason }`, com chave UUID e motivo de 3 a 500 caracteres. Responde `201` na criação ou `200` ao repetir chave, motivo e autor no mesmo pedido/destino. O trabalho registra autor e comanda original. O payload reservado inclui `reprint: { label: "SEGUNDA VIA" }`; o agente deve imprimir essa indicação. |
-| PATCH `/printing/kitchen` para revisão | OWNER/MANAGER. Envie `{ review: { job_ids, decision } }` com 1 a 100 IDs de comandas `REVIEW_REQUIRED` e `RELEASE` ou `DISCARD`. Liberar recoloca na fila e exige contato recente. Descartar marca `SUPPRESSED`. A resposta é o estado da configuração. Se alguma comanda já mudou, o lote inteiro retorna `409 PRINT_REVIEW_CONFLICT`. |
+| GET ou PATCH `/printing/kitchen` | Consulta, ativa, pausa ou revisa comandas retidas. Ativação exige teste confirmado e contato recente. |
+| POST ou DELETE `/printing/kitchen/printer` | Gera URL, usuário e senha ou revoga a credencial. A troca pausa a fila e exige um novo teste. |
+| POST `/printing/kitchen/test` | Enfileira uma via de teste mesmo durante a pausa. Exige contato nos últimos cinco minutos. |
+| POST `/printing/cloudprnt` | HTTP Basic com senha do equipamento. Registra contato e anuncia uma comanda elegível quando o equipamento está pronto. |
+| GET `/printing/cloudprnt` | Sem token devolve a configuração HTTP. Com token reserva a comanda, renderiza o PNG de 576 px e retorna o documento com instrução de corte. Novo download da mesma reserva devolve o mesmo conteúdo. |
+| DELETE `/printing/cloudprnt` | Registra a confirmação pelo token. Resultados repetidos e tardios têm resposta 200 e preservam o estado já registrado. |
+| GET `/print-jobs` | Lista a fila, com filtros e cursor. |
+| POST `/orders/:id/reprints` | Solicita segunda via com motivo e chave UUID idempotente. A comanda leva a marca SEGUNDA VIA. |
 
-A pausa, a revogação e a troca de pareamento retêm a fila pendente. Um intervalo de pelo menos cinco minutos sem contato retém as pendências ao consultar a fila ou no próximo contato do agente. As comandas preexistentes na migration entram em revisão. Liste `REVIEW_REQUIRED` para decidir quais saídas ainda são necessárias antes de retomá-las. Se a impressão passar de ativa para pausada durante uma reserva, uma falha pré-envio posterior também exige revisão antes de uma nova tentativa.
+A credencial é armazenada como hash e identifica o restaurante. O proxy de produção do Compose serve o endpoint pelo mesmo domínio HTTPS da aplicação. A migração revoga as credenciais antigas, pausa os destinos, passa comandas pendentes para `REVIEW_REQUIRED` e marca envios em andamento como `UNCERTAIN`.
 
-O agente deve conferir `expires_at` antes de enviar. O enum `print_job_outcome` registra o resultado informado pelo agente. A reserva vale 30 segundos e o banco limita a uma comanda `SENDING` por restaurante e destino. Reservas vencidas aparecem como `UNCERTAIN` na próxima operação da fila, sem retry. `SENT` indica que o transporte aceitou a comanda. `FAILED_BEFORE_SEND` reprograma com espera de 5 e depois 10 segundos, até o total de três tentativas. A terceira falha pré-envio marca `FAILED`. Em caso incerto, a equipe confere o papel antes de pedir segunda via.
+A comanda original é criada na transação do pedido quando a impressão está ativa. No primeiro download, a API fixa a versão do pedido e as unidades ainda não canceladas. Há uma reserva de 30 segundos por destino. Erro ou expiração após o download marca `UNCERTAIN`; confira o papel antes de pedir outra via. A pausa e a falta de contato por cinco minutos retêm pendências para revisão. `SENT` indica confirmação da impressora para as comandas CloudPRNT.
 
-A reserva revalida cancelamentos sob o mesmo lock usado pelas transições de pedido. Uma comanda totalmente cancelada vira `SUPPRESSED`; cancelamentos parciais fixam a versão e as quantidades restantes na reserva. Depois da reserva, comunicar cancelamentos à cozinha. A segunda via exige uma original existente e fora de `PENDING`, `REVIEW_REQUIRED` ou `SENDING` com prazo vigente, e um pedido com unidades não canceladas. Reaproveitar a chave com motivo ou autor diferente retorna `409 PRINT_REPRINT_KEY_CONFLICT`.
-
-A suíte PostgreSQL em `back-end/tests/printing.test.ts` cobre pareamento, rollback, concorrência, isolamento, expiração, replay, segunda via, revisão, cancelamentos e prazos.
-
-O serviço local fica em `print-agent/` (Node + TypeScript com tsx). Ele pareia com o código temporário, guarda a credencial em arquivo local com permissão 600, reserva, confere `expires_at`, renderiza a comanda ESC/POS e registra o resultado. A comanda traz mesa, `order_id` igual ao do cartão do KDS, horário, itens, variante, adicionais, observações e `SEGUNDA VIA` quando for o caso. O emulador grava a saída em arquivo e simula falta de papel e perda de confirmação. O teste `npm run test:e2e` usa a API e um PostgreSQL reais (`garcom_kds_agent_test`). Instruções em `print-agent/README.md`.
-
-No front, OWNER e MANAGER podem acessar `/admin/cozinha/configuracoes` diretamente para parear, ver o último contato, ativar após o teste, pausar, revogar e revisar pendências antigas. A listagem de impressão e a segunda via continuam disponíveis na API. A tela atual da Cozinha mostra a fila de pedidos. A validação em impressora física segue pendente.
-
-O módulo `back-end/src/modules/printing/` usa `printing.routes.ts`, `printing.controller.ts`, `printing.schemas.ts`, `printing.interfaces.ts`, `printing.service.ts`, `printing.repository.interface.ts`, `printing.repository.ts` e `print-job.ts`. Os contratos HTTP estão em `back-end/src/docs/printing-openapi.ts`.
+Os testes em `back-end/tests/printing.test.ts` simulam a impressora por HTTP usando PostgreSQL real. O adaptador HTTP fica em `cloudprnt.routes.ts` e a comanda em `print-ticket.ts`. A referência de protocolo é o [guia CloudPRNT da Star](https://star-m.jp/products/s_print/sdk/StarCloudPRNT/manual/en/index.html).
 
 ### Limites e erros
 

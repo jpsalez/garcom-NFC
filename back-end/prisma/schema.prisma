@@ -624,11 +624,12 @@ model print_destinations {
   restaurant_id       String
   destination         print_destination
   enabled             Boolean           @default(false)
-  pairing_code_hash   String?           @unique @db.VarChar(64)
-  pairing_expires_at  DateTime?
   credential_hash     String?           @unique @db.VarChar(64)
   last_contact_at     DateTime?
   interrupted_at      DateTime?
+  test_token          String?
+  test_status         print_job_status?
+  test_expires_at     DateTime?
   restaurant          restaurants       @relation(fields: [restaurant_id], references: [id], onDelete: Cascade, onUpdate: Restrict)
   jobs                print_jobs[]
 

@@ -40,3 +40,9 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 O Caddy é o único proxy à frente da API, então o compose já define `TRUST_PROXY=1`. O DNS do domínio precisa apontar para o servidor. `NEXT_PUBLIC_API_URL` é gravada no build do front: mudou o domínio, rode o comando de novo.
 
 Detalhes do back-end em [`back-end/README.md`](back-end/README.md).
+
+## Impressão da cozinha
+
+A impressora consulta a API do Psiu via HTTPS. O modelo de referência é a Star mC-Print3 de 80 mm com CloudPRNT HTTP e firmware 3.2 ou posterior.
+
+Em **Configurações → Impressão da cozinha**, gere as credenciais e informe a URL, o usuário e a senha no painel CloudPRNT da impressora. Aguarde a conexão, imprima a via de teste e ative a impressão automática. A homologação em hardware ainda está pendente.

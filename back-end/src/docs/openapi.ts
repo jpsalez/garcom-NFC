@@ -70,7 +70,7 @@ export const openApiSpec = {
     securitySchemes: {
       cookieAuth: { type: "apiKey", in: "cookie", name: "access_token" },
       tableToken: { type: "apiKey", in: "header", name: "X-Table-Token" },
-      printAgentToken: { type: "http", scheme: "bearer" },
+      cloudPrinterAuth: { type: "http", scheme: "basic" },
     },
   },
   paths: {

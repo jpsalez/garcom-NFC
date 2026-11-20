@@ -41,7 +41,7 @@ class MockApiError extends Error {
 
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
-test('acesso direto a /admin/cozinha/configuracoes restringe configuração a OWNER e MANAGER e AdminNav oculta o link', () => {
+test('Configurações oferece acesso à impressão apenas a OWNER e MANAGER, inclusive na rota direta', () => {
   const cases = [
     [undefined, false],
     [null, false, '/login'],
@@ -81,6 +81,19 @@ test('acesso direto a /admin/cozinha/configuracoes restringe configuração a OW
     });
     const nav = renderToStaticMarkup(React.createElement(AdminNav));
     assert.equal(nav.includes('href="/admin/cozinha/configuracoes"'), false, JSON.stringify(user));
+    assert.equal(nav.includes('href="/admin/configuracoes"'), Boolean(session), JSON.stringify(user));
+
+    const { default: SettingsPage } = load('../components/adminComponents/settingsPage.tsx', {
+      'lucide-react': { ArrowRight: () => null, KeyRound: () => null, List: () => null, Printer: () => null, UserRound: () => null },
+      'next/link': { default: ({ href, children }) => React.createElement('a', { href }, children) },
+      '@/lib/session': { useSession: () => session },
+      '@/lib/kitchenQueue': kitchen,
+    });
+    const settings = renderToStaticMarkup(React.createElement(SettingsPage));
+    assert.equal(settings.includes('href="/admin/configuracoes/perfil"'), Boolean(session), JSON.stringify(user));
+    assert.equal(settings.includes('href="/admin/senha"'), Boolean(session), JSON.stringify(user));
+    assert.equal(settings.includes('href="/admin/cozinha/configuracoes"'), allowed, JSON.stringify(user));
+    assert.equal(settings.includes('href="/admin/cozinha/impressao"'), Boolean(user && kitchen.canAccessKitchen(user)));
   }
 });
 
@@ -97,26 +110,29 @@ test('serviço de impressão codifica filtros, cursores e payloads conforme a AP
   const printing = load('../services/printing.ts', { '@/lib/api': api });
 
   await printing.getKitchenPrinting();
-  await printing.issueKitchenPairingCode();
+  await printing.provisionKitchenPrinter();
   await printing.updateKitchenPrinting({ enabled: true });
   await printing.updateKitchenPrinting({ review: { job_ids: ['j1'], decision: 'RELEASE' } });
-  await printing.revokeKitchenPairing();
+  await printing.revokeKitchenPrinter();
+  await printing.queueKitchenPrintTest();
   await printing.listPrintJobs({ destination: 'KITCHEN', status: 'FAILED', limit: 20, cursor: 'a/b+c' });
   await printing.requestOrderReprint('order/1', { idempotency_key: 'k-1', reason: 'Sem papel' });
 
   assert.equal(requests[0].url, 'http://localhost:4000/api/v1/printing/kitchen');
   assert.equal(requests[1].method, 'POST');
-  assert.equal(requests[1].url, 'http://localhost:4000/api/v1/printing/kitchen/pairing');
+  assert.equal(requests[1].url, 'http://localhost:4000/api/v1/printing/kitchen/printer');
   assert.equal(requests[2].method, 'PATCH');
   assert.deepEqual(JSON.parse(requests[2].body), { enabled: true });
   assert.deepEqual(JSON.parse(requests[3].body), { review: { job_ids: ['j1'], decision: 'RELEASE' } });
   assert.equal(requests[4].method, 'DELETE');
+  assert.equal(requests[5].url, 'http://localhost:4000/api/v1/printing/kitchen/test');
+  assert.equal(requests[5].method, 'POST');
   assert.equal(
-    requests[5].url,
+    requests[6].url,
     'http://localhost:4000/api/v1/print-jobs?destination=KITCHEN&status=FAILED&limit=20&cursor=a%2Fb%2Bc',
   );
-  assert.equal(requests[6].url, 'http://localhost:4000/api/v1/orders/order%2F1/reprints');
-  assert.deepEqual(JSON.parse(requests[6].body), { idempotency_key: 'k-1', reason: 'Sem papel' });
+  assert.equal(requests[7].url, 'http://localhost:4000/api/v1/orders/order%2F1/reprints');
+  assert.deepEqual(JSON.parse(requests[7].body), { idempotency_key: 'k-1', reason: 'Sem papel' });
 });
 
 test('segunda via preserva a mesma chave de idempotência ao repetir envio após falha ou 409 e exibe erro da API', async () => {
@@ -349,17 +365,15 @@ test('painel de impressão destaca FAILED e UNCERTAIN e exibe formulário de seg
   assert.match(html, /Página 1/);
 });
 
-test('configuração exige confirmação do teste para ativar e exibe revisão de pendências antigas', () => {
+test('configuração aguarda confirmação da impressora e exibe revisão de pendências antigas', () => {
   const printingState = load('../lib/printingState.ts', { '@/lib/api': { ApiError: MockApiError } });
   const states = [
-    { destination: 'KITCHEN', enabled: false, paired: true, last_contact_at: '2026-11-20T00:00:00Z' }, // status
-    '2026-11-20T00:01:00Z', // serverTime
-    [{ id: 'rev-1', order_id: 'ord-9', status: 'REVIEW_REQUIRED', attempts: 0, original_job_id: null, reason: null, created_at: '2026-11-20T00:00:00Z' }], // reviewJobs
-    false, // reviewHasMore
-    ['rev-1'], // selectedIds
-    { code: '0123456789abcdef0123', expires_at: '2026-11-20T00:10:00Z' }, // pairingCode
-    false, // testConfirmed
-    false, // confirmingRevoke
+    { destination: 'KITCHEN', enabled: false, paired: true, last_contact_at: new Date().toISOString(), test_status: 'SENDING' },
+    [{ id: 'rev-1', order_id: 'ord-9', status: 'REVIEW_REQUIRED', attempts: 0, original_job_id: null, created_at: '2026-11-20T00:00:00Z' }],
+    false,
+    ['rev-1'],
+    { url: 'https://psiu.test/api/v1/printing/cloudprnt', username: 'psiu', password: 'senha-de-teste' },
+    null,
     true, // loaded
     false, // denied
     false, // busy
@@ -380,8 +394,9 @@ test('configuração exige confirmação do teste para ativar e exibe revisão d
   });
 
   const html = renderToStaticMarkup(React.createElement(CozinhaConfigPage));
-  assert.match(html, /Pareado/);
-  assert.match(html, /0123456789abcdef0123/);
+  assert.match(html, /Conectada/);
+  assert.match(html, /https:\/\/psiu.test\/api\/v1\/printing\/cloudprnt/);
+  assert.match(html, /Aguardando confirmação da impressora/);
   assert.match(html, /<button[^>]*disabled[^>]*>Ativar impressão automática<\/button>/);
   assert.match(html, /Revisão de pendências antigas/);
   assert.match(html, /Liberar selecionadas \(1\)/);

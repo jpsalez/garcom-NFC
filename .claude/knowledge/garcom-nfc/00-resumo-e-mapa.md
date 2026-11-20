@@ -15,7 +15,7 @@ Node + TypeScript executado com tsx (imports com extensão `.ts`), Express 5, Pr
 
 ## Estado real (confirme no código)
 
-[Implementado, impressão] OWNER e MANAGER gerenciam o pareamento revogável e a ativação da impressão da Cozinha. A API grava a comanda original na transação do pedido e permite ao agente reservar e registrar o resultado. OWNER, MANAGER e KITCHEN acompanham a fila e solicitam segunda via. OWNER e MANAGER revisam pendências retidas após interrupções. Consulte o apêndice de cardápio e pedidos para contratos e cobertura no PostgreSQL.
+[Implementado, impressão] A Star mC-Print3 consulta a API via CloudPRNT HTTP sobre HTTPS. OWNER e MANAGER gerenciam a credencial, a via de teste e a revisão de pendências. OWNER, MANAGER e KITCHEN acompanham a fila e solicitam segunda via. A validação em hardware está pendente. Consulte o apêndice de cardápio e pedidos.
 
 [Implementado, fluxo de pedidos] A Cozinha separa Novos, Em preparo e Aguardando garçom. Chamados reúne avisos de novos pedidos, itens na cozinha, fila de entrega e encerramentos recentes. A tela da mesa informa o status do aparelho com o cardápio fechado. Consulte [Fluxo de pedidos à mesa](fluxo-pedidos.md).
 

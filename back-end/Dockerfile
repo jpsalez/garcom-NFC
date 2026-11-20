@@ -2,7 +2,7 @@
 FROM node:22-bookworm-slim
 
 # O Prisma precisa do OpenSSL
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates fontconfig fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

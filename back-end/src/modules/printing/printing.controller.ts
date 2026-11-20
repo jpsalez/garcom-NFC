@@ -1,16 +1,8 @@
 import type { Request, Response } from "express";
 import { inject, injectable } from "tsyringe";
-import { UnauthorizedError } from "../../shared/errors/http-errors.ts";
 import { actorOf } from "../../shared/middlewares/auth.middleware.ts";
 import type { IPrintingService } from "./printing.interfaces.ts";
-import { printAgentCredentialSchema, printingJobsQuery } from "./printing.schemas.ts";
-
-function agentCredential(req: Request) {
-  const bearer = req.get("Authorization")?.match(/^Bearer (\S+)$/i);
-  const credential = printAgentCredentialSchema.safeParse(bearer?.[1]);
-  if (!credential.success) throw new UnauthorizedError("Pareamento de impressão inválido");
-  return credential.data;
-}
+import { printingJobsQuery } from "./printing.schemas.ts";
 
 @injectable()
 export class PrintingController {
@@ -28,8 +20,8 @@ export class PrintingController {
     res.json(result);
   };
 
-  issueCode = async (req: Request, res: Response) => {
-    res.status(201).json(await this.service.issueCode(actorOf(req)));
+  provision = async (req: Request, res: Response) => {
+    res.status(201).json(await this.service.provision(actorOf(req)));
   };
 
   revoke = async (req: Request, res: Response) => {
@@ -37,24 +29,8 @@ export class PrintingController {
     res.sendStatus(204);
   };
 
-  pair = async (req: Request, res: Response) => {
-    res.status(201).json(await this.service.pair(req.body.code));
-  };
-
-  contact = async (req: Request, res: Response) => {
-    await this.service.contact(agentCredential(req));
-    res.sendStatus(204);
-  };
-
-  claim = async (req: Request, res: Response) => {
-    const job = await this.service.claim(agentCredential(req));
-    if (job) res.json(job);
-    else res.sendStatus(204);
-  };
-
-  result = async (req: Request<{ id: string }>, res: Response) => {
-    await this.service.result(agentCredential(req), req.params.id, req.body);
-    res.sendStatus(204);
+  test = async (req: Request, res: Response) => {
+    res.json(await this.service.queueTest(actorOf(req)));
   };
 
   list = async (req: Request, res: Response) => {
