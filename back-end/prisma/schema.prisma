@@ -39,6 +39,8 @@ model restaurants {
   cash_shifts                 cash_shifts[]
   payment_provider_accounts   payment_provider_accounts[]
   payment_terminals           payment_terminals[]
+  daily_sales                 daily_sales[]
+  product_sales_daily         product_sales_daily[]
 }
 
 model users {
@@ -1088,4 +1090,54 @@ model payment_terminals {
   @@unique([restaurant_id, id, provider, provider_account_id], map: "payment_terminals_account_identity_key")
   @@index([restaurant_id, active])
   @@index([restaurant_id, provider, provider_account_id])
+}
+
+/// Consolidado por dia operacional. Fonte: comandas fechadas (exceto legacy_closed); reconstruível.
+model daily_sales {
+  restaurant_id         String
+  business_date         DateTime @db.Date
+  tabs_closed_count     Int      @default(0)
+  table_tabs_count      Int      @default(0)
+  counter_tabs_count    Int      @default(0)
+  guests_total          Int      @default(0)
+  gross_sales_cents     Int      @default(0)
+  cancelled_items_cents Int      @default(0)
+  discounts_cents       Int      @default(0)
+  service_fee_cents     Int      @default(0)
+  couvert_cents         Int      @default(0)
+  tips_cents            Int      @default(0)
+  net_sales_cents       Int      @default(0)
+  cash_cents            Int      @default(0)
+  credit_cents          Int      @default(0)
+  debit_cents           Int      @default(0)
+  pix_cents             Int      @default(0)
+  voucher_cents         Int      @default(0)
+  other_cents           Int      @default(0)
+  provider_fees_cents   Int      @default(0)
+  total_stay_seconds    BigInt   @default(0)
+  rebuilt_at            DateTime @default(now())
+
+  restaurant restaurants @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+
+  @@id([restaurant_id, business_date])
+}
+
+/// Itens vendidos por dia operacional, produto, variante e hora local do pedido.
+model product_sales_daily {
+  restaurant_id          String
+  business_date          DateTime @db.Date
+  product_id             String
+  variant_id             String
+  hour_bucket            Int
+  product_name_snapshot  String   @db.VarChar(120)
+  variant_name_snapshot  String   @db.VarChar(120)
+  category_name_snapshot String   @db.VarChar(120)
+  quantity_sold          Int      @default(0)
+  quantity_cancelled     Int      @default(0)
+  revenue_cents          Int      @default(0)
+
+  restaurant restaurants @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+
+  @@id([restaurant_id, business_date, product_id, variant_id, hour_bucket])
+  @@index([restaurant_id, product_id, business_date])
 }

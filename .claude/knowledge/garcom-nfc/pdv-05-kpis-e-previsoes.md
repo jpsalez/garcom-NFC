@@ -259,3 +259,57 @@ Para prever a demanda do produto `P` na próxima **sexta-feira** (`weekday = 5`)
   ]
 }
 ```
+
+---
+
+## 6. Implementação (Etapa 5)
+
+Código em `back-end/src/modules/reports/`; migration `20261121090000_sales_aggregates`.
+
+### Fonte única dos números
+- `sales-contribution.ts` calcula, de forma pura, quanto uma comanda fechada soma em `daily_sales` e `product_sales_daily`. O incremental e o rebuild somam exatamente essa função, então os dois sempre dão o mesmo resultado.
+- `sales-aggregator.ts`:
+  - `applyTabSalesChange` roda dentro do `unit.run` do fechamento (`close-tab.ts`, que cobre o fechamento manual, o automático e o da sessão) e do estorno de comanda já fechada (`payments.service.ts`). No estorno ele aplica `contribuição depois − contribuição antes`.
+  - `rebuildRange` apaga e recria o intervalo a partir das comandas.
+- O incremental atualiza com `updateMany` + `create`. O lock do restaurante serializa as escritas.
+- `daily_sales` não tem CHECK de não-negativo de propósito: um agregado defasado não pode bloquear um estorno, e o rebuild corrige. `product_sales_daily` mantém o CHECK, porque estornos não alteram produtos.
+- O rebuild usa uma transação por dia, para não segurar o lock do restaurante pelo período inteiro.
+- Ficam fora: comandas `legacy_closed`, abertas e canceladas. `tabs_cancelled_count` não foi criado, porque a comanda cancelada não tem `business_date`.
+
+### Definições adotadas
+- KPIs, mix de pagamentos e buckets do histórico ficam em `sales-summary.ts`.
+- `gross_sales_cents` = `tabs.subtotal_cents`: itens ativos, antes de taxa e ajustes.
+- `net_sales_cents` = soma dos pagamentos `APPROVED`. É o que foi efetivamente recebido, inclui taxa de serviço, couvert e gorjeta e diminui com estornos. `avg_ticket_cents` usa esse valor.
+- `discounts_cents`, `couvert_cents` e `tips_cents` saem dos ajustes ativos.
+- `cancelled_items_cents` = `unit_price_cents × cancelled_quantity`.
+- `hour_bucket` é a hora local de criação do pedido (`localHour` em `tab-business-date.ts`). O `business_date` é o da comanda, calculado no fechamento pelo `businessDate` já existente.
+
+### Endpoints (`reports:read`: OWNER e MANAGER; o CASHIER recebe 403)
+| Rota | Resposta |
+|---|---|
+| `GET /reports/sales/summary?from&to&compare=previous_period` | `period`, `kpis`, `payment_mix`, `comparison` (delta em pontos percentuais; `null` sem base) |
+| `GET /reports/sales/history?from&to&granularity=day\|week\|month` | `items[]` por bucket; a semana começa na segunda-feira |
+| `GET /reports/products/abc?from&to` | curva ABC (`abc-curve.ts`); o produto que cruza 80% ou 95% fica na classe anterior, então o primeiro é sempre A |
+| `GET /reports/products/basket?from&to` | pares com ≥ 3 co-ocorrências, top 20 (`basket-and-prep.ts`) |
+| `GET /reports/heatmap?from&to` | `weekday × hour_bucket`; o dia é o operacional, então um pedido à 01:00 antes do corte conta na hora 1 do dia anterior |
+| `GET /reports/kitchen/prep-time?from&to` | média e p90 (percentil contínuo) do envio ao primeiro `READY` |
+| `GET /reports/forecasts/demand?target_date&limit` | WMA sazonal (`forecast.engine.ts`, `demand-forecast.ts`) |
+| `GET /reports/forecasts/alerts?date` | regras da §4.2 (`anomaly.engine.ts`, `sales-alerts.ts`); sem data, avalia o último dia operacional completo |
+| `POST /reports/rebuild {from,to}` | só OWNER, até 92 dias |
+
+Períodos: `from ≤ to` e no máximo 366 dias (`reports.schemas.ts`; datas em `report-dates.ts`). Contrato do serviço em `reports.interfaces.ts`.
+
+### Previsão
+- Usa até 12 ocorrências do mesmo dia da semana com venda. A §4.1 fala em 8, mas com 8 o nível `HIGH` (n ≥ 12) nunca seria alcançado.
+- O σ é o desvio padrão populacional das ocorrências.
+- A tendência compara os 14 dias anteriores ao alvo com os 14 dias antes deles. Sem base, vale 1.
+
+### Alertas
+- `REVENUE_DROP` exige pelo menos 3 ocorrências do mesmo dia da semana.
+- `DISCOUNT_SPIKE` exige média de descontos maior que zero.
+- Dias sem venda não geram alerta de dia.
+
+### Reconciliação
+`back-end/src/shared/jobs/reports-reconciliation.job.ts` roda no boot e depois a cada 24 h. Reconstrói os últimos 7 dias operacionais de cada restaurante ativo (`ReportsService.reconcile`). A falha de um restaurante é registrada com o `restaurant_id` e não interrompe os demais.
+
+Testes em `back-end/tests/reports-and-forecasts.test.ts`.

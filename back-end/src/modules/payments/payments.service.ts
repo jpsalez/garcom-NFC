@@ -21,6 +21,7 @@ import { closeTab, notifyClosedTab } from "../tabs/close-tab.ts";
 import { notifyPaymentRequestUpdated } from "../tabs/payment-request-events.ts";
 import { PaymentRequestsRepository } from "../tabs/payment-requests.repository.ts";
 import { requestForConversion } from "../tabs/payment-requests.service.ts";
+import { applyTabSalesChange, tabSales } from "../reports/sales-aggregator.ts";
 import { businessDate } from "../tabs/tab-business-date.ts";
 import { notifyTabUpdated } from "../tabs/tab-events.ts";
 import { loadTabLedger, summarizeLedger } from "../tabs/tab-ledger.ts";
@@ -377,7 +378,9 @@ export class PaymentsService implements IPaymentsService {
     if (tab.status === "CLOSED" && tab.business_date?.getTime() !== businessDate(now, restaurant).getTime())
       throw new ConflictError("O dia operacional do estorno terminou", "REFUND_WINDOW_EXPIRED");
 
+    const sales = await tabSales(transaction, tab.id);
     const refunded = await this.applyRefund(transaction, tab, payment, actor, reason);
+    if (sales) await applyTabSalesChange(transaction, tab.id, sales);
     return { ...refunded, state, replayed: false };
   }
 

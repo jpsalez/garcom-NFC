@@ -89,6 +89,8 @@ import { PointCredentialRefreshService } from "../../modules/payments/point-cred
 import { PointPaymentsService } from "../../modules/payments/point-payments.service.ts";
 import { MercadoPagoProvider } from "../../modules/payments/providers/mercado-pago.provider.ts";
 import { TerminalsService } from "../../modules/payments/terminals.service.ts";
+import type { IReportsService } from "../../modules/reports/reports.interfaces.ts";
+import { ReportsService } from "../../modules/reports/reports.service.ts";
 import { ManualPaymentProvider } from "../../modules/payments/providers/manual.provider.ts";
 import { PaymentProviderRegistry } from "../../modules/payments/providers/payment-provider.registry.ts";
 
@@ -115,6 +117,7 @@ export function registerDependencies() {
   container.registerSingleton("PointPaymentsService", PointPaymentsService);
   container.registerSingleton("PointCredentialRefreshService", PointCredentialRefreshService);
   container.registerSingleton("TerminalsService", TerminalsService);
+  container.registerSingleton<IReportsService>("ReportsService", ReportsService);
   container.registerSingleton("PaymentProviderRegistry", PaymentProviderRegistry);
   container.registerSingleton<IOrdersRepository>("OrdersRepository", OrdersRepository);
   container.registerSingleton<IOrdersService>("OrdersService", OrdersService);

@@ -19,3 +19,10 @@ export function businessDate(
   const beforeCutoff = value("hour") * 60 + value("minute") < business_day_cutoff_minutes;
   return new Date(Date.UTC(value("year"), value("month") - 1, value("day") - Number(beforeCutoff)));
 }
+
+export function localHour(at: Date, timezone: string) {
+  const hour = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", hourCycle: "h23" })
+    .formatToParts(at)
+    .find(({ type }) => type === "hour")?.value;
+  return Number(hour);
+}

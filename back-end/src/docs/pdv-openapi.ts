@@ -14,6 +14,14 @@ import {
 } from "../modules/payments/payments.schemas.ts";
 import { createTerminalSchema, updateTerminalSchema } from "../modules/payments/terminals.schemas.ts";
 import {
+  alertsQuery,
+  forecastQuery,
+  historyQuery,
+  rangeQuery,
+  rebuildSchema,
+  summaryQuery,
+} from "../modules/reports/reports.schemas.ts";
+import {
   restaurantSettingsPatchSchema,
   restaurantSettingsSchema,
 } from "../modules/restaurants/restaurant-settings.schema.ts";
@@ -72,6 +80,31 @@ function tabMutation(summary: string, schema: z.ZodType) {
     parameters: [tabId],
     requestBody: tabBody(schema),
     responses: { ...tabErrors, 200: { description: "Comanda atualizada no campo tab" } },
+  };
+}
+
+function queryOf(schema: z.ZodType) {
+  const { properties = {}, required = [] } = z.toJSONSchema(schema, { io: "input" });
+  return Object.entries(properties).map(([name, property]) => ({
+    name,
+    in: "query",
+    required: required.includes(name),
+    schema: property,
+  }));
+}
+const reportErrors = {
+  400: { description: "VALIDATION_ERROR (período inválido ou acima do limite)" },
+  401: settingsResponses[401],
+  403: { description: "Somente OWNER e MANAGER (reports:read)" },
+};
+function report(summary: string, schema: z.ZodType) {
+  return {
+    get: {
+      ...pdvAccess,
+      summary,
+      parameters: queryOf(schema),
+      responses: { ...reportErrors, 200: { description: summary } },
+    },
   };
 }
 
@@ -411,6 +444,22 @@ export const pdvPaths = {
         },
       },
       responses: { ...settingsResponses, 400: { description: "VALIDATION_ERROR" } },
+    },
+  },
+  "/reports/sales/summary": report("KPIs do período com mix de pagamentos e comparação", summaryQuery),
+  "/reports/sales/history": report("Série diária, semanal ou mensal por dia operacional", historyQuery),
+  "/reports/products/abc": report("Ranking de produtos com curva ABC", rangeQuery),
+  "/reports/products/basket": report("Pares de produtos vendidos juntos na mesma comanda", rangeQuery),
+  "/reports/heatmap": report("Itens e receita por dia da semana e hora local", rangeQuery),
+  "/reports/kitchen/prep-time": report("Tempo médio e p90 até o primeiro item pronto", rangeQuery),
+  "/reports/forecasts/demand": report("Previsão de demanda por produto (WMA sazonal)", forecastQuery),
+  "/reports/forecasts/alerts": report("Alertas de anomalia do dia operacional", alertsQuery),
+  "/reports/rebuild": {
+    post: {
+      ...pdvAccess,
+      summary: "Reconstrói os agregados do período a partir das comandas fechadas (somente OWNER)",
+      requestBody: tabBody(rebuildSchema),
+      responses: { ...reportErrors, 200: { description: "Período e dias com venda reconstruídos" } },
     },
   },
 };

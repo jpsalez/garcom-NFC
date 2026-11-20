@@ -4,6 +4,7 @@ import { ConflictError } from "../../shared/errors/http-errors.ts";
 import type { RestaurantTransaction } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
 import { MenuRepository } from "../menu/menu.repository.ts";
+import { applyTabSalesChange } from "../reports/sales-aggregator.ts";
 import { closeSessionResources, notifySessionClosed, type ClosedSession } from "../sessions/close-session.ts";
 import { TableSessionRepository } from "../sessions/sessions.repository.ts";
 import { notifyPaymentRequestUpdated } from "./payment-request-events.ts";
@@ -56,6 +57,7 @@ export async function closeTab(
     business_date: businessDate(now, restaurant),
     version: tab.version + 1,
   });
+  await applyTabSalesChange(transaction, tab.id);
   const resources = await closeTabResources(transaction, tab, actor.id);
   await new MenuRepository(db).audit(
     actor,
