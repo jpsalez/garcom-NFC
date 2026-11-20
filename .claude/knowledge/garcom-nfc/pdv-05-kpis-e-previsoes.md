@@ -309,7 +309,7 @@ Períodos: `from ≤ to` e no máximo 366 dias (`reports.schemas.ts`; datas em `
 - `REVENUE_DROP` exige pelo menos 3 ocorrências do mesmo dia da semana.
 - `DISCOUNT_SPIKE` exige média de descontos maior que zero.
 - Dias sem venda não geram alerta de dia.
-- `CASH_DIFF_RECURRENT` considera os turnos fechados nos 7 dias que terminam na data avaliada, com limites em UTC, e não os 7 dias até hoje.
+- `CASH_DIFF_RECURRENT` considera os turnos fechados nos 7 dias operacionais que terminam na data avaliada. A janela começa no instante local de `data − 6` mais o corte (`businessDayStart` em `tab-business-date.ts`, o inverso de `businessDate`) e dura 7 dias.
 
 ### Reconciliação
 `back-end/src/shared/jobs/reports-reconciliation.job.ts` roda no boot e depois a cada 24 h. Reconstrói os últimos 7 dias operacionais de cada restaurante ativo (`ReportsService.reconcile`). A falha de um restaurante é registrada com o `restaurant_id` e não interrompe os demais.

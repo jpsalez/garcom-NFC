@@ -1,3 +1,4 @@
+import { type BusinessClock, businessDayStart } from "../tabs/tab-business-date.ts";
 import { rankProducts } from "./abc-curve.ts";
 import {
   cancellationSpike,
@@ -28,7 +29,12 @@ function trendsOf(rows: ProductRows, date: Date) {
   }));
 }
 
-export async function salesAlerts(repository: ReportsRepository, restaurantId: string, date: Date) {
+export async function salesAlerts(
+  repository: ReportsRepository,
+  restaurantId: string,
+  date: Date,
+  clock: BusinessClock,
+) {
   const history: DayFigures[] = await repository.dailyRange(restaurantId, {
     from: addDays(date, -42),
     to: date,
@@ -38,8 +44,9 @@ export async function salesAlerts(repository: ReportsRepository, restaurantId: s
   const cancelledItems = products
     .filter(({ business_date }) => sameDay(business_date, date))
     .reduce((sum, { quantity_cancelled }) => sum + quantity_cancelled, 0);
-  // Turnos fechados nos 7 dias que terminam na data avaliada (limites em UTC).
-  const shifts = await repository.closedCashShifts(restaurantId, addDays(date, -6), addDays(date, 1));
+  // Turnos fechados nos 7 dias operacionais que terminam na data avaliada, no fuso e corte do restaurante.
+  const since = businessDayStart(addDays(date, -6), clock);
+  const shifts = await repository.closedCashShifts(restaurantId, since, addDays(since, 7));
   const dayAlerts = day?.tabs_closed_count
     ? [
         revenueDrop(day, history),

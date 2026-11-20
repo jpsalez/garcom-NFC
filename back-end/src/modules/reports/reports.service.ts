@@ -30,6 +30,11 @@ function restaurantOf(actor: ActorContext) {
   return actor.restaurantId;
 }
 
+const errorCode = (error: unknown) =>
+  typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
+
 const toRange = ({ from, to }: RangeQuery): DateRange => ({ from: parseDay(from), to: parseDay(to) });
 
 @injectable()
@@ -105,7 +110,7 @@ export class ReportsService implements IReportsService {
     const clock = await repository.businessClock(restaurantId);
     // Sem data, avalia o último dia operacional completo.
     const date = query.date ? parseDay(query.date) : addDays(businessDate(new Date(), clock), -1);
-    return salesAlerts(repository, restaurantId, date);
+    return salesAlerts(repository, restaurantId, date, clock);
   }
 
   async rebuild(actor: ActorContext, input: RebuildInput) {
@@ -127,8 +132,9 @@ export class ReportsService implements IReportsService {
         logOperation({
           event: "reports.reconciliation_failed",
           restaurant_id: id,
-          // Só a mensagem, truncada: nada de payload ou parâmetros da consulta.
-          error: error instanceof Error ? error.message.slice(0, 300) : "erro desconhecido",
+          // Só nome e código: a mensagem do Prisma inclui os argumentos da consulta.
+          error: error instanceof Error ? error.name : "unknown",
+          code: errorCode(error),
         });
       }
     }

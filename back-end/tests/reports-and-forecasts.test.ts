@@ -4,7 +4,7 @@ import type { payment_method } from "../generated/prisma/enums.ts";
 import { basketPairs, prepTimeStats } from "../src/modules/reports/basket-and-prep.ts";
 import { forecastDemand, trendFactor, weightedMean } from "../src/modules/reports/forecast.engine.ts";
 import type { IReportsService } from "../src/modules/reports/reports.interfaces.ts";
-import { businessDate, localHour } from "../src/modules/tabs/tab-business-date.ts";
+import { businessDate, businessDayStart, localHour } from "../src/modules/tabs/tab-business-date.ts";
 import { container } from "../src/shared/container/container.ts";
 import { api } from "./helpers/app.ts";
 import { auth, ownerOf } from "./helpers/auth.ts";
@@ -96,8 +96,9 @@ async function closeTab(f: Fixture, tabId: string) {
   return api().post(`/api/v1/tabs/${tabId}/close`).set(auth(f.token)).send({ expected_version: version });
 }
 
-const rebuildDay = (f: Fixture, date: string) =>
-  api().post("/api/v1/reports/rebuild").set(auth(f.token)).send({ from: date, to: date });
+const rebuildDay = (f: Fixture, from: string, to = from) =>
+  api().post("/api/v1/reports/rebuild").set(auth(f.token)).send({ from, to });
+const nextDay = (date: string) => new Date(Date.parse(date) + 86_400_000).toISOString().slice(0, 10);
 
 async function aggregates(restaurantId: string) {
   const daily = await prisma.daily_sales.findMany({
@@ -277,14 +278,23 @@ describe("agregados de vendas", () => {
     const pending = await sellAtCounter(f, { close: "none" });
     const { business_date } = await prisma.tabs.findUniqueOrThrow({ where: { id: manual.tabId } });
     const date = business_date?.toISOString().slice(0, 10) ?? "";
-    const [closed, rebuilt] = await Promise.all([closeTab(f, pending.tabId), rebuildDay(f, date)]);
+    // date e date+1: os fechamentos podem cruzar a virada do dia operacional durante o teste.
+    const [closed, rebuilt] = await Promise.all([
+      closeTab(f, pending.tabId),
+      rebuildDay(f, date, nextDay(date)),
+    ]);
     expect([closed.status, rebuilt.status]).toEqual([200, 200]);
 
     const incremental = await aggregates(f.restaurantId);
-    expect(incremental.daily).toMatchObject([
-      { tabs_closed_count: 3, table_tabs_count: 1, counter_tabs_count: 2, net_sales_cents: 6600 },
-    ]);
-    expect((await rebuildDay(f, date)).status).toBe(200);
+    const total = (
+      field: "tabs_closed_count" | "table_tabs_count" | "counter_tabs_count" | "net_sales_cents",
+    ) => incremental.daily.reduce((sum, row) => sum + row[field], 0);
+    expect(
+      ["tabs_closed_count", "table_tabs_count", "counter_tabs_count", "net_sales_cents"].map((field) =>
+        total(field as Parameters<typeof total>[0]),
+      ),
+    ).toEqual([3, 1, 2, 6600]);
+    expect((await rebuildDay(f, date, nextDay(date))).status).toBe(200);
     expect(await aggregates(f.restaurantId)).toEqual(incremental);
   });
 
@@ -418,7 +428,7 @@ describe("previsões", () => {
         expected_cash_cents: Math.max(0, -difference),
         counted_cash_cents: Math.max(0, difference),
         difference_cents: difference,
-        closed_at: new Date(),
+        closed_at: new Date("2026-11-20T15:00:00Z"),
       })),
     });
     const alerts = await report(f.token, "forecasts/alerts", { date: "2026-11-20" });
@@ -431,6 +441,52 @@ describe("previsões", () => {
         expect.objectContaining({ code: "CASH_DIFF_RECURRENT", severity: "CRITICAL" }),
       ]),
     );
+  });
+});
+
+describe("janela do caixa nos alertas", () => {
+  const clock = { timezone: "America/Sao_Paulo", business_day_cutoff_minutes: 300 };
+  const shortage = (f: Fixture, closedAt: string, difference: number) =>
+    prisma.cash_shifts.create({
+      data: {
+        restaurant_id: f.restaurantId,
+        opened_by_user_id: f.user.id,
+        status: "CLOSED",
+        opening_cents: 0,
+        expected_cash_cents: -difference,
+        counted_cash_cents: 0,
+        difference_cents: difference,
+        closed_at: new Date(closedAt),
+      },
+    });
+  const cashAlert = async (f: Fixture) =>
+    (await report(f.token, "forecasts/alerts", { date: "2026-11-20" })).body.alerts.some(
+      ({ code }: { code: string }) => code === "CASH_DIFF_RECURRENT",
+    );
+
+  it("calcula o início do dia operacional no fuso e no corte do restaurante", () => {
+    const start = businessDayStart(day("2026-11-20"), clock);
+    expect(start).toEqual(new Date("2026-11-20T08:00:00Z"));
+    expect(businessDate(start, clock)).toEqual(day("2026-11-20"));
+    expect(businessDate(new Date(start.getTime() - 1), clock)).toEqual(day("2026-11-19"));
+    expect(businessDayStart(day("2026-11-20"), { ...clock, business_day_cutoff_minutes: 0 })).toEqual(
+      new Date("2026-11-20T03:00:00Z"),
+    );
+  });
+
+  it("inclui o turno das 22:00 locais do dia e exclui o de sete dias antes", async () => {
+    const f = await menuFixture();
+    await prisma.restaurants.update({
+      where: { id: f.restaurantId },
+      data: { business_day_cutoff_minutes: 300 },
+    });
+    // 22:00 locais de D−7 (01:00Z de D−6) fica fora; sozinho com o de D não forma recorrência.
+    await shortage(f, "2026-11-14T01:00:00Z", -2000);
+    await shortage(f, "2026-11-21T01:00:00Z", -1500);
+    expect(await cashAlert(f)).toBe(false);
+    // Um segundo turno dentro da janela confirma que o de D (01:00Z de D+1) foi contado.
+    await shortage(f, "2026-11-20T01:00:00Z", -1200);
+    expect(await cashAlert(f)).toBe(true);
   });
 });
 
