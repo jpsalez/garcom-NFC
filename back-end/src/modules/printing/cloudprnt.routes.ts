@@ -36,7 +36,7 @@ export function cloudPrntRoutes() {
   router.post("/", async (req, res) => {
     const credential = printerCredential(req);
     const poll = cloudPollSchema.parse(req.body);
-    const ready = /^20[01](?:$|\s|%20)/i.test(poll.statusCode) && !poll.printingInProgress && !poll.jobToken;
+    const ready = /^20[01](?:$|\s|%20)/i.test(poll.statusCode) && !poll.printingInProgress;
     const token = await printing.poll(credential, ready);
     res.json(token
       ? { jobReady: true, jobToken: token, mediaTypes: [cloudPrintMediaType], deleteMethod: "DELETE" }

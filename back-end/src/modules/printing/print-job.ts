@@ -5,7 +5,7 @@ import { PrintingRepository } from "./printing.repository.ts";
 
 export const kitchenDestination = "KITCHEN";
 export const printerOfflineMs = 5 * 60 * 1000;
-export const reservationTtlMs = 30 * 1000;
+export const reservationTtlMs = 2 * 60 * 1000;
 
 export function printPayload(order: OrderRecord, reprint: boolean) {
   const items = order.items

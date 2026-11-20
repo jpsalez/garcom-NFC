@@ -206,7 +206,7 @@ A API do Psiu recebe consultas HTTPS da própria impressora. O modelo de referê
 
 A credencial é armazenada como hash e identifica o restaurante. O proxy de produção do Compose serve o endpoint pelo mesmo domínio HTTPS da aplicação. A migração revoga as credenciais antigas, pausa os destinos, passa comandas pendentes para `REVIEW_REQUIRED` e marca envios em andamento como `UNCERTAIN`.
 
-A comanda original é criada na transação do pedido quando a impressão está ativa. No primeiro download, a API fixa a versão do pedido e as unidades ainda não canceladas. Há uma reserva de 30 segundos por destino. Erro ou expiração após o download marca `UNCERTAIN`; confira o papel antes de pedir outra via. A pausa e a falta de contato por cinco minutos retêm pendências para revisão. `SENT` indica confirmação da impressora para as comandas CloudPRNT.
+A comanda original é criada na transação do pedido quando a impressão está ativa. No primeiro download, a API fixa a versão do pedido e as unidades ainda não canceladas. Há uma reserva de dois minutos por destino. Erro ou expiração após o download marca `UNCERTAIN`; confira o papel antes de pedir outra via. A pausa e a falta de contato por cinco minutos retêm pendências para revisão. `SENT` indica confirmação da impressora para as comandas CloudPRNT.
 
 Os testes em `back-end/tests/printing.test.ts` simulam a impressora por HTTP usando PostgreSQL real. O adaptador HTTP fica em `cloudprnt.routes.ts` e a comanda em `print-ticket.ts`. A referência de protocolo é o [guia CloudPRNT da Star](https://star-m.jp/products/s_print/sdk/StarCloudPRNT/manual/en/index.html).
 
