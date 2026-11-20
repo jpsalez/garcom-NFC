@@ -10,7 +10,6 @@ import {
 } from "../../shared/errors/http-errors.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
-import { notifyPos } from "../../shared/realtime/pos-events.ts";
 import type {
   IRestaurantUnitOfWork,
   RestaurantTransaction,
@@ -29,11 +28,14 @@ import { ensureOpenTab, getTab } from "../tabs/tabs-state.ts";
 import { tabSummary } from "../tabs/tabs-view.ts";
 import { TabsRepository } from "../tabs/tabs.repository.ts";
 import { allocatedByItem, validateAllocations, validatePaymentAmount } from "./payment-allocation.ts";
+import { notifyPayment } from "./payment-events.ts";
 import { paymentView } from "./payment-view.ts";
 import type { IPaymentsService } from "./payments.interfaces.ts";
 import type { PaymentRecord } from "./payments.repository.interface.ts";
 import { PaymentsRepository } from "./payments.repository.ts";
 import type { CreatePayment, PaymentAllocation, RefundPayment } from "./payments.schemas.ts";
+import { pointBinding } from "./point-payment-state.ts";
+import type { PointPaymentsService } from "./point-payments.service.ts";
 import type { PaymentProviderRegistry } from "./providers/payment-provider.registry.ts";
 
 function restaurantOf(actor: ActorContext) {
@@ -50,17 +52,6 @@ function requestHash(tabId: string, input: CreatePayment) {
   return createHash("sha256")
     .update(JSON.stringify({ tabId, ...input, allocations }))
     .digest("hex");
-}
-
-function notifyPayment(notifier: INotifier, payment: PaymentRecord) {
-  notifyPos(notifier, payment.restaurant_id, "payment:updated", {
-    payment_id: payment.id,
-    tab_id: payment.tab_id,
-    status: payment.status,
-    amount_cents: payment.amount_cents,
-    method: payment.method,
-    provider: payment.provider,
-  });
 }
 
 function matchesAllocations(input: PaymentAllocation[], saved: PaymentAllocation[]) {
@@ -112,12 +103,26 @@ export class PaymentsService implements IPaymentsService {
     @inject("RestaurantUnitOfWork") private unit: IRestaurantUnitOfWork,
     @inject("Notifier") private notifier: INotifier,
     @inject("PaymentProviderRegistry") private providers: PaymentProviderRegistry,
+    @inject("PointPaymentsService") private point: PointPaymentsService,
   ) {}
 
   async create(actor: ActorContext, id: string, input: CreatePayment) {
+    const result = await this.beginPayment(actor, id, input);
+    if (result.replayed) return this.response(result);
+
+    notifyPayment(this.notifier, result.payment);
+    if (result.converted) notifyPaymentRequestUpdated(this.notifier, result.converted);
+    if (result.closed) notifyClosedTab(this.notifier, result.closed);
+    else notifyTabUpdated(this.notifier, result.tab, result.state.pendingCents);
+    if (result.payment.provider !== "MERCADO_PAGO") return this.response(result);
+
+    return this.response(await this.dispatchPointPayment(result.payment));
+  }
+
+  private beginPayment(actor: ActorContext, id: string, input: CreatePayment) {
     const restaurantId = restaurantOf(actor);
     const hash = requestHash(id, input);
-    const result = await this.unit.run(
+    return this.unit.run(
       restaurantId,
       async (transaction) => {
         const { db } = transaction;
@@ -134,12 +139,28 @@ export class PaymentsService implements IPaymentsService {
       },
       { actor, capability: "payments:create" },
     );
-    if (!result.replayed) {
-      notifyPayment(this.notifier, result.payment);
-      if (result.converted) notifyPaymentRequestUpdated(this.notifier, result.converted);
-      if (result.closed) notifyClosedTab(this.notifier, result.closed);
-      else notifyTabUpdated(this.notifier, result.tab, result.state.pendingCents);
-    }
+  }
+
+  private async dispatchPointPayment(payment: PaymentRecord) {
+    const { restaurant_id: restaurantId, id } = payment;
+    await this.point.dispatch(payment);
+    return this.unit.run(
+      restaurantId,
+      async (transaction) => {
+        const current = await new PaymentsRepository(transaction.db).get(restaurantId, id);
+        if (!current) throw new NotFoundError("Pagamento não encontrado");
+        return { ...(await this.replay(transaction, current, false)), replayed: false };
+      },
+      { allowInactive: true },
+    );
+  }
+
+  private response(
+    result: Pick<
+      Awaited<ReturnType<PaymentsService["replay"]>>,
+      "payment" | "tab" | "state" | "autoClosed" | "replayed"
+    >,
+  ) {
     return {
       payment: paymentView(result.payment),
       tab: tabSummary(result.tab, result.state.hasPendingKitchenItems, result.state),
@@ -170,9 +191,9 @@ export class PaymentsService implements IPaymentsService {
     validateAllocations(ledger.orders, allocatedByItem(ledger.payments), data.allocations);
     validatePaymentAmount(tab, state.pendingCents, data.amount, data.allocations, data.includeFee);
 
-    const payment = await this.persistManualPayment(transaction, tab, actor, { input, data, hash });
+    const payment = await this.persistPayment(transaction, tab, actor, { input, data, hash });
     const converted = await this.convertRequest(db, payment, data.request, actor);
-    const paid = await this.applyApprovedPayment(db, tab, payment, actor);
+    const paid = await this.applyRecordedPayment(db, tab, payment, actor);
     const closed = await this.maybeClose(transaction, paid, actor, state, input.auto_close);
     return {
       payment,
@@ -182,12 +203,13 @@ export class PaymentsService implements IPaymentsService {
       autoClosed: closed !== null,
       state: {
         ...state,
+        pendingCents: state.pendingCents + (payment.status === "PENDING" ? payment.amount_cents : 0),
         openRequests: closed ? 0 : state.openRequests - Number(data.request?.status === "OPEN"),
       },
     };
   }
 
-  private async persistManualPayment(
+  private async persistPayment(
     { db, now }: RestaurantTransaction,
     tab: tabs,
     actor: ActorContext,
@@ -199,18 +221,19 @@ export class PaymentsService implements IPaymentsService {
   ) {
     if (input.tip_cents > data.amount)
       throw new ValidationError(undefined, "A gorjeta não pode exceder o pagamento");
-    const provider = this.providers.get(input.provider);
-    if (input.terminal_id) throw new ValidationError(undefined, "O pagamento manual não usa terminal");
+    const binding =
+      input.provider === "MERCADO_PAGO" ? await pointBinding(db, tab.restaurant_id, input, now) : null;
     const { method, received_cents, tip_cents, installments, idempotency_key } = input;
     const amount_cents = data.amount;
-    const charge = provider.recordCharge({ method, amount_cents, received_cents });
+    const charge = binding ? { status: "PENDING" as const } : this.manualCharge(input, amount_cents);
     const shift = await new CashShiftsRepository(db).findOpenByOperator(tab.restaurant_id, actor.id);
     return new PaymentsRepository(db).create(
       tab.restaurant_id,
       {
         ...charge,
         ...input.manual_details,
-        provider: provider.kind,
+        ...binding,
+        provider: input.provider,
         tab_id: tab.id,
         cash_shift_id: shift?.id,
         method,
@@ -222,11 +245,22 @@ export class PaymentsService implements IPaymentsService {
         payer_label: data.payerLabel,
         actor_user_id: actor.id,
         request_hash: hash,
-        confirmed_at: now,
+        confirmed_at: binding ? undefined : now,
         created_at: now,
       },
       data.allocations,
     );
+  }
+
+  private manualCharge(input: CreatePayment, amount_cents: number) {
+    const provider = this.providers.get(input.provider);
+    if (provider.kind !== "MANUAL" || input.terminal_id)
+      throw new ValidationError(undefined, "O pagamento manual não usa terminal");
+    return provider.recordCharge({
+      method: input.method,
+      amount_cents,
+      received_cents: input.received_cents,
+    });
   }
 
   private async convertRequest(
@@ -243,15 +277,15 @@ export class PaymentsService implements IPaymentsService {
     });
   }
 
-  private async applyApprovedPayment(db: DbClient, tab: tabs, payment: PaymentRecord, actor: ActorContext) {
+  private async applyRecordedPayment(db: DbClient, tab: tabs, payment: PaymentRecord, actor: ActorContext) {
     await applyPaymentToCashShift(db, payment);
     const paid = await new TabsRepository(db).update(tab.restaurant_id, tab.id, {
-      paid_cents: tab.paid_cents + payment.amount_cents,
+      paid_cents: tab.paid_cents + (payment.status === "APPROVED" ? payment.amount_cents : 0),
       version: tab.version + 1,
     });
     await new MenuRepository(db).audit(
       actor,
-      "PAYMENT_RECORDED",
+      payment.status === "APPROVED" ? "PAYMENT_RECORDED" : "PAYMENT_REQUESTED",
       "PAYMENT",
       payment.id,
       {},
@@ -306,6 +340,11 @@ export class PaymentsService implements IPaymentsService {
     const tab = await getTab(new TabsRepository(db), restaurant.id, id);
     const payment = await new PaymentsRepository(db).findById(restaurant.id, id, paymentId);
     if (!payment) throw new NotFoundError("Pagamento não encontrado");
+    if (payment.provider !== "MANUAL")
+      throw new ConflictError(
+        "Estorno integrado indisponível nesta operação",
+        "INTEGRATED_REFUND_UNAVAILABLE",
+      );
 
     const state = summarizeLedger(await loadTabLedger(db, tab));
     if (payment.status === "REFUNDED" && payment.refund_reason === reason)
@@ -315,7 +354,6 @@ export class PaymentsService implements IPaymentsService {
     if (tab.status === "CLOSED" && tab.business_date?.getTime() !== businessDate(now, restaurant).getTime())
       throw new ConflictError("O dia operacional do estorno terminou", "REFUND_WINDOW_EXPIRED");
 
-    this.providers.get(payment.provider);
     const refunded = await this.applyRefund(transaction, tab, payment, actor, reason);
     return { ...refunded, state, replayed: false };
   }

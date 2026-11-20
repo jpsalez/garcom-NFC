@@ -12,7 +12,7 @@
 
 ### 1.1 Novas variáveis de ambiente (`back-end/.env`)
 ```env
-# Obrigatória a partir da Etapa 4 (chave 32 bytes em hex = 64 chars: `openssl rand -hex 32`)
+# Obrigatória para a integração Point (32 bytes em hex: `openssl rand -hex 32`)
 CREDENTIALS_ENCRYPTION_KEY=...
 
 # Etapa 4 — Mercado Pago Point (credenciais do seu App de Parceiro no MP Developers)
@@ -35,15 +35,7 @@ FOCUS_NFE_PROD_URL=https://api.focusnfe.com.br/v2
 - O prefixo `v1:` permite rotação futura de chave sem quebrar dados antigos.
 
 ### 1.3 Captura de `rawBody` no Express (`back-end/src/server.ts`)
-Para validar assinaturas **HMAC-SHA256** de webhooks (Mercado Pago, Notaas, Focus NFe), o `express.json` precisa preservar o buffer bruto **somente nas rotas de webhook** (ou via `verify`):
-```ts
-app.use(express.json({
-  limit: "1mb",
-  verify: (req, _res, buf) => {
-    if (req.url.startsWith("/api/v1/webhooks/")) (req as Request & { rawBody?: Buffer }).rawBody = buf;
-  },
-}));
-```
+O `express.json` preserva o buffer bruto apenas em `/api/v1/webhooks/*` para integrações que assinam o corpo. O Mercado Pago assina o manifesto descrito na seção 3.3.
 
 ---
 
@@ -69,17 +61,11 @@ back-end/src/modules/payments/
     └── (futuro: stone.provider.ts, pagbank.provider.ts, cielo.provider.ts)
 ```
 
-### 2.2 Interface única (`IPaymentProvider`)
-```ts
-export interface IPaymentProvider {
-  readonly kind: PaymentProviderType;
-  listTerminals(account: DecryptedProviderAccount): Promise<ExternalTerminal[]>;
-  createCharge(account: DecryptedProviderAccount, input: CreateChargeInput): Promise<ProviderChargeResult>;
-  getChargeStatus(account: DecryptedProviderAccount, externalId: string): Promise<ProviderChargeStatus>;
-  cancelCharge(account: DecryptedProviderAccount, externalId: string): Promise<void>;
-  parseWebhook(headers: Record<string, string>, rawBody: Buffer, secret: string): Promise<WebhookEvent | null>;
-}
-```
+### 2.2 Interface dos provedores
+
+`IPaymentProvider` é discriminada por `kind`. `MANUAL` confirma localmente com `recordCharge`. `MERCADO_PAGO` oferece OAuth, terminais, criação e consulta de cobranças e cancelamento. O registry retorna o adaptador apropriado. O estado financeiro é aplicado pelos serviços depois de validar o retorno externo.
+
+Arquivos da integração Point: `payment-provider-accounts.repository.ts`, `payment-terminals.repository.ts`, `payment-sync.queries.ts`, `payment-events.ts`, `point-account.ts`, `point-oauth-state.ts`, `point-credential-refresh.service.ts`, `point-payment-state.ts`, `point-payments.service.ts`, `mercado-pago-http.ts`, `mercado-pago-order.ts`, `terminals.routes.ts` e `terminals.schemas.ts`.
 
 ### 2.3 Os 4 níveis de integração (convivem na mesma interface)
 | Nível | Provedor | Como funciona | Quando usar |
@@ -94,68 +80,38 @@ export interface IPaymentProvider {
 ## 3. Especificação do piloto N1: Mercado Pago Point (`mercado-pago.provider.ts`)
 
 ### 3.1 Conexão OAuth2 por restaurante
-1. `GET /api/v1/payment-providers/mercado-pago/oauth/url` (`terminals:configure`):
-   - Gera `state` assinado com HMAC (`{ restaurantId, nonce, exp }` — validade 10 min).
-   - Redireciona para `https://auth.mercadopago.com.br/authorization?client_id=...&response_type=code&platform_id=mp&state=...&redirect_uri=...`.
-2. `GET /api/v1/payment-providers/mercado-pago/oauth/callback`:
-   - Valida assinatura e expiração do `state`.
-   - Troca `code` via `POST /oauth/token` → recebe `access_token`, `refresh_token`, `user_id`, `expires_in`.
-   - Cifra `access_token` e `refresh_token` com `encryptSecret()` e grava em `payment_provider_accounts`.
-3. `POST /api/v1/payment-terminals/sync` (`terminals:configure`):
-   - Chama `GET /point/integration-api/devices` (ou `GET /terminals/v1/list` conforme versão ativa da Orders/Point API) → sincroniza terminais em `payment_terminals`.
-   - Garante que o terminal esteja no modo PDV (`operating_mode = "PDV"`).
 
-### 3.2 Fluxo de cobrança assíncrona (sem segurar lock!)
-```mermaid
-sequenceDiagram
-  participant OP as Garçom / Caixa
-  participant API as Back-end PDV
-  participant DB as Postgres (unit.run)
-  participant MP as API Mercado Pago
-  participant POS as Maquininha Point
+- `GET /api/v1/payment-providers/mercado-pago/oauth/url?environment=SANDBOX` gera a URL de autorização para OWNER/MANAGER. O `state` assinado por HMAC vincula restaurante, usuário e ambiente e vence em dez minutos. Use `environment=PRODUCTION` para credenciais de produção.
+- `GET /api/v1/payment-providers/mercado-pago/oauth/callback` exige a sessão do usuário que iniciou a conexão. Valida o `state` antes da troca em `POST /oauth/token` e revalida a permissão ao salvar as credenciais cifradas. A conta já vinculada mantém sua identidade externa para preservar a conciliação.
+- `POST /api/v1/payment-terminals/sync?environment=SANDBOX` importa terminais em modo PDV via `GET /terminals/v1/list`. A sincronização preserva rótulos e desativa no sistema os terminais que saírem do modo PDV ou da conta.
+- `GET /api/v1/payment-terminals` lista terminais para operadores de pagamento. OWNER/MANAGER cadastram um terminal PDV com um rótulo via `POST`, alteram rótulo ou disponibilidade via `PATCH /api/v1/payment-terminals/:id` e desativam via `DELETE`, preservando o histórico.
 
-  OP->>API: POST /tabs/:id/payments (provider=MERCADO_PAGO, terminal_id, amount)
-  API->>DB: unit.run: valida saldo + grava payment(PENDING) + allocations
-  DB-->>API: commit (lock liberado!)
-  API->>MP: POST cobrança na Point (X-Idempotency-Key = payment.idempotency_key)
-  alt Erro HTTP / timeout antes de criar no MP
-    API->>DB: unit.run: payment -> CANCELLED (libera saldo e allocations)
-    API-->>OP: 502 PROVIDER_UNAVAILABLE
-  else Criado no MP
-    MP->>POS: Valor aparece na tela da maquininha
-    MP-->>API: 201 { external_payment_id }
-    API->>DB: unit.run: external_payment_id + status=PROCESSING
-    API-->>OP: 202 Accepted { payment }
-  end
+### 3.2 Cobrança e idempotência
 
-  Note over POS: Cliente aproxima cartão ou lê QR Pix na Point
-  MP->>API: POST /webhooks/payments/mercado-pago (x-signature + x-request-id)
-  API->>API: 1) Valida HMAC x-signature  2) Consulta GET oficial no MP (anti-spoof)
-  API->>DB: unit.run: payment -> APPROVED + NSU/bandeira/parcelas/taxa + soma paid_cents
-  API-->>OP: Socket.IO payment:updated + tab:updated
-```
+1. `POST /api/v1/tabs/:id/payments` com `provider=MERCADO_PAGO` reserva saldo e alocações como `PENDING` na transação do restaurante. A operação vincula a conta, o terminal e o turno do operador.
+2. Depois do commit, o adaptador cria a order em `POST /v1/orders` com o `X-Idempotency-Key` local, o ID do pagamento como `external_reference` e validade `PT5M`. O Point aceita crédito, débito, voucher e Pix. Para crédito parcelado, o vendedor assume o custo do parcelamento e precisa habilitar o plano de parcelas na conta.
+3. O retorno válido da criação vincula o ID da order e muda o estado para `PROCESSING` em nova transação. A API responde `202`. A confirmação de crédito depende da consulta autenticada.
+4. Em rejeição definitiva da primeira criação, o pagamento passa a `CANCELLED`, liberando saldo e alocações, e a API responde `502 PROVIDER_UNAVAILABLE`. Após timeout ou resposta ambígua, a API responde `202 PENDING` e mantém a reserva.
+   Quando uma cobrança vinda de solicitação do cliente termina `DECLINED`, `CANCELLED` ou `EXPIRED`, a solicitação volta de `CONVERTED` para `ACCEPTED` na mesma transação e o balcão recebe `payment_request:updated`.
+5. Repetir a mesma chave e o mesmo payload retorna o pagamento já registrado. O estorno integrado está indisponível no endpoint local (`INTEGRATED_REFUND_UNAVAILABLE`). O estorno de pagamento manual segue disponível.
 
-### 3.3 Validação do Webhook Mercado Pago (`x-signature`)
-1. Extrair `ts` e `v1` do header `x-signature` e o header `x-request-id`.
-2. Montar o template oficial do Mercado Pago: `id:${dataId};request-id:${requestId};ts:${ts};`.
-3. Calcular `HMAC-SHA256(template, webhookSecret)` e comparar com `v1` usando **`crypto.timingSafeEqual`** (nunca `===`).
-4. Rejeitar com `401 INVALID_WEBHOOK_SIGNATURE` se inválido ou se `ts` for muito antigo (ex.: > 10 min, proteção anti-replay).
-5. Sempre fazer `GET` na API do Mercado Pago para obter o estado autoritativo (nunca confiar apenas no body do webhook).
+[Processamento de pagamentos Point](https://www.mercadopago.com.br/developers/pt/docs/mp-point/payment-processing)
 
-### 3.4 Mapeamento de estados e job de recuperação
-| Estado no provedor | Estado interno `payments.status` | Efeito no saldo da comanda |
-|---|---|---|
-| Criado / enviado à Point (`OPEN`, `ON_TERMINAL`, `IN_PROCESS`) | `PROCESSING` | Reserva saldo (`pending_cents`) |
-| Aprovado (`FINISHED`, `PROCESSED`, `APPROVED`) | `APPROVED` | Soma em `paid_cents`, libera `pending_cents`, grava `confirmed_at` |
-| Recusado (`REJECTED`, `ERROR`) | `DECLINED` | Libera saldo e `allocations` |
-| Cancelado (`CANCELED`, `ABANDONED`) | `CANCELLED` | Libera saldo e `allocations` |
-| Timeout > 5 min sem resposta | `EXPIRED` | Libera saldo e `allocations` |
+### 3.3 Validação do webhook
 
-**Job `back-end/src/shared/jobs/payment-reconciliation.job.ts` (`setInterval(..., 30_000).unref()` em `main.ts`):**
-- Busca pagamentos `PROCESSING` com `updated_at < now - 20s` (em lotes de 20).
-- Consulta `provider.getChargeStatus` fora do lock; atualiza para `APPROVED`/`DECLINED`/`CANCELLED` se mudou.
-- Se `created_at < now - 5 min` e ainda aberto, tenta `provider.cancelCharge` e marca `EXPIRED`.
-- Além disso, job diário renova `refresh_token` do OAuth que vence nos próximos 30 dias.
+`POST /api/v1/webhooks/payments/mercado-pago` usa `data.id` da query, `x-request-id` e `ts` de `x-signature`. Valida HMAC-SHA256 do manifesto `id:${dataIdLowerCase};request-id:${requestId};ts:${ts};` com comparação em tempo constante e tolerância de dez minutos. Assinatura inválida retorna `401 INVALID_WEBHOOK_SIGNATURE`.
+
+Depois da assinatura, a integração identifica o vínculo local e consulta `GET /v1/orders/{id}` com a credencial da conta correspondente. Antes de consolidar um pagamento, valida ID, referência local, conta, terminal, método e centavos pagos. A transação revalida o vínculo e o estado do pagamento, registrando mudanças em auditoria com ator SYSTEM. Eventos Socket.IO saem após o commit.
+
+[Notificações de orders Point](https://www.mercadopago.com.br/developers/pt/docs/mp-point/notifications)
+
+### 3.4 Reconciliação e renovação
+
+O job `payment-reconciliation.job.ts` consulta em lotes os pagamentos pendentes. Os estados `created`, `at_terminal` e `action_required` mantêm a reserva. A order processada com pagamento creditado vira `APPROVED`. Cancelamento, expiração e falha definitiva confirmados liberam a reserva. Um `202` de cancelamento no terminal mantém `PROCESSING` até confirmação por consulta ou notificação posterior.
+
+Uma criação sem ID é retomada com a mesma chave dentro dos primeiros cinco minutos. Se continuar ambígua depois dessa janela, a reserva permanece e exige conferência operacional. O job aplica `EXPIRED` apenas com confirmação de expiração ou de cancelamento da tentativa vencida. A renovação diária consulta contas com token a vencer em até 30 dias e usa atualização condicional ao gravar novas credenciais.
+
+[Estados de orders Point](https://www.mercadopago.com.br/developers/pt/docs/mp-point/resources/status-order-transaction)
 
 ---
 

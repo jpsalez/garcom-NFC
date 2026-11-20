@@ -37,6 +37,8 @@ model restaurants {
   print_destinations          print_destinations[]
   tabs                        tabs[]
   cash_shifts                 cash_shifts[]
+  payment_provider_accounts   payment_provider_accounts[]
+  payment_terminals           payment_terminals[]
 }
 
 model users {
@@ -910,6 +912,7 @@ model payments {
   cash_shift_id        String?
   provider             payment_provider_type @default(MANUAL)
   terminal_id          String?
+  provider_account_id  String?
   method               payment_method
   status               payment_status
   amount_cents         Int
@@ -937,6 +940,8 @@ model payments {
 
   tab             tabs                  @relation(fields: [restaurant_id, tab_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
   cash_shift      cash_shifts?          @relation(fields: [restaurant_id, cash_shift_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  provider_account payment_provider_accounts? @relation(fields: [restaurant_id, provider, provider_account_id], references: [restaurant_id, provider, id], onDelete: Restrict, onUpdate: Restrict, map: "payments_provider_account_fkey")
+  terminal         payment_terminals?          @relation(fields: [restaurant_id, terminal_id, provider, provider_account_id], references: [restaurant_id, id, provider, provider_account_id], onDelete: Restrict, onUpdate: Restrict, map: "payments_terminal_fkey")
   /// As FKs SQL de autoria limpam apenas os IDs dos usuários ao excluí-los.
   actor           users?                @relation("payment_actor", fields: [restaurant_id, actor_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
   refunded_by     users?                @relation("payment_refunded_by", fields: [restaurant_id, refunded_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
@@ -945,8 +950,11 @@ model payments {
 
   @@unique([restaurant_id, id])
   @@unique([restaurant_id, idempotency_key])
+  @@unique([restaurant_id, provider_account_id, external_payment_id], map: "payments_account_external_key")
   @@index([restaurant_id, tab_id, status])
   @@index([restaurant_id, cash_shift_id, status])
+  @@index([restaurant_id, terminal_id])
+  @@index([restaurant_id, provider, provider_account_id])
   @@index([provider, external_payment_id])
   @@index([status, updated_at])
   @@index([restaurant_id, actor_user_id])
@@ -1021,4 +1029,63 @@ model cash_movements {
 
   @@index([restaurant_id, cash_shift_id, created_at])
   @@index([restaurant_id, actor_user_id])
+}
+
+enum provider_environment {
+  SANDBOX
+  PRODUCTION
+}
+
+enum provider_account_status {
+  ACTIVE
+  REVOKED
+}
+
+model payment_provider_accounts {
+  id                       String                  @id @default(uuid())
+  restaurant_id            String
+  provider                 payment_provider_type
+  environment              provider_environment    @default(SANDBOX)
+  status                   provider_account_status @default(ACTIVE)
+  external_account_id      String?                 @db.VarChar(128)
+  access_token_encrypted   String
+  refresh_token_encrypted  String?
+  token_expires_at         DateTime?
+  webhook_secret_encrypted String?
+  metadata_json            Json?
+  created_at               DateTime                @default(now())
+  updated_at               DateTime                @default(now()) @updatedAt
+
+  restaurant restaurants         @relation(fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  terminals  payment_terminals[]
+  payments   payments[]
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, provider, id])
+  @@unique([restaurant_id, provider, environment], map: "payment_provider_accounts_identity_key")
+  @@index([provider, status, token_expires_at])
+}
+
+model payment_terminals {
+  id                  String                @id @default(uuid())
+  restaurant_id       String
+  provider_account_id String?
+  provider            payment_provider_type
+  external_device_id  String?               @db.VarChar(128)
+  serial_number       String?               @db.VarChar(128)
+  label               String                @db.VarChar(80)
+  active              Boolean               @default(true)
+  last_seen_at        DateTime?
+  metadata_json       Json?
+  created_at          DateTime              @default(now())
+  updated_at          DateTime              @default(now()) @updatedAt
+
+  restaurant       restaurants                @relation(fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  provider_account payment_provider_accounts? @relation(fields: [restaurant_id, provider, provider_account_id], references: [restaurant_id, provider, id], onDelete: Restrict, onUpdate: Restrict, map: "payment_terminals_account_fkey")
+  payments         payments[]
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, id, provider, provider_account_id], map: "payment_terminals_account_identity_key")
+  @@index([restaurant_id, active])
+  @@index([restaurant_id, provider, provider_account_id])
 }

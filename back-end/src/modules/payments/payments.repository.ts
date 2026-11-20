@@ -1,9 +1,11 @@
 import { inject, injectable } from "tsyringe";
+import type { payment_status } from "../../../generated/prisma/client.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type {
   CreatePaymentAllocationData,
   CreatePaymentData,
   IPaymentsRepository,
+  PaymentRecord,
   UpdatePaymentData,
 } from "./payments.repository.interface.ts";
 
@@ -21,6 +23,13 @@ export class PaymentsRepository implements IPaymentsRepository {
   findIdempotency(restaurantId: string, key: string) {
     return this.db.payments.findUnique({
       where: { restaurant_id_idempotency_key: { restaurant_id: restaurantId, idempotency_key: key } },
+      include: { allocations: true },
+    });
+  }
+
+  get(restaurantId: string, id: string) {
+    return this.db.payments.findUnique({
+      where: { id, restaurant_id: restaurantId },
       include: { allocations: true },
     });
   }
@@ -45,6 +54,33 @@ export class PaymentsRepository implements IPaymentsRepository {
       where: { id, restaurant_id: restaurantId, tab_id: tabId },
       data,
       include: { allocations: true },
+    });
+  }
+
+  async transition(
+    restaurantId: string,
+    id: string,
+    expectedStatuses: payment_status[],
+    data: UpdatePaymentData,
+  ) {
+    const result = await this.db.payments.updateMany({
+      where: { id, restaurant_id: restaurantId, status: { in: expectedStatuses } },
+      data,
+    });
+    return result.count ? this.get(restaurantId, id) : null;
+  }
+
+  auditPointTransition(restaurantId: string, payment: PaymentRecord, previousStatus: payment_status) {
+    return this.db.restaurant_operation_events.create({
+      data: {
+        restaurant_id: restaurantId,
+        entity_type: "PAYMENT",
+        entity_id: payment.id,
+        action: "POINT_PAYMENT_STATUS_CHANGED",
+        actor_type: "SYSTEM",
+        previous_value: { status: previousStatus },
+        new_value: { status: payment.status, tab_id: payment.tab_id, amount_cents: payment.amount_cents },
+      },
     });
   }
 

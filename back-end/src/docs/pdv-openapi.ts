@@ -11,6 +11,7 @@ import {
 } from "../modules/restaurants/restaurant-settings.schema.ts";
 
 import { createPaymentSchema, refundPaymentSchema } from "../modules/payments/payments.schemas.ts";
+import { createTerminalSchema, updateTerminalSchema } from "../modules/payments/terminals.schemas.ts";
 import { guestSchema, paymentRequestSchema } from "../modules/tabs/payment-requests.schemas.ts";
 import { posSubmitSchema } from "../modules/orders/orders.schemas.ts";
 import {
@@ -96,7 +97,104 @@ const cashShiftQueryParameters = Object.entries(
   z.toJSONSchema(cashShiftsQuery, { io: "input" }).properties ?? {},
 ).map(([name, schema]) => ({ name, in: "query", schema }));
 
+const pointEnvironment = {
+  name: "environment",
+  in: "query",
+  schema: { type: "string", enum: ["SANDBOX", "PRODUCTION"], default: "SANDBOX" },
+};
+const pointErrors = {
+  ...tabErrors,
+  404: { description: "Terminal não encontrado no restaurante autenticado" },
+  502: { description: "PROVIDER_UNAVAILABLE" },
+  503: { description: "Credenciais indisponíveis" },
+};
+
 export const pdvPaths = {
+  "/payment-providers/mercado-pago/oauth/url": {
+    get: {
+      ...pdvAccess,
+      summary: "Gera URL OAuth para o restaurante autenticado",
+      parameters: [pointEnvironment],
+      responses: { ...pointErrors, 200: { description: "URL no campo url" } },
+    },
+  },
+  "/payment-providers/mercado-pago/oauth/callback": {
+    get: {
+      ...pdvAccess,
+      summary: "Vincula a conta Point usando state e código OAuth",
+      parameters: ["code", "state"].map((name) => ({
+        name,
+        in: "query",
+        required: true,
+        schema: { type: "string" },
+      })),
+      responses: { ...pointErrors, 200: { description: "Conta vinculada sem credenciais na resposta" } },
+    },
+  },
+  "/payment-terminals/sync": {
+    post: {
+      ...pdvAccess,
+      summary: "Sincroniza os terminais em modo PDV da conta do restaurante",
+      parameters: [pointEnvironment],
+      responses: { ...pointErrors, 200: { description: "Terminais no campo terminals" } },
+    },
+  },
+  "/payment-terminals": {
+    get: {
+      ...pdvAccess,
+      summary: "Lista terminais Point do restaurante",
+      responses: { ...pointErrors, 200: { description: "Terminais no campo terminals" } },
+    },
+    post: {
+      ...pdvAccess,
+      summary: "Cadastra um terminal PDV da conta Point com um rótulo",
+      requestBody: tabBody(createTerminalSchema),
+      responses: { ...pointErrors, 201: { description: "Terminal cadastrado" } },
+    },
+  },
+  "/payment-terminals/{id}": {
+    get: {
+      ...pdvAccess,
+      summary: "Consulta terminal do restaurante",
+      parameters: [tabId],
+      responses: { ...pointErrors, 200: { description: "Terminal no campo terminal" } },
+    },
+    patch: {
+      ...pdvAccess,
+      summary: "Altera rótulo ou disponibilidade do terminal",
+      parameters: [tabId],
+      requestBody: tabBody(updateTerminalSchema),
+      responses: { ...pointErrors, 200: { description: "Terminal atualizado" } },
+    },
+    delete: {
+      ...pdvAccess,
+      summary: "Desativa terminal sem remover histórico de pagamento",
+      parameters: [tabId],
+      responses: { ...pointErrors, 204: { description: "Terminal desativado" } },
+    },
+  },
+  "/webhooks/payments/mercado-pago": {
+    post: {
+      tags: ["PDV"],
+      security: [],
+      summary: "Recebe notificação Point assinada e consulta a Orders API",
+      parameters: [
+        { name: "data.id", in: "query", required: true, schema: { type: "string" } },
+        ...["x-request-id", "x-signature"].map((name) => ({
+          name,
+          in: "header",
+          required: true,
+          schema: { type: "string" },
+        })),
+      ],
+      responses: {
+        200: { description: "Notificação autenticada" },
+        401: { description: "INVALID_WEBHOOK_SIGNATURE" },
+        502: pointErrors[502],
+        503: pointErrors[503],
+      },
+    },
+  },
   "/cash-shifts": {
     get: {
       ...pdvAccess,
@@ -177,11 +275,14 @@ export const pdvPaths = {
   },
   "/tabs/{id}/payments": {
     post: {
-      ...tabMutation("Registra pagamento manual e divide por itens ou valor livre", createPaymentSchema),
+      ...tabMutation("Registra pagamento manual ou reserva valor para cobrança Point", createPaymentSchema),
       responses: {
         ...tabErrors,
         200: { description: "Pagamento já registrado para a chave, com replayed=true" },
-        201: { description: "Pagamento confirmado, tab e indicação de fechamento automático" },
+        201: { description: "Pagamento manual confirmado, tab e indicação de fechamento automático" },
+        202: { description: "Cobrança Point reservada, aguardando resultado ou confirmação" },
+        502: pointErrors[502],
+        503: pointErrors[503],
       },
     },
   },

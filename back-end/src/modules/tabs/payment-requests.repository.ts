@@ -49,6 +49,13 @@ export class PaymentRequestsRepository {
     });
   }
 
+  reopenForPayment(restaurantId: string, paymentId: string) {
+    return this.db.payment_requests.updateManyAndReturn({
+      where: { restaurant_id: restaurantId, payment_id: paymentId, status: "CONVERTED" },
+      data: { status: "ACCEPTED", payment_id: null },
+    });
+  }
+
   closeOpenForSession(restaurantId: string, sessionId: string, status: EndRequestStatus) {
     return this.db.payment_requests.updateManyAndReturn({
       where: { restaurant_id: restaurantId, session_id: sessionId, status: { in: ["OPEN", "ACCEPTED"] } },

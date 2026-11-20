@@ -85,6 +85,10 @@ import {
 } from "../../modules/tabs/tab-adjustments.service.ts";
 import type { IPaymentsService } from "../../modules/payments/payments.interfaces.ts";
 import { PaymentsService } from "../../modules/payments/payments.service.ts";
+import { PointCredentialRefreshService } from "../../modules/payments/point-credential-refresh.service.ts";
+import { PointPaymentsService } from "../../modules/payments/point-payments.service.ts";
+import { MercadoPagoProvider } from "../../modules/payments/providers/mercado-pago.provider.ts";
+import { TerminalsService } from "../../modules/payments/terminals.service.ts";
 import { ManualPaymentProvider } from "../../modules/payments/providers/manual.provider.ts";
 import { PaymentProviderRegistry } from "../../modules/payments/providers/payment-provider.registry.ts";
 
@@ -107,6 +111,10 @@ export function registerDependencies() {
   container.registerSingleton<ICashShiftsRepository>("CashShiftsRepository", CashShiftsRepository);
   container.registerSingleton<ICashShiftsService>("CashShiftsService", CashShiftsService);
   container.registerSingleton("ManualPaymentProvider", ManualPaymentProvider);
+  container.registerSingleton("MercadoPagoProvider", MercadoPagoProvider);
+  container.registerSingleton("PointPaymentsService", PointPaymentsService);
+  container.registerSingleton("PointCredentialRefreshService", PointCredentialRefreshService);
+  container.registerSingleton("TerminalsService", TerminalsService);
   container.registerSingleton("PaymentProviderRegistry", PaymentProviderRegistry);
   container.registerSingleton<IOrdersRepository>("OrdersRepository", OrdersRepository);
   container.registerSingleton<IOrdersService>("OrdersService", OrdersService);

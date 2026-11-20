@@ -1,9 +1,9 @@
 import { injectable } from "tsyringe";
 import { ValidationError } from "../../../shared/errors/http-errors.ts";
-import type { IPaymentProvider, ManualChargeInput } from "./payment-provider.interface.ts";
+import type { IManualPaymentProvider, ManualChargeInput } from "./payment-provider.interface.ts";
 
 @injectable()
-export class ManualPaymentProvider implements IPaymentProvider {
+export class ManualPaymentProvider implements IManualPaymentProvider {
   readonly kind = "MANUAL";
 
   recordCharge({ method, amount_cents, received_cents }: ManualChargeInput) {

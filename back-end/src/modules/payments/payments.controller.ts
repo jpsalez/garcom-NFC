@@ -10,7 +10,8 @@ export class PaymentsController {
 
   create = async (req: Request, res: Response) => {
     const result = await this.service.create(actorOf(req), String(req.params.id), req.body as CreatePayment);
-    return res.status(result.replayed ? 200 : 201).json(result);
+    if (result.replayed) return res.status(200).json(result);
+    return res.status(result.payment.provider === "MERCADO_PAGO" ? 202 : 201).json(result);
   };
 
   refund = async (req: Request, res: Response) =>
