@@ -217,6 +217,8 @@ model tabs {
   adjustments_cents        Int                @default(0)
   total_cents              Int                @default(0)
   paid_cents               Int                @default(0)
+  closed_refunded_cents    Int                @default(0)
+  legacy_closed            Boolean            @default(false)
   business_date            DateTime?          @db.Date
   opened_by_user_id        String?
   closed_by_user_id        String?
@@ -256,14 +258,20 @@ ALTER TABLE tabs ADD CONSTRAINT tabs_valid_invariants CHECK (
   AND version > 0
   AND service_fee_bps BETWEEN 0 AND 3000
   AND subtotal_cents >= 0 AND service_fee_cents >= 0
-  AND total_cents >= 0 AND paid_cents >= 0
+  AND total_cents >= 0 AND paid_cents >= 0 AND closed_refunded_cents >= 0
   AND (guests_count IS NULL OR guests_count > 0)
   AND ((kind = 'TABLE' AND table_id IS NOT NULL) OR (kind = 'COUNTER' AND table_id IS NULL))
   AND ((service_fee_waived = false) OR (service_fee_waive_reason IS NOT NULL AND length(btrim(service_fee_waive_reason)) BETWEEN 3 AND 500))
   AND ((status <> 'CANCELLED') OR (cancel_reason IS NOT NULL AND length(btrim(cancel_reason)) BETWEEN 3 AND 500))
-  AND ((status <> 'CLOSED') OR (closed_at IS NOT NULL AND business_date IS NOT NULL AND paid_cents = total_cents))
+  AND (status = 'CLOSED' OR closed_refunded_cents = 0)
+  AND (NOT legacy_closed OR (status = 'CLOSED' AND paid_cents = 0 AND closed_refunded_cents = 0))
+  AND ((status <> 'CLOSED') OR (closed_at IS NOT NULL AND business_date IS NOT NULL
+       AND (legacy_closed OR paid_cents::bigint + closed_refunded_cents = total_cents)))
 );
 ```
+**[Implementado] CHECK atual:** a versão acima é a da migration `20261120170000_tab_closing_and_payments`, que substituiu a da Etapa 1 (`paid_cents = total_cents` quando `CLOSED`). `closed_refunded_cents` soma os estornos feitos com a comanda já `CLOSED` (a comanda continua `CLOSED` e `paid_cents` diminui); só é diferente de zero em comanda `CLOSED`.
+
+**`tabs.legacy_closed` [Implementado]:** marca comandas convertidas do legado (migration `20261120160100_tabs_and_pos_orders`): sessões antigas fechadas com pedidos, que não registravam pagamentos. Têm `status = CLOSED`, `paid_cents = 0` e ficam isentas da regra `paid = total`. Preservam o consumo sem atestar receita, então os relatórios de receita por encerramento devem filtrar `legacy_closed = false`.
 
 ### 3.2 Etapa 2 — `tab_adjustments`, `payment_requests`, `payments`, `payment_allocations`
 ```prisma
@@ -541,6 +549,8 @@ model payment_provider_accounts {
   @@unique([restaurant_id, id])
   @@unique([restaurant_id, provider, environment])
 }
+// [Implementado] webhook_secret_encrypted está reservado e não é usado: hoje o segredo do webhook
+// vem de MERCADO_PAGO_WEBHOOK_SECRET no ambiente (global). Decisão pendente: DEC-18.
 
 model payment_terminals {
   id                  String                     @id @default(uuid())

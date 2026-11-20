@@ -53,7 +53,7 @@ de operações, e `public-restaurant.ts` preserva o formato das respostas de cad
 3. **Módulo `back-end/src/modules/tabs/`:**
    - `tabs.interfaces.ts`, `tabs.schemas.ts`, `tabs-pricing.ts` (função pura de cálculo de totais).
    - `tabs.repository.interface.ts`, `tabs.repository.ts` (`restaurantId` 1º param, aceita `DbClient`).
-   - `tabs.service.ts` (`open`, `getOrCreateForTable`, `list`, `getDetail`, `update`, `transferTable`, `merge`, `recalculate`).
+   - `tabs.service.ts` (`open`, `list`, `getDetail`, `update`, `transferTable`, `merge`). `getOrCreateForTable` e `recalculateTab` ficam em `tabs-state.ts`, não no service.
    - `tabs.controller.ts`, `tabs.routes.ts`.
 4. **Atualizações em módulos existentes:**
    - `orders/orders.service.ts`: adicionar `posSubmit` (`POST /orders`), gravar `tab_id` e `category_name_snapshot`, recalcular `tab` ao criar pedido ou cancelar item (`TRANSITIONED → CANCELLED` bloqueia se `tab` fechada).
@@ -83,6 +83,7 @@ configurado ao fechar uma comanda vazia junto com a sessão manual.
 ### Checklist de arquivos
 1. **Migration 2 (`tab_closing_and_payments`):**
    - `session_tokens.guest_label`.
+   - `tabs.closed_refunded_cents` e novo CHECK `tabs_valid_invariants` (`paid_cents + closed_refunded_cents = total_cents` quando `CLOSED`).
    - Tabelas `tab_adjustments`, `payment_requests`, `payments`, `payment_allocations` + índice parcial `payment_requests_one_open_per_token` + CHECKs.
 2. **Em `back-end/src/modules/tabs/`:**
    - `tab-adjustments.service.ts` (desconto, couvert, gorjeta, remover 10% com motivo).
@@ -123,6 +124,9 @@ As operações no banco usam `payment-requests.repository.ts` e `tab-adjustments
 ### Testes obrigatórios (`tests/cash-shifts.test.ts`)
 - Abrir turno (2º turno aberto do mesmo operador retorna `409 CASH_SHIFT_ALREADY_OPEN`), receber em dinheiro com troco (soma só o líquido!), receber em cartão (não altera `expected_cash_cents`), registrar sangria (`-`) e suprimento (`+`), fechar informando `counted_cash_cents` e verificar `difference_cents` exato.
 - `WAITER` toma `403` em `/cash-shifts/*`; `CASHIER` vê apenas o próprio turno na listagem.
+- Saldo insuficiente: sangria ou estorno que levaria a gaveta abaixo de zero retorna `409 CASH_SHIFT_INSUFFICIENT_CASH` sem alterar movimentos, pagamento nem comanda.
+- Estorno com turno fechado: corrige `expected_cash_cents` do turno vinculado, preserva `counted_cash_cents` e recalcula `difference_cents`.
+- Pagamento sem turno aberto do operador continua aceito, com `cash_shift_id` nulo, e não usa o caixa de outro operador.
 
 ---
 
@@ -133,7 +137,7 @@ As operações no banco usam `payment-requests.repository.ts` e `tab-adjustments
 1. **Migration 4 (`payment_providers_and_terminals`):** `payment_provider_accounts`, `payment_terminals` + índice parcial `payment_terminals_unique_device` + FK em `payments.terminal_id`.
 2. **Infra compartilhada:**
    - `back-end/src/shared/utils/crypto.ts` (`encryptSecret` / `decryptSecret` AES-256-GCM).
-   - `back-end/src/server.ts`: captura de `req.rawBody` para `/api/v1/webhooks/*`.
+   - Sem captura de `req.rawBody`: o HMAC do Mercado Pago usa `data.id`, `x-request-id` e `ts`. Captura do corpo bruto fica para a Etapa 6, só se um provedor fiscal exigir.
 3. **Em `back-end/src/modules/payments/`:**
    - `providers/mercado-pago.provider.ts` (OAuth, `listTerminals`, `createCharge`, `getChargeStatus`, `cancelCharge`, `parseWebhook` com `timingSafeEqual`).
    - `terminals.service.ts` (OAuth URL + callback + sync + CRUD terminais).
@@ -145,7 +149,8 @@ As operações no banco usam `payment-requests.repository.ts` e `tab-adjustments
 - Criptografia `crypto.ts` (roundtrip, tamper no authTag falha, nunca vaza plaintext).
 - Cobrança N1 com `MercadoPagoProvider` mockado via `nock`/stub: grava `PENDING` → HTTP fora do lock → `PROCESSING` → webhook com assinatura HMAC inválida retorna `401` → webhook válido confirma `APPROVED`, grava NSU/bandeira/parcelas e soma `paid_cents`.
 - Falha HTTP na criação da cobrança marca `CANCELLED` e libera saldo/alocações da comanda.
-- Job de reconciliação expira cobrança travada após 5 min e libera saldo.
+- Criação sem ID é retomada com a mesma chave até 5 min; só `400`/`422` cancelam e liberam a reserva (`409`, `401`/`403`, `404` mantêm `PENDING`).
+- Depois de 11 min sem retorno, o pagamento sai com `needs_review` e a conferência é manual em `POST /tabs/:id/payments/:paymentId/resolve` (`NOT_CHARGED` libera a reserva; `CHARGED` consolida após consulta ao Mercado Pago); antes disso, `409 POINT_PAYMENT_NOT_REVIEWABLE` (pdv-04 §3.4, DEC-16).
 
 ---
 
