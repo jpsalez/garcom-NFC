@@ -472,21 +472,34 @@ describe("janela do caixa nos alertas", () => {
     expect(businessDayStart(day("2026-11-20"), { ...clock, business_day_cutoff_minutes: 0 })).toEqual(
       new Date("2026-11-20T03:00:00Z"),
     );
+    // Início do horário de verão em Nova York: 00:00 ainda é -05:00 e 03:00 já é -04:00.
+    const newYork = { timezone: "America/New_York", business_day_cutoff_minutes: 0 };
+    expect(businessDayStart(day("2026-03-08"), newYork)).toEqual(new Date("2026-03-08T05:00:00Z"));
+    expect(businessDayStart(day("2026-03-08"), { ...newYork, business_day_cutoff_minutes: 180 })).toEqual(
+      new Date("2026-03-08T07:00:00Z"),
+    );
   });
 
-  it("inclui o turno das 22:00 locais do dia e exclui o de sete dias antes", async () => {
+  // Os dois cenários divergem da janela UTC antiga [D−6 00:00Z, D+1 00:00Z): o teste falha se ela voltar.
+  it.each([
+    {
+      scenario: "A: conta o turno das 22:00 locais de D (01:00Z de D+1)",
+      closedAt: ["2026-11-21T01:00:00Z", "2026-11-20T01:00:00Z"],
+      expected: true,
+    },
+    {
+      scenario: "B: ignora o turno das 22:00 locais de D−7 (01:00Z de D−6)",
+      closedAt: ["2026-11-14T01:00:00Z", "2026-11-20T01:00:00Z"],
+      expected: false,
+    },
+  ])("$scenario", async ({ closedAt, expected }) => {
     const f = await menuFixture();
     await prisma.restaurants.update({
       where: { id: f.restaurantId },
       data: { business_day_cutoff_minutes: 300 },
     });
-    // 22:00 locais de D−7 (01:00Z de D−6) fica fora; sozinho com o de D não forma recorrência.
-    await shortage(f, "2026-11-14T01:00:00Z", -2000);
-    await shortage(f, "2026-11-21T01:00:00Z", -1500);
-    expect(await cashAlert(f)).toBe(false);
-    // Um segundo turno dentro da janela confirma que o de D (01:00Z de D+1) foi contado.
-    await shortage(f, "2026-11-20T01:00:00Z", -1200);
-    expect(await cashAlert(f)).toBe(true);
+    for (const at of closedAt) await shortage(f, at, -1500);
+    expect(await cashAlert(f)).toBe(expected);
   });
 });
 

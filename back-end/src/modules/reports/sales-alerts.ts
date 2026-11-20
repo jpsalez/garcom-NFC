@@ -46,7 +46,12 @@ export async function salesAlerts(
     .reduce((sum, { quantity_cancelled }) => sum + quantity_cancelled, 0);
   // Turnos fechados nos 7 dias operacionais que terminam na data avaliada, no fuso e corte do restaurante.
   const since = businessDayStart(addDays(date, -6), clock);
-  const shifts = await repository.closedCashShifts(restaurantId, since, addDays(since, 7));
+  const shifts = await repository.closedCashShifts(
+    restaurantId,
+    since,
+    // Fim calculado pelo relógio: a semana pode ter 167 ou 169 h com horário de verão.
+    businessDayStart(addDays(date, 1), clock),
+  );
   const dayAlerts = day?.tabs_closed_count
     ? [
         revenueDrop(day, history),

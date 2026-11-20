@@ -309,7 +309,7 @@ Períodos: `from ≤ to` e no máximo 366 dias (`reports.schemas.ts`; datas em `
 - `REVENUE_DROP` exige pelo menos 3 ocorrências do mesmo dia da semana.
 - `DISCOUNT_SPIKE` exige média de descontos maior que zero.
 - Dias sem venda não geram alerta de dia.
-- `CASH_DIFF_RECURRENT` considera os turnos fechados nos 7 dias operacionais que terminam na data avaliada. A janela começa no instante local de `data − 6` mais o corte (`businessDayStart` em `tab-business-date.ts`, o inverso de `businessDate`) e dura 7 dias.
+- `CASH_DIFF_RECURRENT` considera os turnos fechados nos 7 dias operacionais que terminam na data avaliada. A janela vai de `businessDayStart(data − 6)` até `businessDayStart(data + 1)` (em `tab-business-date.ts`, o inverso de `businessDate`), então continua correta quando o horário de verão muda no meio da semana.
 
 ### Reconciliação
 `back-end/src/shared/jobs/reports-reconciliation.job.ts` roda no boot e depois a cada 24 h. Reconstrói os últimos 7 dias operacionais de cada restaurante ativo (`ReportsService.reconcile`). A falha de um restaurante é registrada com o `restaurant_id` e não interrompe os demais.
@@ -318,6 +318,7 @@ As queries de `/reports/*` são validadas uma única vez, no controller (`schema
 
 ### Limitações conhecidas
 - `basketTabs` carrega em memória os itens de todas as comandas fechadas do período (até 366 dias). Em restaurantes grandes, vale migrar para SQL agregado.
+- Em fusos que trocam de horário à meia-noite (Santiago, Havana), o início do dia operacional calculado por `businessDayStart` pode cair numa hora inexistente ou repetida e ficar até 1 h deslocado. Nos fusos brasileiros atuais, sem horário de verão, isso não ocorre.
 - A tendência da previsão usa os 28 dias anteriores ao `target_date`. Para uma data muito à frente, essa janela cai no futuro, sem vendas, e o fator vira 1.
 
 Testes em `back-end/tests/reports-and-forecasts.test.ts`.
