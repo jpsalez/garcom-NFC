@@ -1,5 +1,8 @@
 # 4. Modelo de dados 
 
+> **Atualização de 19/11/2026:** o backend de cardápio, mídia e pedidos foi implementado após o levantamento histórico deste capítulo. Para contratos, modelo, limitações e operação atuais da feature, consulte o Apêndice D. As afirmações históricas de ausência de cardápio abaixo descrevem o estado anterior.
+
+
 O modelo de dados é a parte mais estável do repositório: as seis tabelas previstas na v0.3 existem no schema do Prisma, mais `refresh_tokens` (renovação do login) e `password_resets` (recuperação de senha), em nove migrations (a inicial, mais ajustes de papéis, categorias, CHECKs, o índice parcial de chamados e índices de consulta). Este capítulo descreve cada tabela, campo e enum, as relações, os índices, as regras de integridade e as diferenças entre a documentação e o schema real. Convenções: [Especificado] vem de v0.2/v0.3; [Implementado] vem de `schema.prisma` e das migrations (conferido em 14/11/2026). 
 
 ## 4.1 Visão geral 

@@ -1,5 +1,8 @@
 # 8. API, tempo real, segurança, configuração e erros 
 
+> **Atualização de 19/11/2026:** o backend de cardápio, mídia e pedidos foi implementado após o levantamento histórico deste capítulo. Para contratos, modelo, limitações e operação atuais da feature, consulte o Apêndice D. As afirmações históricas de ausência de cardápio abaixo descrevem o estado anterior.
+
+
 ## 8.1 Convenções gerais da API 
  
 - **[Implementado]** Base `/api/v1`, corpos JSON. Usuários do balcão e do OWNER se autenticam por cookies httpOnly (`access_token` e `refresh_token`, `SameSite=Lax`, `Secure` em produção; a API não aceita mais `Authorization: Bearer`). Como o navegador envia cookie sozinho, o filtro `blockForeignOrigin` responde 403 a POST/PATCH/PUT/DELETE de `Origin` fora de `FRONTEND_URL` (CSRF); o CORS usa `credentials: true` com origens explícitas. A mesa envia o cabeçalho `X-Table-Token` (v0.3; a v0.2 usava `X-Table-Session` para um token compartilhado, DV-24).

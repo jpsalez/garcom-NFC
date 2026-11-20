@@ -56,7 +56,7 @@ function operation(
         }
       : {}),
     responses: {
-      [success]: { description: "Sucesso; DTOs e exemplos em docs/menu/API.md" },
+      [success]: { description: "Sucesso; DTOs e exemplos na documentação técnica do projeto" },
       ...(success === 201
         ? { 200: { description: "Envio ou publicação já confirmados (replayed=true)" } }
         : {}),

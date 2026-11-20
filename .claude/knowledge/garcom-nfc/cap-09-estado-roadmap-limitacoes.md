@@ -1,5 +1,8 @@
 # 9. Estado de implementação, roadmap e limitações 
 
+> **Atualização de 19/11/2026:** o backend de cardápio, mídia e pedidos foi implementado após o levantamento histórico deste capítulo. Para contratos, modelo, limitações e operação atuais da feature, consulte o Apêndice D. As afirmações históricas de ausência de cardápio abaixo descrevem o estado anterior.
+
+
 Conferido com o código em 14/11/2026 (branch `dev`). O MVP do chamado está completo no back-end e integrado ao front; restam as pendências listadas em 9.5, nenhuma bloqueante.
 
 ## 9.1 Estado por módulo 

@@ -1,5 +1,8 @@
 # 1. Visão geral e escopo 
 
+> **Atualização de 19/11/2026:** o backend de cardápio, mídia e pedidos foi implementado após o levantamento histórico deste capítulo. Para contratos, modelo, limitações e operação atuais da feature, consulte o Apêndice D. As afirmações históricas de ausência de cardápio abaixo descrevem o estado anterior.
+
+
 ## 1.1 O que é o Garçom NFC 
 
 O Garçom NFC é uma plataforma SaaS multi-restaurante de atendimento de mesa por toque. Cada mesa recebe uma plaquinha com um QR Code e, opcionalmente, uma tag NFC que gravam a mesma URL pública. O cliente aproxima o celular (ou lê o QR Code), abre a página da mesa no navegador, sem instalar aplicativo e sem fazer login, e aciona o garçom ou pede a conta com um toque. O restaurante vê esses chamados em tempo real numa tela de balcão. O slogan da documentação v0.3 resume a proposta: o cliente chama pelo QR Code e o pedido aparece na tela do balcão. 

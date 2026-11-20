@@ -1,5 +1,8 @@
 # 2. Requisitos e regras de negócio 
 
+> **Atualização de 19/11/2026:** o backend de cardápio, mídia e pedidos foi implementado após o levantamento histórico deste capítulo. Para contratos, modelo, limitações e operação atuais da feature, consulte o Apêndice D. As afirmações históricas de ausência de cardápio abaixo descrevem o estado anterior.
+
+
 ## 2.1 Convenções das tabelas 
 
 As três tabelas seguintes (RF, RNF e RN) reproduzem integralmente os requisitos das duas versões: cada linha é um requisito, com o identificador da v0.3 e o da v0.2 lado a lado ("—" quando só existe em uma das versões). Os identificadores se repetem entre versões com significados diferentes (por exemplo, RF05 é "Gerir cardápio" na v0.2 e "Chamar garçom" na v0.3); por isso, fora destas tabelas, todo identificador vem com a versão (por exemplo, "v0.3 RF05"). As linhas seguem a ordem da v0.3; os itens que só existem na v0.2 vêm ao final de cada tabela. 
