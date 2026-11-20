@@ -1,0 +1,424 @@
+import { createHash } from "node:crypto";
+import { inject, injectable } from "tsyringe";
+import type { tabs } from "../../../generated/prisma/client.ts";
+import { type ActorContext, requireCapability } from "../../shared/authorization/capabilities.ts";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "../../shared/errors/http-errors.ts";
+import type { DbClient } from "../../shared/providers/prisma.ts";
+import type { INotifier } from "../../shared/realtime/notifier.ts";
+import type {
+  IRestaurantUnitOfWork,
+  RestaurantTransaction,
+} from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
+import { applyPaymentToCashShift } from "../cash-shifts/cash-shift-balance.ts";
+import { CashShiftsRepository } from "../cash-shifts/cash-shifts.repository.ts";
+import { ensureNoActiveNfce } from "../fiscal/fiscal-document.ts";
+import type { FiscalEmissionService } from "../fiscal/fiscal-emission.service.ts";
+import { MenuRepository } from "../menu/menu.repository.ts";
+import { applyTabSalesChange, tabSales } from "../reports/sales-aggregator.ts";
+import { closeTab, notifyClosedTab } from "../tabs/close-tab.ts";
+import { notifyPaymentRequestUpdated } from "../tabs/payment-request-events.ts";
+import { PaymentRequestsRepository } from "../tabs/payment-requests.repository.ts";
+import { requestForConversion } from "../tabs/payment-requests.service.ts";
+import { businessDate } from "../tabs/tab-business-date.ts";
+import { notifyTabUpdated } from "../tabs/tab-events.ts";
+import { loadTabLedger, summarizeLedger } from "../tabs/tab-ledger.ts";
+import { TabsRepository } from "../tabs/tabs.repository.ts";
+import { ensureOpenTab, getTab } from "../tabs/tabs-state.ts";
+import { tabSummary } from "../tabs/tabs-view.ts";
+import { allocatedByItem, validateAllocations, validatePaymentAmount } from "./payment-allocation.ts";
+import { notifyPayment } from "./payment-events.ts";
+import { paymentView } from "./payment-view.ts";
+import type { IPaymentsService } from "./payments.interfaces.ts";
+import type { PaymentRecord } from "./payments.repository.interface.ts";
+import { PaymentsRepository } from "./payments.repository.ts";
+import type {
+  CreatePayment,
+  PaymentAllocation,
+  RefundPayment,
+  ResolvePointPayment,
+} from "./payments.schemas.ts";
+import { needsPointReview, notReviewable, pointBinding } from "./point-payment-state.ts";
+import type { PointPaymentsService } from "./point-payments.service.ts";
+import type { PaymentProviderRegistry } from "./providers/payment-provider.registry.ts";
+
+function restaurantOf(actor: ActorContext) {
+  if (!actor.restaurantId) throw new ForbiddenError("Usuário sem restaurante");
+  return actor.restaurantId;
+}
+
+function sortedAllocations(rows: PaymentAllocation[]) {
+  return [...rows].sort((a, b) => a.order_item_id.localeCompare(b.order_item_id));
+}
+
+function requestHash(tabId: string, input: CreatePayment) {
+  const allocations = input.allocations && sortedAllocations(input.allocations);
+  return createHash("sha256")
+    .update(JSON.stringify({ tabId, ...input, allocations }))
+    .digest("hex");
+}
+
+function matchesAllocations(input: PaymentAllocation[], saved: PaymentAllocation[]) {
+  if (input.length !== saved.length) return false;
+  return input.every((row) =>
+    saved.some(
+      (original) =>
+        original.order_item_id === row.order_item_id &&
+        original.covered_cents === row.covered_cents &&
+        (original.covered_units_bps === undefined || original.covered_units_bps === row.covered_units_bps),
+    ),
+  );
+}
+
+async function resolvePaymentInput(transaction: RestaurantTransaction, tab: tabs, input: CreatePayment) {
+  if (!input.payment_request_id) {
+    if (input.amount_cents === undefined)
+      throw new ValidationError(undefined, "Informe o valor do pagamento");
+    return {
+      amount: input.amount_cents,
+      allocations: input.allocations ?? [],
+      payerLabel: input.payer_label,
+      includeFee: input.include_service_fee,
+      request: null,
+    };
+  }
+  const { request, selection } = await requestForConversion(transaction, tab, input.payment_request_id);
+  const items = selection.items ?? [];
+  if (
+    (input.allocations && !matchesAllocations(input.allocations, items)) ||
+    (input.amount_cents !== undefined && input.amount_cents !== request.requested_amount_cents) ||
+    (items.length &&
+      input.include_service_fee !== undefined &&
+      input.include_service_fee !== selection.include_service_fee)
+  )
+    throw new ConflictError("O pagamento deve corresponder à solicitação", "PAYMENT_REQUEST_CHANGED");
+  return {
+    amount: request.requested_amount_cents,
+    allocations: input.allocations ?? items,
+    payerLabel: input.payer_label ?? request.payer_label,
+    includeFee: items.length ? selection.include_service_fee : undefined,
+    request,
+  };
+}
+
+@injectable()
+export class PaymentsService implements IPaymentsService {
+  constructor(
+    @inject("RestaurantUnitOfWork") private unit: IRestaurantUnitOfWork,
+    @inject("Notifier") private notifier: INotifier,
+    @inject("PaymentProviderRegistry") private providers: PaymentProviderRegistry,
+    @inject("PointPaymentsService") private point: PointPaymentsService,
+    @inject("FiscalEmissionService") private fiscal: FiscalEmissionService,
+  ) {}
+
+  async create(actor: ActorContext, id: string, input: CreatePayment) {
+    const result = await this.beginPayment(actor, id, input);
+    if (result.replayed) return this.response(result);
+
+    notifyPayment(this.notifier, result.payment);
+    if (result.converted) notifyPaymentRequestUpdated(this.notifier, result.converted);
+    if (result.closed) notifyClosedTab(this.notifier, result.closed);
+    else notifyTabUpdated(this.notifier, result.tab, result.state.pendingCents);
+    // NFC-e do fechamento automático: o resultado chega por fiscal:updated e em GET /tabs/:id/nfce.
+    if (result.closed?.fiscalDocument) await this.fiscal.dispatch(result.closed.fiscalDocument);
+    if (result.payment.provider !== "MERCADO_PAGO") return this.response(result);
+
+    return this.response(await this.dispatchPointPayment(result.payment));
+  }
+
+  private beginPayment(actor: ActorContext, id: string, input: CreatePayment) {
+    const restaurantId = restaurantOf(actor);
+    const hash = requestHash(id, input);
+    return this.unit.run(
+      restaurantId,
+      async (transaction) => {
+        const { db } = transaction;
+        const tab = await getTab(new TabsRepository(db), restaurantId, id);
+        const saved = await new PaymentsRepository(db).findIdempotency(restaurantId, input.idempotency_key);
+        if (saved) {
+          if (saved.request_hash !== hash)
+            throw new ConflictError("Chave de pagamento já utilizada", "IDEMPOTENCY_CONFLICT");
+          return this.replay(transaction, saved, input.auto_close);
+        }
+        ensureOpenTab(tab);
+        const recorded = await this.recordPayment(transaction, tab, transaction.actor ?? actor, input, hash);
+        return { ...recorded, replayed: false };
+      },
+      { actor, capability: "payments:create" },
+    );
+  }
+
+  private async dispatchPointPayment(payment: PaymentRecord) {
+    await this.point.dispatch(payment);
+    return this.current(payment);
+  }
+
+  async resolvePoint(actor: ActorContext, id: string, paymentId: string, input: ResolvePointPayment) {
+    const payment = await this.unit.run(
+      restaurantOf(actor),
+      async ({ db, now, restaurant }) => {
+        const found = await new PaymentsRepository(db).findById(restaurant.id, id, paymentId);
+        if (!found) throw new NotFoundError("Pagamento não encontrado");
+        if (!needsPointReview(found, now.getTime())) throw notReviewable();
+        return found;
+      },
+      { actor, capability: "payments:create" },
+    );
+    await this.point.resolve(actor, payment, input);
+    return this.response(await this.current(payment));
+  }
+
+  private current({ restaurant_id: restaurantId, id }: PaymentRecord) {
+    return this.unit.run(
+      restaurantId,
+      async (transaction) => {
+        const current = await new PaymentsRepository(transaction.db).get(restaurantId, id);
+        if (!current) throw new NotFoundError("Pagamento não encontrado");
+        return { ...(await this.replay(transaction, current, false)), replayed: false };
+      },
+      { allowInactive: true },
+    );
+  }
+
+  private response(
+    result: Pick<
+      Awaited<ReturnType<PaymentsService["replay"]>>,
+      "payment" | "tab" | "state" | "autoClosed" | "replayed"
+    >,
+  ) {
+    return {
+      payment: paymentView(result.payment),
+      tab: tabSummary(result.tab, result.state.hasPendingKitchenItems, result.state),
+      auto_closed: result.autoClosed,
+      replayed: result.replayed,
+    };
+  }
+
+  private async replay({ db }: RestaurantTransaction, payment: PaymentRecord, autoClose: boolean) {
+    const tab = await getTab(new TabsRepository(db), payment.restaurant_id, payment.tab_id);
+    const state = summarizeLedger(await loadTabLedger(db, tab));
+    const autoClosed =
+      autoClose && Boolean(tab.closed_at && tab.closed_at.getTime() === payment.confirmed_at?.getTime());
+    return { payment, tab, state, autoClosed, replayed: true, closed: null, converted: null };
+  }
+
+  private async recordPayment(
+    transaction: RestaurantTransaction,
+    tab: tabs,
+    actor: ActorContext,
+    input: CreatePayment,
+    hash: string,
+  ) {
+    const { db } = transaction;
+    const ledger = await loadTabLedger(db, tab);
+    const state = summarizeLedger(ledger);
+    const data = await resolvePaymentInput(transaction, tab, input);
+    validateAllocations(ledger.orders, allocatedByItem(ledger.payments), data.allocations);
+    validatePaymentAmount(tab, state.pendingCents, data.amount, data.allocations, data.includeFee);
+
+    const payment = await this.persistPayment(transaction, tab, actor, { input, data, hash });
+    const converted = await this.convertRequest(db, payment, data.request, actor);
+    const paid = await this.applyRecordedPayment(db, tab, payment, actor);
+    const closed = await this.maybeClose(transaction, paid, actor, state, input.auto_close);
+    return {
+      payment,
+      converted,
+      tab: closed?.tab ?? paid,
+      closed,
+      autoClosed: closed !== null,
+      state: {
+        ...state,
+        pendingCents: state.pendingCents + (payment.status === "PENDING" ? payment.amount_cents : 0),
+        openRequests: closed ? 0 : state.openRequests - Number(data.request?.status === "OPEN"),
+      },
+    };
+  }
+
+  private async persistPayment(
+    { db, now }: RestaurantTransaction,
+    tab: tabs,
+    actor: ActorContext,
+    {
+      input,
+      data,
+      hash,
+    }: { input: CreatePayment; data: Awaited<ReturnType<typeof resolvePaymentInput>>; hash: string },
+  ) {
+    if (input.tip_cents > data.amount)
+      throw new ValidationError(undefined, "A gorjeta não pode exceder o pagamento");
+    const binding =
+      input.provider === "MERCADO_PAGO" ? await pointBinding(db, tab.restaurant_id, input, now) : null;
+    const { method, received_cents, tip_cents, installments, idempotency_key } = input;
+    const amount_cents = data.amount;
+    const charge = binding ? { status: "PENDING" as const } : this.manualCharge(input, amount_cents);
+    const shift = await new CashShiftsRepository(db).findOpenByOperator(tab.restaurant_id, actor.id);
+    return new PaymentsRepository(db).create(
+      tab.restaurant_id,
+      {
+        ...charge,
+        ...input.manual_details,
+        ...binding,
+        provider: input.provider,
+        tab_id: tab.id,
+        cash_shift_id: shift?.id,
+        method,
+        amount_cents,
+        received_cents,
+        tip_cents,
+        installments,
+        idempotency_key,
+        payer_label: data.payerLabel,
+        actor_user_id: actor.id,
+        request_hash: hash,
+        confirmed_at: binding ? undefined : now,
+        created_at: now,
+      },
+      data.allocations,
+    );
+  }
+
+  private manualCharge(input: CreatePayment, amount_cents: number) {
+    const provider = this.providers.get(input.provider);
+    if (provider.kind !== "MANUAL" || input.terminal_id)
+      throw new ValidationError(undefined, "O pagamento manual não usa terminal");
+    return provider.recordCharge({
+      method: input.method,
+      amount_cents,
+      received_cents: input.received_cents,
+    });
+  }
+
+  private async convertRequest(
+    db: DbClient,
+    payment: PaymentRecord,
+    request: Awaited<ReturnType<typeof resolvePaymentInput>>["request"],
+    actor: ActorContext,
+  ) {
+    if (!request) return null;
+    return new PaymentRequestsRepository(db).update(payment.restaurant_id, payment.tab_id, request.id, {
+      status: "CONVERTED",
+      payment_id: payment.id,
+      handled_by_user_id: actor.id,
+    });
+  }
+
+  private async applyRecordedPayment(db: DbClient, tab: tabs, payment: PaymentRecord, actor: ActorContext) {
+    await applyPaymentToCashShift(db, payment);
+    const paid = await new TabsRepository(db).update(tab.restaurant_id, tab.id, {
+      paid_cents: tab.paid_cents + (payment.status === "APPROVED" ? payment.amount_cents : 0),
+      version: tab.version + 1,
+    });
+    await new MenuRepository(db).audit(
+      actor,
+      payment.status === "APPROVED" ? "PAYMENT_RECORDED" : "PAYMENT_REQUESTED",
+      "PAYMENT",
+      payment.id,
+      {},
+      { tab_id: tab.id, amount_cents: payment.amount_cents, status: payment.status, method: payment.method },
+    );
+    return paid;
+  }
+
+  private async maybeClose(
+    transaction: RestaurantTransaction,
+    tab: tabs,
+    actor: ActorContext,
+    state: ReturnType<typeof summarizeLedger>,
+    autoClose: boolean,
+  ) {
+    if (
+      !autoClose ||
+      tab.paid_cents !== tab.total_cents ||
+      state.pendingCents ||
+      state.hasPendingKitchenItems
+    )
+      return null;
+    requireCapability(actor, "tabs:close");
+    return closeTab(transaction, tab, state, actor);
+  }
+
+  async refund(actor: ActorContext, id: string, paymentId: string, { reason }: RefundPayment) {
+    const result = await this.unit.run(
+      restaurantOf(actor),
+      (transaction) =>
+        this.refundInTransaction(transaction, transaction.actor ?? actor, id, paymentId, reason),
+      { actor, capability: "payments:refund" },
+    );
+    if (!result.replayed) {
+      notifyPayment(this.notifier, result.payment);
+      notifyTabUpdated(this.notifier, result.tab, result.state.pendingCents);
+    }
+    return {
+      payment: paymentView(result.payment),
+      tab: tabSummary(result.tab, result.state.hasPendingKitchenItems, result.state),
+    };
+  }
+
+  private async refundInTransaction(
+    transaction: RestaurantTransaction,
+    actor: ActorContext,
+    id: string,
+    paymentId: string,
+    reason: string,
+  ) {
+    const { db, now, restaurant } = transaction;
+    const tab = await getTab(new TabsRepository(db), restaurant.id, id);
+    const payment = await new PaymentsRepository(db).findById(restaurant.id, id, paymentId);
+    if (!payment) throw new NotFoundError("Pagamento não encontrado");
+    if (payment.provider !== "MANUAL")
+      throw new ConflictError(
+        "Estorno integrado indisponível nesta operação",
+        "INTEGRATED_REFUND_UNAVAILABLE",
+      );
+
+    const state = summarizeLedger(await loadTabLedger(db, tab));
+    if (payment.status === "REFUNDED" && payment.refund_reason === reason)
+      return { tab, state, payment, replayed: true };
+    if (payment.status !== "APPROVED")
+      throw new ConflictError("Somente pagamentos aprovados podem ser estornados", "PAYMENT_NOT_APPROVED");
+    await ensureNoActiveNfce(db, tab);
+    if (tab.status === "CLOSED" && tab.business_date?.getTime() !== businessDate(now, restaurant).getTime())
+      throw new ConflictError("O dia operacional do estorno terminou", "REFUND_WINDOW_EXPIRED");
+
+    const sales = await tabSales(transaction, tab.id);
+    const refunded = await this.applyRefund(transaction, tab, payment, actor, reason);
+    if (sales) await applyTabSalesChange(transaction, tab.id, sales);
+    return { ...refunded, state, replayed: false };
+  }
+
+  private async applyRefund(
+    { db, now }: RestaurantTransaction,
+    tab: tabs,
+    payment: PaymentRecord,
+    actor: ActorContext,
+    reason: string,
+  ) {
+    const { restaurant_id, id: tabId } = tab;
+    const refunded = await new PaymentsRepository(db).update(restaurant_id, tabId, payment.id, {
+      status: "REFUNDED",
+      refund_reason: reason,
+      refunded_at: now,
+      refunded_by_user_id: actor.id,
+    });
+    await applyPaymentToCashShift(db, refunded);
+    const updated = await new TabsRepository(db).update(restaurant_id, tabId, {
+      paid_cents: tab.paid_cents - payment.amount_cents,
+      version: tab.version + 1,
+      closed_refunded_cents:
+        tab.status === "CLOSED" ? tab.closed_refunded_cents + payment.amount_cents : undefined,
+    });
+    await new MenuRepository(db).audit(
+      actor,
+      "PAYMENT_REFUNDED",
+      "PAYMENT",
+      payment.id,
+      { status: payment.status },
+      { tab_id: tabId, status: refunded.status, amount_cents: payment.amount_cents, reason },
+    );
+    return { tab: updated, payment: refunded };
+  }
+}

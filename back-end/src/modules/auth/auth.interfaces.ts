@@ -1,4 +1,5 @@
-import type { restaurants, users } from "../../../generated/prisma/client.ts";
+import type { users } from "../../../generated/prisma/client.ts";
+import type { PublicRestaurant } from "../restaurants/public-restaurant.ts";
 import type { changePasswordInput, createUserInput, loginUserInput } from "./auth.schema.ts";
 
 // Usuário sem o hash da senha, seguro para devolver na resposta
@@ -6,7 +7,7 @@ export type PublicUser = Omit<users, "password_hash">;
 
 export type RegisterResult = {
   user: PublicUser;
-  restaurant: restaurants;
+  restaurant: PublicRestaurant;
 };
 
 // token: JWT de acesso (curto); refreshToken: troca por um par novo em POST /auth/refresh

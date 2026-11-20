@@ -11,6 +11,7 @@ type Authenticate = (token: string) => Promise<ActorContext>;
 const roomOf = (restaurantId: string) => `restaurant:${restaurantId}`;
 const userRoomOf = (userId: string) => `user:${userId}`;
 const stationNamespace = "/print-station";
+const posRoomOf = (restaurantId: string) => `restaurant:${restaurantId}:pos`;
 const ordersRoomOf = (restaurantId: string) => `restaurant:${restaurantId}:orders`;
 
 // Uma sala por restaurante: o isolamento do tempo real é o mesmo do HTTP. Sem servidor ligado (testes), não envia nada.
@@ -20,13 +21,19 @@ export class SocketNotifier implements INotifier {
 
   // Só OWNER e STAFF entram (SUPER_ADMIN não tem restaurante); o JWT vem do cookie httpOnly do handshake, nunca na URL.
   // authenticate e origins chegam de fora (main.ts) para o notifier não depender do HTTP.
-  attach(httpServer: HttpServer, authenticate: Authenticate, origins: string[], authenticatePrintStation: AuthenticatePrintStation) {
+  attach(
+    httpServer: HttpServer,
+    authenticate: Authenticate,
+    origins: string[],
+    authenticatePrintStation: AuthenticatePrintStation,
+  ) {
     this.io = new Server(httpServer, { cors: { origin: origins, credentials: true } });
     this.io.use(async (socket, next) => {
       try {
         const user = await authenticate(readCookie(socket.handshake.headers.cookie, ACCESS_COOKIE) ?? "");
         if (!user.restaurantId) throw new Error("Usuário sem restaurante");
         socket.join([roomOf(user.restaurantId), userRoomOf(user.id)]);
+        if (hasCapability(user, "tabs:read")) socket.join(posRoomOf(user.restaurantId));
         if (hasCapability(user, "orders:read")) socket.join(ordersRoomOf(user.restaurantId));
         next();
       } catch {
@@ -57,6 +64,10 @@ export class SocketNotifier implements INotifier {
 
   toRestaurant(restaurantId: string, event: string, payload: unknown) {
     this.io?.to(roomOf(restaurantId)).emit(event, payload);
+  }
+
+  toPos(restaurantId: string, event: string, payload: unknown) {
+    this.io?.to(posRoomOf(restaurantId)).emit(event, payload);
   }
 
   toOrders(restaurantId: string, event: string, payload: { order_id: string; version: number }) {

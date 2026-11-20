@@ -6,7 +6,12 @@ import { createServer } from "node:http";
 import sharp from "sharp";
 import swaggerUi from "swagger-ui-express";
 import type { ISessionsService } from "./modules/sessions/sessions.interfaces.ts";
+import type { IReportsService } from "./modules/reports/reports.interfaces.ts";
 import type { ITokenCleanupService } from "./modules/auth/auth.interfaces.ts";
+import { startPaymentReconciliationJob } from "./shared/jobs/payment-reconciliation.job.ts";
+import { startReportsReconciliationJob } from "./shared/jobs/reports-reconciliation.job.ts";
+import { startFiscalReconciliationJob } from "./shared/jobs/fiscal-reconciliation.job.ts";
+import type { FiscalEmissionService } from "./modules/fiscal/fiscal-emission.service.ts";
 import { startSessionExpiryJob } from "./shared/jobs/session-expiry.job.ts";
 import { startTokenCleanupJob } from "./shared/jobs/token-cleanup.job.ts";
 import { allowedOrigins, app } from "./server.ts";
@@ -49,6 +54,9 @@ function bootstrap() {
     httpServer, authenticateToken, allowedOrigins, (ticket) => printing.authenticateStationSocket(ticket),
   );
   httpServer.listen(port, () => console.log(`rodando na ${port}`));
+  startPaymentReconciliationJob();
+  startReportsReconciliationJob(container.resolve<IReportsService>("ReportsService"));
+  startFiscalReconciliationJob(container.resolve<FiscalEmissionService>("FiscalEmissionService"));
   startSessionExpiryJob(container.resolve<ISessionsService>("SessionsService"));
   startTokenCleanupJob(container.resolve<ITokenCleanupService>("TokenCleanupService"));
   startMediaCleanupJob(container.resolve<IMediaService>("MediaService"));

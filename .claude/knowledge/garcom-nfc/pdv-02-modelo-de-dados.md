@@ -217,6 +217,8 @@ model tabs {
   adjustments_cents        Int                @default(0)
   total_cents              Int                @default(0)
   paid_cents               Int                @default(0)
+  closed_refunded_cents    Int                @default(0)
+  legacy_closed            Boolean            @default(false)
   business_date            DateTime?          @db.Date
   opened_by_user_id        String?
   closed_by_user_id        String?
@@ -256,14 +258,20 @@ ALTER TABLE tabs ADD CONSTRAINT tabs_valid_invariants CHECK (
   AND version > 0
   AND service_fee_bps BETWEEN 0 AND 3000
   AND subtotal_cents >= 0 AND service_fee_cents >= 0
-  AND total_cents >= 0 AND paid_cents >= 0
+  AND total_cents >= 0 AND paid_cents >= 0 AND closed_refunded_cents >= 0
   AND (guests_count IS NULL OR guests_count > 0)
   AND ((kind = 'TABLE' AND table_id IS NOT NULL) OR (kind = 'COUNTER' AND table_id IS NULL))
   AND ((service_fee_waived = false) OR (service_fee_waive_reason IS NOT NULL AND length(btrim(service_fee_waive_reason)) BETWEEN 3 AND 500))
   AND ((status <> 'CANCELLED') OR (cancel_reason IS NOT NULL AND length(btrim(cancel_reason)) BETWEEN 3 AND 500))
-  AND ((status <> 'CLOSED') OR (closed_at IS NOT NULL AND business_date IS NOT NULL AND paid_cents = total_cents))
+  AND (status = 'CLOSED' OR closed_refunded_cents = 0)
+  AND (NOT legacy_closed OR (status = 'CLOSED' AND paid_cents = 0 AND closed_refunded_cents = 0))
+  AND ((status <> 'CLOSED') OR (closed_at IS NOT NULL AND business_date IS NOT NULL
+       AND (legacy_closed OR paid_cents::bigint + closed_refunded_cents = total_cents)))
 );
 ```
+**[Implementado] CHECK atual:** a versão acima é a da migration `20261120170000_tab_closing_and_payments`, que substituiu a da Etapa 1 (`paid_cents = total_cents` quando `CLOSED`). `closed_refunded_cents` soma os estornos feitos com a comanda já `CLOSED` (a comanda continua `CLOSED` e `paid_cents` diminui); só é diferente de zero em comanda `CLOSED`.
+
+**`tabs.legacy_closed` [Implementado]:** marca comandas convertidas do legado (migration `20261120160100_tabs_and_pos_orders`): sessões antigas fechadas com pedidos, que não registravam pagamentos. Têm `status = CLOSED`, `paid_cents = 0` e ficam isentas da regra `paid = total`. Preservam o consumo sem atestar receita, então os relatórios de receita por encerramento devem filtrar `legacy_closed = false`.
 
 ### 3.2 Etapa 2 — `tab_adjustments`, `payment_requests`, `payments`, `payment_allocations`
 ```prisma
@@ -530,7 +538,6 @@ model payment_provider_accounts {
   access_token_encrypted   String
   refresh_token_encrypted  String?
   token_expires_at         DateTime?
-  webhook_secret_encrypted String?
   metadata_json            Json?
   created_at               DateTime                @default(now())
   updated_at               DateTime                @default(now()) @updatedAt
@@ -541,6 +548,8 @@ model payment_provider_accounts {
   @@unique([restaurant_id, id])
   @@unique([restaurant_id, provider, environment])
 }
+// [Implementado] DEC-18: a coluna webhook_secret_encrypted foi REMOVIDA (migration
+// 20261121110000_drop_unused_webhook_secret). O segredo do webhook é global, em MERCADO_PAGO_WEBHOOK_SECRET.
 
 model payment_terminals {
   id                  String                     @id @default(uuid())
@@ -626,6 +635,11 @@ model product_sales_daily {
 *(Nota: `total_stay_seconds` como `BigInt` evita overflow e permite calcular a média exata em qualquer janela semanal/mensal: `SUM(total_stay_seconds) / SUM(tabs_closed_count)`!)*
 
 ### 3.6 Etapa 6 — `fiscal_settings`, `fiscal_tax_profiles`, `fiscal_documents`
+> **Implementado com diferenças:** veja `schema.prisma` e a migration `20261121100000_fiscal_nfce`, que mandam sobre o esboço abaixo.
+> - `fiscal_settings` não guarda IE, CRT, CSC, série nem `next_nfce_number`, que ficam no provedor. A credencial é opcional para o `MOCK`.
+> - `fiscal_documents` ganhou `PROCESSING`, `attempt`, `external_id`, `total_cents`, `environment`, `dispatched_at` e `cancel_requested_at`. É uma nota por comanda (`@@unique([restaurant_id, tab_id])`), e o número e a série vêm do provedor.
+> - O perfil em `menu_products` usa FK composta `RESTRICT`, sem rota de exclusão de perfil.
+> - Regras e fluxo: `pdv-04` §4.
 ```prisma
 enum fiscal_provider_type {
   MOCK

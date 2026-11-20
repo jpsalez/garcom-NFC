@@ -6,6 +6,8 @@ import type { Submission } from "./orders.schemas.ts";
 export type PricedLine = {
   product_id: string;
   variant_id: string;
+  category_id_snapshot: string;
+  category_name_snapshot: string;
   product_name_snapshot: string;
   variant_name_snapshot: string;
   quantity: number;
@@ -21,11 +23,12 @@ export type PricedLine = {
     price_delta_cents: number;
   }[];
 };
-export function submissionHash(input: Submission) {
+export function submissionHash(input: Submission, target?: { tab_id?: string; table_id?: string }) {
   return createHash("sha256")
     .update(
       JSON.stringify({
         publication_id: input.publication_id,
+        ...(target && { target }),
         items: input.items.map((item) => ({
           product_id: item.product_id,
           variant_id: item.variant_id,
@@ -42,11 +45,14 @@ export function priceSubmission(
   availability: Map<string, boolean>,
   input: Submission,
 ) {
-  const products = content.categories.flatMap((category) => category.products);
   const lines: PricedLine[] = input.items.map((item) => {
-    const product = products.find((row) => row.id === item.product_id),
+    const category = content.categories.find((row) =>
+      row.products.some((product) => product.id === item.product_id),
+    );
+    const product = category?.products.find((row) => row.id === item.product_id),
       variant = product?.variants.find((row) => row.id === item.variant_id);
-    if (!product || !variant) throw new NotFoundError("Produto ou variante não encontrado na publicação");
+    if (!category || !product || !variant)
+      throw new NotFoundError("Produto ou variante não encontrado na publicação");
     const available = (id: string) => {
       if (availability.get(id) !== true) throw new ConflictError("Item indisponível", "ITEM_UNAVAILABLE");
     };
@@ -84,6 +90,8 @@ export function priceSubmission(
     return {
       product_id: product.id,
       variant_id: variant.id,
+      category_id_snapshot: category.id,
+      category_name_snapshot: category.name,
       product_name_snapshot: product.name,
       variant_name_snapshot: variant.name,
       quantity: item.quantity,

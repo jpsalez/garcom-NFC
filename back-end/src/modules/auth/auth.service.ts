@@ -3,6 +3,7 @@ import type { IAuthService, LoginResult, RegisterResult } from "./auth.interface
 import type { IUserRepository } from "../users/users.repository.interface.ts";
 import type { IRefreshTokenRepository } from "./refresh-tokens.repository.interface.ts";
 import { UserRepository } from "../users/users.repository.ts";
+import { toPublicRestaurant } from "../restaurants/public-restaurant.ts";
 import { RestaurantRepository } from "../restaurants/restaurants.repository.ts";
 import { slugify, withRandomSuffix } from "../restaurants/slug.ts";
 import { runInTransaction } from "../../shared/providers/prisma.ts";
@@ -56,7 +57,7 @@ export class AuthService implements IAuthService {
       return { user, restaurant };
     });
 
-    return { user: toPublicUser(user), restaurant };
+    return { user: toPublicUser(user), restaurant: toPublicRestaurant(restaurant) };
   }
 
   // Login vale para SUPER_ADMIN, OWNER e STAFF: a role vem do banco e vai dentro do token
@@ -65,7 +66,10 @@ export class AuthService implements IAuthService {
 
     // Mesma mensagem para e-mail inexistente e senha errada: não revela quais e-mails existem
     // Compara sempre (hash falso se o e-mail não existe) para não revelar e-mails pelo tempo de resposta
-    const validPassword = await comparePassword(credentials.password, user?.password_hash ?? DUMMY_PASSWORD_HASH);
+    const validPassword = await comparePassword(
+      credentials.password,
+      user?.password_hash ?? DUMMY_PASSWORD_HASH,
+    );
     if (!user || !validPassword || !(await this.isActive(user))) {
       throw new UnauthorizedError("E-mail ou senha inválidos");
     }

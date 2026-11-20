@@ -1,8 +1,8 @@
-import type { restaurants } from "../../../generated/prisma/client.ts";
+import type { PublicRestaurant } from "../restaurants/public-restaurant.ts";
 import type { createRestaurantInput } from "./administration.schema.ts";
 
 export interface IAdministrationService {
-  createRestaurant(input: createRestaurantInput): Promise<restaurants>;
-  listRestaurants(): Promise<restaurants[]>;
-  setRestaurantActive(id: string, active: boolean, userId: string): Promise<restaurants>;
+  createRestaurant(input: createRestaurantInput): Promise<PublicRestaurant>;
+  listRestaurants(): Promise<PublicRestaurant[]>;
+  setRestaurantActive(id: string, active: boolean, userId: string): Promise<PublicRestaurant>;
 }

@@ -32,6 +32,9 @@ Como usar: (1) leia só este índice; (2) escolha 1 ou 2 arquivos; (3) para deta
 | pdv-04-maquininhas-e-fiscal.md | ~1900 | **PDV · Maquininhas e NFC-e** — interface `PaymentProvider` (N0 Manual + N1 Mercado Pago Point), OAuth, webhooks e `FiscalProvider` (Etapa 6) |
 | pdv-05-kpis-e-previsoes.md | ~2800 | **PDV · Histórico, KPIs e Previsões** — dia operacional, UPSERT/rebuild, SQLs de KPIs, algoritmo WMA/alertas e contratos JSON |
 | pdv-06-guia-de-implementacao-e-testes.md | ~2700 | **PDV · Guia de implementação e testes** — checklist de arquivos por etapa (0..6), ordem de migrations, matriz Vitest e DoD |
+| _arquivo/pdv-dev/ | — | **Arquivo morto**: skills `pdv-*` e agentes `pdv_*` (`/pdv-etapa`, `/pdv-migration`, `/pdv-provider`, `/pdv-kpi`), aposentados após as Etapas 0 a 6. Não leia salvo pedido |
+
+> O PDV (pdv-00 a pdv-06) está implementado (Etapas 0 a 6); os documentos servem de referência, e o código manda.
 
 Arquivo morto (não leia por padrão): `../_arquivo/` guarda anotações antigas, por exemplo `sessao-2026-11-12-onde-paramos.md`.
 

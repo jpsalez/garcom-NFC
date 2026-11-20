@@ -16,21 +16,34 @@ datasource db {
 }
 
 model restaurants {
-  id               String                        @id @default(uuid())
-  name             String
-  slug             String                        @unique
-  active           Boolean                       @default(true)
-  created_at       DateTime                      @default(now())
-  users            users[]
-  tables           tables[]
-  tableSessions    table_sessions[]
-  calls            calls[]
-  menus            menus[]                       @relation("menus_restaurant")
-  order_settings   restaurant_order_settings[]   @relation("restaurant_order_settings_restaurant")
-  media_assets     media_assets[]                @relation("media_assets_restaurant")
-  orders           orders[]                      @relation("orders_restaurant")
-  operation_events restaurant_operation_events[] @relation("restaurant_operation_events_restaurant")
-  print_destinations print_destinations[]
+  id                          String                        @id @default(uuid())
+  name                        String
+  slug                        String                        @unique
+  active                      Boolean                       @default(true)
+  created_at                  DateTime                      @default(now())
+  timezone                    String                        @default("America/Sao_Paulo") @db.VarChar(64)
+  business_day_cutoff_minutes Int                           @default(0)
+  service_fee_bps             Int                           @default(1000)
+  next_tab_number             Int                           @default(1)
+  users                       users[]
+  tables                      tables[]
+  tableSessions               table_sessions[]
+  calls                       calls[]
+  menus                       menus[]                       @relation("menus_restaurant")
+  order_settings              restaurant_order_settings[]   @relation("restaurant_order_settings_restaurant")
+  media_assets                media_assets[]                @relation("media_assets_restaurant")
+  orders                      orders[]                      @relation("orders_restaurant")
+  operation_events            restaurant_operation_events[] @relation("restaurant_operation_events_restaurant")
+  print_destinations          print_destinations[]
+  tabs                        tabs[]
+  cash_shifts                 cash_shifts[]
+  payment_provider_accounts   payment_provider_accounts[]
+  payment_terminals           payment_terminals[]
+  daily_sales                 daily_sales[]
+  product_sales_daily         product_sales_daily[]
+  fiscal_settings             fiscal_settings?
+  fiscal_tax_profiles         fiscal_tax_profiles[]
+  fiscal_documents            fiscal_documents[]
 }
 
 model users {
@@ -52,6 +65,18 @@ model users {
   published_menus             menu_publications[]           @relation("menu_publications_published_by_user")
   order_events                order_events[]                @relation("order_events_actor")
   restaurant_operation_events restaurant_operation_events[] @relation("restaurant_operation_events_actor")
+  opened_tabs                 tabs[]                        @relation("tabs_opened_by")
+  closed_tabs                 tabs[]                        @relation("tabs_closed_by")
+  submitted_orders            orders[]                      @relation("orders_submitted_by_user")
+  created_tab_adjustments     tab_adjustments[]             @relation("tab_adjustment_created_by")
+  removed_tab_adjustments     tab_adjustments[]             @relation("tab_adjustment_removed_by")
+  handled_payment_requests    payment_requests[]            @relation("payment_request_handled_by")
+  created_payments            payments[]                    @relation("payment_actor")
+  refunded_payments           payments[]                    @relation("payment_refunded_by")
+  closed_cash_shifts          cash_shifts[]                 @relation("cash_shift_closed_by")
+  cash_movements              cash_movements[]              @relation("cash_movement_actor")
+
+  @@unique([restaurant_id, id])
 }
 
 model tables {
@@ -63,6 +88,7 @@ model tables {
   active          Boolean          @default(true)
   tableSessions   table_sessions[]
   tenant_sessions table_sessions[] @relation("table_sessions_tenant_table")
+  tabs            tabs[]           @relation("tabs_table")
 
   @@unique([restaurant_id, id])
   @@index([restaurant_id])
@@ -76,6 +102,7 @@ model table_sessions {
   restaurant_id  String
   restaurant     restaurants      @relation(fields: [restaurant_id], references: [id])
   table_id       String
+  tab_id         String?
   table          tables           @relation(fields: [table_id], references: [id])
   status         tableStatus      @default(ACTIVE)
   keep_open      Boolean          @default(false)
@@ -89,10 +116,13 @@ model table_sessions {
   calls          calls[]
   tenant_table   tables           @relation("table_sessions_tenant_table", fields: [restaurant_id, table_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
   orders         orders[]         @relation("orders_session")
+  tab            tabs?            @relation(fields: [restaurant_id, tab_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict, map: "table_sessions_tab_fkey")
+  payment_requests payment_requests[]
 
   @@unique([restaurant_id, id])
   @@index([restaurant_id, status])
   @@index([table_id])
+  @@index([restaurant_id, tab_id], map: "table_sessions_restaurant_tab_idx")
 }
 
 model session_tokens {
@@ -101,8 +131,10 @@ model session_tokens {
   table_session    table_sessions @relation(fields: [session_id], references: [id])
   token_hash       String         @unique
   revoked_at       DateTime?
+  guest_label      String?        @db.VarChar(60)
   calls            calls[]
   submitted_orders orders[]       @relation("orders_submitted_by_token")
+  payment_requests payment_requests[]
 
   @@unique([id, session_id])
   @@index([session_id])
@@ -160,6 +192,7 @@ enum staff_category {
   CLEANING
   KITCHEN
   OTHER
+  CASHIER
 }
 
 // Renovação do login: o valor existe só no aparelho do usuário; o banco guarda o hash. Cada uso gera um novo e revoga o anterior.
@@ -264,6 +297,9 @@ model menu_products {
   variants             menu_product_variants[] @relation("menu_product_variants_product")
   option_groups        menu_option_groups[]    @relation("menu_option_groups_product")
   images               menu_product_images[]   @relation("menu_product_images_product")
+  /// Perfil tributário da NFC-e; fora do rascunho/publicação do cardápio.
+  fiscal_tax_profile_id String?
+  fiscal_tax_profile    fiscal_tax_profiles?    @relation(fields: [restaurant_id, fiscal_tax_profile_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
 
   @@unique([restaurant_id, id])
   @@index([category_id, position, id])
@@ -452,6 +488,8 @@ model orders {
   session_id            String?
   publication_id        String?
   submitted_by_token_id String?
+  submitted_by_user_id  String?
+  tab_id                String
   table_label_snapshot  String             @db.VarChar(120)
   submission_key        String             @db.VarChar(64)
   request_hash          String             @db.VarChar(64)
@@ -465,6 +503,9 @@ model orders {
   session               table_sessions?    @relation("orders_session", fields: [restaurant_id, session_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
   publication           menu_publications? @relation("orders_publication", fields: [restaurant_id, publication_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
   submitted_by_token    session_tokens?    @relation("orders_submitted_by_token", fields: [submitted_by_token_id, session_id], references: [id, session_id], onDelete: Restrict, onUpdate: Restrict)
+  /// A FK SQL limpa apenas submitted_by_user_id ao excluir o usuário.
+  submitted_by_user     users?             @relation("orders_submitted_by_user", fields: [restaurant_id, submitted_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict, map: "orders_submitted_by_user_fkey")
+  tab                   tabs               @relation(fields: [restaurant_id, tab_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict, map: "orders_tab_fkey")
   items                 order_items[]      @relation("order_items_order")
   events                order_events[]     @relation("order_events_order")
   print_jobs            print_jobs[]
@@ -475,6 +516,8 @@ model orders {
   @@index([restaurant_id, session_id, created_at])
   @@index([restaurant_id, publication_id])
   @@index([submitted_by_token_id, session_id])
+  @@index([restaurant_id, tab_id, created_at], map: "orders_restaurant_tab_created_idx")
+  @@index([restaurant_id, submitted_by_user_id])
 }
 
 model order_items {
@@ -486,6 +529,8 @@ model order_items {
   position              Int
   product_name_snapshot String                @db.VarChar(120)
   variant_name_snapshot String                @db.VarChar(120)
+  category_id_snapshot  String?
+  category_name_snapshot String              @default("Sem categoria") @db.VarChar(120)
   quantity              Int
   base_price_cents      Int
   unit_price_cents      Int
@@ -501,8 +546,10 @@ model order_items {
   variant               menu_product_variants @relation("order_items_variant", fields: [restaurant_id, product_id, variant_id], references: [restaurant_id, product_id, id], onDelete: Restrict, onUpdate: Restrict)
   selections            order_item_options[]  @relation("order_item_options_item")
   events                order_events[]        @relation("order_events_item")
+  payment_allocations payment_allocations[]
 
   @@unique([restaurant_id, order_id, id])
+  @@unique([restaurant_id, id])
   @@unique([restaurant_id, product_id, id])
   @@unique([order_id, position])
   @@index([restaurant_id, order_id])
@@ -595,10 +642,12 @@ enum media_derivative_kind {
 
 enum order_source {
   LOCAL_MENU
+  POS
 }
 
 enum order_fulfillment {
   DINE_IN
+  COUNTER
 }
 
 enum order_item_stage {
@@ -694,4 +743,501 @@ enum print_job_outcome {
   SENT
   FAILED_BEFORE_SEND
   UNCERTAIN
+}
+
+enum tab_kind {
+  TABLE
+  COUNTER
+}
+
+enum tab_status {
+  OPEN
+  CLOSING
+  CLOSED
+  CANCELLED
+}
+
+model tabs {
+  id                       String           @id @default(uuid())
+  restaurant_id            String
+  number                   Int
+  kind                     tab_kind
+  table_id                 String?
+  table_label_snapshot     String?          @db.VarChar(120)
+  label                    String?          @db.VarChar(80)
+  guests_count             Int?
+  status                   tab_status       @default(OPEN)
+  service_fee_bps          Int              @default(1000)
+  service_fee_waived       Boolean          @default(false)
+  service_fee_waive_reason String?          @db.VarChar(500)
+  subtotal_cents           Int              @default(0)
+  service_fee_cents        Int              @default(0)
+  adjustments_cents        Int              @default(0)
+  total_cents              Int              @default(0)
+  paid_cents               Int              @default(0)
+  /// Estornos ocorridos após o fechamento; preserva o valor liquidado na data de fechamento.
+  closed_refunded_cents    Int              @default(0)
+  business_date            DateTime?        @db.Date
+  /// Histórico de sessões fechadas antes do PDV, sem pagamentos registrados.
+  legacy_closed            Boolean          @default(false)
+  opened_by_user_id        String?
+  closed_by_user_id        String?
+  cancel_reason            String?          @db.VarChar(500)
+  version                  Int              @default(1)
+  opened_at                DateTime         @default(now())
+  closed_at                DateTime?
+  updated_at               DateTime         @default(now()) @updatedAt
+
+  restaurant restaurants      @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+  table      tables?          @relation("tabs_table", fields: [restaurant_id, table_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  /// As FKs SQL de autoria limpam apenas os IDs dos usuários ao excluí-los.
+  opened_by  users?           @relation("tabs_opened_by", fields: [restaurant_id, opened_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+  closed_by  users?           @relation("tabs_closed_by", fields: [restaurant_id, closed_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+  sessions   table_sessions[]
+  orders     orders[]
+  adjustments tab_adjustments[]
+  payment_requests payment_requests[]
+  payments payments[]
+  fiscal_document fiscal_documents?
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, number])
+  @@index([restaurant_id, status, opened_at])
+  @@index([restaurant_id, business_date, status])
+  @@index([restaurant_id, table_id, status])
+  @@index([restaurant_id, opened_by_user_id])
+  @@index([restaurant_id, closed_by_user_id])
+}
+
+enum tab_adjustment_type {
+  DISCOUNT
+  COUVERT
+  TIP
+}
+
+enum tab_adjustment_mode {
+  FIXED_CENTS
+  PERCENT_BPS
+}
+
+enum payment_method {
+  CASH
+  CREDIT
+  DEBIT
+  PIX
+  VOUCHER
+  OTHER
+}
+
+enum payment_status {
+  PENDING
+  PROCESSING
+  APPROVED
+  DECLINED
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+enum payment_provider_type {
+  MANUAL
+  MERCADO_PAGO
+  STONE
+  PAGBANK
+  CIELO
+  PAYGO
+  SITEF
+}
+
+enum payment_request_status {
+  OPEN
+  ACCEPTED
+  CONVERTED
+  CANCELLED
+  EXPIRED
+}
+
+model tab_adjustments {
+  id                 String              @id @default(uuid())
+  restaurant_id      String
+  tab_id             String
+  type               tab_adjustment_type
+  mode               tab_adjustment_mode
+  value              Int
+  computed_cents     Int
+  reason             String              @db.VarChar(500)
+  created_by_user_id String?
+  created_at         DateTime            @default(now())
+  removed_at         DateTime?
+  removed_by_user_id String?
+  remove_reason      String?             @db.VarChar(500)
+
+  tab        tabs   @relation(fields: [restaurant_id, tab_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  /// As FKs SQL de autoria limpam apenas os IDs dos usuários ao excluí-los.
+  created_by users? @relation("tab_adjustment_created_by", fields: [restaurant_id, created_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+  removed_by users? @relation("tab_adjustment_removed_by", fields: [restaurant_id, removed_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@unique([restaurant_id, id])
+  @@index([restaurant_id, tab_id, removed_at])
+  @@index([restaurant_id, created_by_user_id])
+  @@index([restaurant_id, removed_by_user_id])
+}
+
+model payment_requests {
+  id                     String                 @id @default(uuid())
+  restaurant_id          String
+  tab_id                 String
+  session_id             String
+  session_token_id       String
+  payer_label            String                 @db.VarChar(60)
+  preferred_method       payment_method
+  requested_amount_cents Int
+  selection_json         Json
+  status                 payment_request_status @default(OPEN)
+  payment_id             String?
+  handled_by_user_id     String?
+  created_at             DateTime               @default(now())
+  updated_at             DateTime               @default(now()) @updatedAt
+
+  tab           tabs           @relation(fields: [restaurant_id, tab_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  session       table_sessions @relation(fields: [restaurant_id, session_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  session_token session_tokens @relation(fields: [session_token_id, session_id], references: [id, session_id], onDelete: Restrict, onUpdate: Restrict)
+  payment       payments?      @relation(fields: [restaurant_id, payment_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  /// A FK SQL limpa apenas handled_by_user_id ao excluir o usuário.
+  handled_by    users?         @relation("payment_request_handled_by", fields: [restaurant_id, handled_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, payment_id])
+  @@index([restaurant_id, tab_id, status])
+  @@index([restaurant_id, session_id, status])
+  @@index([session_token_id, session_id])
+  @@index([restaurant_id, handled_by_user_id])
+}
+
+model payments {
+  id                   String                @id @default(uuid())
+  restaurant_id        String
+  tab_id               String
+  cash_shift_id        String?
+  provider             payment_provider_type @default(MANUAL)
+  terminal_id          String?
+  provider_account_id  String?
+  method               payment_method
+  status               payment_status
+  amount_cents         Int
+  received_cents       Int?
+  change_cents         Int                   @default(0)
+  tip_cents            Int                   @default(0)
+  provider_fee_cents   Int?
+  payer_label          String?               @db.VarChar(60)
+  idempotency_key      String                @db.VarChar(64)
+  request_hash         String                @db.VarChar(64)
+  external_payment_id  String?               @db.VarChar(128)
+  nsu                  String?               @db.VarChar(64)
+  authorization_code   String?               @db.VarChar(64)
+  card_brand           String?               @db.VarChar(32)
+  acquirer_cnpj        String?               @db.VarChar(14)
+  installments         Int                   @default(1)
+  raw_provider_payload Json?
+  actor_user_id        String?
+  refund_reason        String?               @db.VarChar(500)
+  refunded_by_user_id  String?
+  confirmed_at         DateTime?
+  refunded_at          DateTime?
+  created_at           DateTime              @default(now())
+  updated_at           DateTime              @default(now()) @updatedAt
+
+  tab             tabs                  @relation(fields: [restaurant_id, tab_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  cash_shift      cash_shifts?          @relation(fields: [restaurant_id, cash_shift_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  provider_account payment_provider_accounts? @relation(fields: [restaurant_id, provider, provider_account_id], references: [restaurant_id, provider, id], onDelete: Restrict, onUpdate: Restrict, map: "payments_provider_account_fkey")
+  terminal         payment_terminals?          @relation(fields: [restaurant_id, terminal_id, provider, provider_account_id], references: [restaurant_id, id, provider, provider_account_id], onDelete: Restrict, onUpdate: Restrict, map: "payments_terminal_fkey")
+  /// As FKs SQL de autoria limpam apenas os IDs dos usuários ao excluí-los.
+  actor           users?                @relation("payment_actor", fields: [restaurant_id, actor_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+  refunded_by     users?                @relation("payment_refunded_by", fields: [restaurant_id, refunded_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+  allocations     payment_allocations[]
+  payment_request payment_requests?
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, idempotency_key])
+  @@unique([restaurant_id, provider_account_id, external_payment_id], map: "payments_account_external_key")
+  @@index([restaurant_id, tab_id, status])
+  @@index([restaurant_id, cash_shift_id, status])
+  @@index([restaurant_id, terminal_id])
+  @@index([restaurant_id, provider, provider_account_id])
+  @@index([provider, external_payment_id])
+  @@index([status, updated_at])
+  @@index([restaurant_id, actor_user_id])
+  @@index([restaurant_id, refunded_by_user_id])
+}
+
+model payment_allocations {
+  id                String @id @default(uuid())
+  restaurant_id     String
+  payment_id        String
+  order_item_id     String
+  covered_cents     Int
+  covered_units_bps Int?
+
+  payment    payments    @relation(fields: [restaurant_id, payment_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  order_item order_items @relation(fields: [restaurant_id, order_item_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([restaurant_id, payment_id, order_item_id])
+  @@index([restaurant_id, order_item_id])
+}
+
+enum cash_shift_status {
+  OPEN
+  CLOSED
+}
+
+enum cash_movement_type {
+  SANGRIA
+  SUPRIMENTO
+}
+
+model cash_shifts {
+  id                  String            @id @default(uuid())
+  restaurant_id       String
+  /// Identificador histórico do operador, preservado na exclusão do usuário.
+  opened_by_user_id   String
+  closed_by_user_id   String?
+  status              cash_shift_status @default(OPEN)
+  opening_cents       Int
+  expected_cash_cents Int               @default(0)
+  counted_cash_cents  Int?
+  difference_cents    Int?
+  notes               String?           @db.VarChar(500)
+  opened_at           DateTime          @default(now())
+  closed_at           DateTime?
+
+  restaurant restaurants      @relation(fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  /// A FK SQL limpa apenas closed_by_user_id ao excluir o usuário.
+  closed_by  users?           @relation("cash_shift_closed_by", fields: [restaurant_id, closed_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+  payments   payments[]
+  movements  cash_movements[]
+
+  @@unique([restaurant_id, id])
+  @@index([restaurant_id, status, opened_at])
+  @@index([restaurant_id, opened_by_user_id, opened_at])
+  @@index([restaurant_id, closed_by_user_id])
+}
+
+model cash_movements {
+  id            String             @id @default(uuid())
+  restaurant_id String
+  cash_shift_id String
+  type          cash_movement_type
+  amount_cents  Int
+  reason        String             @db.VarChar(500)
+  actor_user_id String?
+  created_at    DateTime           @default(now())
+
+  cash_shift cash_shifts @relation(fields: [restaurant_id, cash_shift_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  /// A FK SQL limpa apenas actor_user_id ao excluir o usuário.
+  actor      users?      @relation("cash_movement_actor", fields: [restaurant_id, actor_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@index([restaurant_id, cash_shift_id, created_at])
+  @@index([restaurant_id, actor_user_id])
+}
+
+enum provider_environment {
+  SANDBOX
+  PRODUCTION
+}
+
+enum provider_account_status {
+  ACTIVE
+  REVOKED
+}
+
+model payment_provider_accounts {
+  id                       String                  @id @default(uuid())
+  restaurant_id            String
+  provider                 payment_provider_type
+  environment              provider_environment    @default(SANDBOX)
+  status                   provider_account_status @default(ACTIVE)
+  external_account_id      String?                 @db.VarChar(128)
+  access_token_encrypted   String
+  refresh_token_encrypted  String?
+  token_expires_at         DateTime?
+  metadata_json            Json?
+  created_at               DateTime                @default(now())
+  updated_at               DateTime                @default(now()) @updatedAt
+
+  restaurant restaurants         @relation(fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  terminals  payment_terminals[]
+  payments   payments[]
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, provider, id])
+  @@unique([restaurant_id, provider, environment], map: "payment_provider_accounts_identity_key")
+  @@index([provider, status, token_expires_at])
+}
+
+model payment_terminals {
+  id                  String                @id @default(uuid())
+  restaurant_id       String
+  provider_account_id String?
+  provider            payment_provider_type
+  external_device_id  String?               @db.VarChar(128)
+  serial_number       String?               @db.VarChar(128)
+  label               String                @db.VarChar(80)
+  active              Boolean               @default(true)
+  last_seen_at        DateTime?
+  metadata_json       Json?
+  created_at          DateTime              @default(now())
+  updated_at          DateTime              @default(now()) @updatedAt
+
+  restaurant       restaurants                @relation(fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  provider_account payment_provider_accounts? @relation(fields: [restaurant_id, provider, provider_account_id], references: [restaurant_id, provider, id], onDelete: Restrict, onUpdate: Restrict, map: "payment_terminals_account_fkey")
+  payments         payments[]
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, id, provider, provider_account_id], map: "payment_terminals_account_identity_key")
+  @@index([restaurant_id, active])
+  @@index([restaurant_id, provider, provider_account_id])
+}
+
+/// Consolidado por dia operacional. Fonte: comandas fechadas (exceto legacy_closed); reconstruível.
+model daily_sales {
+  restaurant_id         String
+  business_date         DateTime @db.Date
+  tabs_closed_count     Int      @default(0)
+  table_tabs_count      Int      @default(0)
+  counter_tabs_count    Int      @default(0)
+  guests_total          Int      @default(0)
+  gross_sales_cents     Int      @default(0)
+  cancelled_items_cents Int      @default(0)
+  discounts_cents       Int      @default(0)
+  service_fee_cents     Int      @default(0)
+  couvert_cents         Int      @default(0)
+  tips_cents            Int      @default(0)
+  net_sales_cents       Int      @default(0)
+  cash_cents            Int      @default(0)
+  credit_cents          Int      @default(0)
+  debit_cents           Int      @default(0)
+  pix_cents             Int      @default(0)
+  voucher_cents         Int      @default(0)
+  other_cents           Int      @default(0)
+  provider_fees_cents   Int      @default(0)
+  total_stay_seconds    BigInt   @default(0)
+  rebuilt_at            DateTime @default(now())
+
+  restaurant restaurants @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+
+  @@id([restaurant_id, business_date])
+}
+
+/// Itens vendidos por dia operacional, produto, variante e hora local do pedido.
+model product_sales_daily {
+  restaurant_id          String
+  business_date          DateTime @db.Date
+  product_id             String
+  variant_id             String
+  hour_bucket            Int
+  product_name_snapshot  String   @db.VarChar(120)
+  variant_name_snapshot  String   @db.VarChar(120)
+  category_name_snapshot String   @db.VarChar(120)
+  quantity_sold          Int      @default(0)
+  quantity_cancelled     Int      @default(0)
+  revenue_cents          Int      @default(0)
+
+  restaurant restaurants @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+
+  @@id([restaurant_id, business_date, product_id, variant_id, hour_bucket])
+  @@index([restaurant_id, product_id, business_date])
+}
+
+enum fiscal_provider_type {
+  MOCK
+  NOTAAS
+  FOCUS_NFE
+}
+
+enum fiscal_environment {
+  HOMOLOGACAO
+  PRODUCAO
+}
+
+enum fiscal_document_status {
+  PENDING
+  PROCESSING
+  AUTHORIZED
+  REJECTED
+  CANCELLED
+}
+
+/// Emitente, CSC, série e numeração ficam configurados no provedor.
+model fiscal_settings {
+  restaurant_id                 String               @id
+  enabled                       Boolean              @default(false)
+  provider                      fiscal_provider_type @default(MOCK)
+  environment                   fiscal_environment   @default(HOMOLOGACAO)
+  cnpj                          String               @db.VarChar(14)
+  provider_credential_encrypted String?
+  default_tax_profile_id        String?
+  updated_at                    DateTime             @default(now()) @updatedAt
+
+  restaurant          restaurants          @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+  default_tax_profile fiscal_tax_profiles? @relation("fiscal_default_profile", fields: [restaurant_id, default_tax_profile_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+}
+
+model fiscal_tax_profiles {
+  id            String   @id @default(uuid())
+  restaurant_id String
+  name          String   @db.VarChar(80)
+  ncm           String   @db.VarChar(8)
+  cfop          String   @db.VarChar(4)
+  csosn         String   @db.VarChar(4)
+  origin        Int      @default(0)
+  unit          String   @default("UN") @db.VarChar(6)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now()) @updatedAt
+
+  restaurant       restaurants       @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+  products         menu_products[]
+  default_settings fiscal_settings[] @relation("fiscal_default_profile")
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, name])
+}
+
+/// Uma NFC-e por comanda. A referência no provedor é `id-attempt`.
+// Índice único parcial (o mesmo external_id não serve a duas comandas) fica na migration fiscal_nfce:
+// CREATE UNIQUE INDEX fiscal_documents_external_unique ON fiscal_documents(restaurant_id, provider, external_id) WHERE external_id IS NOT NULL;
+// Nunca aceite um `migrate dev` que o remova.
+model fiscal_documents {
+  id                String                 @id @default(uuid())
+  restaurant_id     String
+  tab_id            String
+  provider          fiscal_provider_type
+  environment       fiscal_environment
+  status            fiscal_document_status @default(PENDING)
+  attempt           Int                    @default(1)
+  external_id       String?                @db.VarChar(128)
+  total_cents       Int
+  customer_document String?                @db.VarChar(14)
+  number            Int?
+  series            Int?
+  access_key        String?                @db.VarChar(44)
+  protocol          String?                @db.VarChar(64)
+  sefaz_status      String?                @db.VarChar(16)
+  sefaz_message     String?                @db.VarChar(500)
+  xml_url           String?                @db.VarChar(1000)
+  danfe_url         String?                @db.VarChar(1000)
+  qrcode_url        String?                @db.VarChar(2000)
+  dispatched_at     DateTime?
+  issued_at         DateTime?
+  cancel_reason     String?                @db.VarChar(255)
+  cancel_requested_at DateTime?
+  cancelled_at      DateTime?
+  created_at        DateTime               @default(now())
+  updated_at        DateTime               @default(now()) @updatedAt
+
+  restaurant restaurants @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+  tab        tabs        @relation(fields: [restaurant_id, tab_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, tab_id])
+  @@index([status, updated_at])
 }

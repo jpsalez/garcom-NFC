@@ -47,12 +47,12 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
 | Cenário | Regra obrigatória | Código HTTP / `code` |
 |---|---|---|
 | **Desativar mesa** (`PATCH /tables/:id { active: false }`) com comanda `OPEN`/`CLOSING` | **Bloquear!** Não fechar comanda silenciosamente (corrige lacuna de `tables.service.ts`). | `409 TABLE_HAS_OPEN_TAB` |
-| **Fechar sessão manual** (`POST /sessions/:id/close`) com comanda aberta com consumo ou saldo > 0 | **Bloquear!** Equipe deve fechar pela comanda (`POST /tabs/:id/close`) ou cancelar a comanda. Se a comanda tiver 0 pedidos, fecha ambos juntos. | `409 TAB_HAS_UNPAID_BALANCE` |
+| **Fechar sessão manual** (`POST /sessions/:id/close`) com comanda aberta com consumo ou saldo > 0 | **Bloquear!** Equipe deve fechar pela comanda (`POST /tabs/:id/close`) ou cancelar a comanda. Se a comanda tiver 0 pedidos, fecha ambos juntos. Sem comanda aberta, também bloqueia se a sessão tiver pedidos pendentes [Implementado]. | `409 TAB_HAS_UNPAID_BALANCE` ou `409 SESSION_HAS_PENDING_ORDERS` |
 | **Timeout da sessão NFC (4 h)** (`session-expiry.job.ts`) | Fecha `table_session` (`TIMEOUT`), revoga tokens e cancela `calls` + `payment_requests` abertos daquela sessão. **NÃO fecha a `tab`!** Novo scan na mesa cria nova `table_session` ligada ao mesmo `tab_id`. | — (job) |
 | **Novo pedido com comanda em `CLOSING`** | Permite o pedido e volta a `tab` automaticamente para `OPEN`, emitindo `tab:updated`. | `201 Created` |
 | **Cancelar item de pedido** (`POST /orders/:id/transitions → CANCELLED`) | Bloqueia se `tab.status IN ('CLOSED', 'CANCELLED')` (`TAB_NOT_OPEN`), ou se o novo `total_cents < paid_cents + pending_cents` (`TOTAL_BELOW_PAID` — exige estornar/cancelar pagamento antes). | `409` |
 | **Aplicar desconto** que derrube `total_cents` abaixo de `paid_cents + pending_cents` | **Bloquear!** Estornar/cancelar pagamento antes. | `409 TOTAL_BELOW_PAID` |
-| **Estornar pagamento** de comanda já `CLOSED` | Permitido só para `OWNER`/`MANAGER` dentro do **mesmo `business_date`** (ou com reabertura controlada). Estorna `payments` → `REFUNDED`, reverte delta em `daily_sales` e audita. | `200 OK` ou `409 REFUND_WINDOW_EXPIRED` |
+| **Estornar pagamento** de comanda já `CLOSED` | Permitido só para `OWNER`/`MANAGER` dentro do **mesmo `business_date`** (ou com reabertura controlada). Estorna `payments` → `REFUNDED`, reverte delta em `daily_sales` e audita. A comanda continua `CLOSED`: `paid_cents` diminui e `closed_refunded_cents` aumenta pelo mesmo valor [Implementado, `applyRefund`]. Pagamento integrado (Point) não é estornável: `409 INTEGRATED_REFUND_UNAVAILABLE` (DEC-17, decidido: o estorno Point continua bloqueado). | `200 OK` ou `409 REFUND_WINDOW_EXPIRED` |
 | **Concorrência de 2 operadores na mesma comanda** | Tudo serializado em `RestaurantUnitOfWork.run` (`SELECT ... FOR UPDATE` no restaurante) + `expected_version` em `close`/`cancel`/`merge`/`transfer`. | `409 VERSION_CONFLICT` |
 | **Scan sem pedido** | Scan (`POST /public/tables/:code/scan`) cria `table_session` e vincula a uma `tab` se já existir; **só cria `tab` automaticamente no 1º pedido** (ou abertura explícita em `POST /tabs`), evitando centenas de comandas vazias. | — |
 
@@ -106,7 +106,7 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
   ```
 
 #### `GET /api/v1/tabs/:id` (`tabs:read`)
-- **Response `200 OK`:** além dos campos do resumo, retorna:
+- **Response `200 OK`:** `{ "tab": TabDetail }`. Além dos campos do resumo, `tab` retorna:
   - `orders[]` (cada pedido com `items[]`, cada item com `active_line_cents`, `allocated_cents`, `unallocated_cents`, `submitted_by_token_id`, `guest_label`).
   - `by_guest[]` — agrupamento pronto para o caixa/garçom:
     ```json
@@ -128,13 +128,19 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
 - **Request:** `{ "waived": true, "reason": "Cliente optou por não pagar os 10%" }`
 - **Response `200 OK`:** `{ "tab": TabSummary }`
 
+#### `PATCH /api/v1/tabs/:id` (`tabs:manage`)
+- **Request:** `{ "expected_version": 5, "label": "João", "guests_count": 2 }`. Envie os campos que deseja alterar. Use `null` para limpar o nome ou o número de pessoas.
+- **Response `200 OK`:** `{ "tab": TabSummary }`.
+
 #### `POST /api/v1/tabs/:id/transfer-table` (`tabs:manage`)
 - **Request:** `{ "target_table_id": "uuid-mesa-destino", "expected_version": 5 }`
 - **Erros:** `409 TAB_ALREADY_OPEN` (mesa destino ocupada), `409 VERSION_CONFLICT`.
+- A transferência move a sessão ativa da mesa principal. As sessões de mesas secundárias preservam suas mesas e a comanda vinculada.
 
 #### `POST /api/v1/tabs/:id/merge` (`tabs:manage`)
 - **Request:** `{ "source_tab_id": "uuid-comanda-origem", "expected_version": 5 }`
-- Transfere pedidos, ajustes e pagamentos aprovados da origem para `:id`, marca origem como `CANCELLED`. Bloqueia se origem tiver pagamento `PENDING`/`PROCESSING`.
+- Transfere pedidos, sessões, ajustes, pagamentos e solicitações da origem para `:id`. Marca a origem como `CANCELLED` e bloqueia se houver pagamento `PENDING` ou `PROCESSING` nela. As parcelas pagas continuam ligadas aos mesmos itens.
+- O vínculo secundário dura até o fim da sessão original. Depois de um timeout, o scan na mesa principal reencontra a comanda aberta pela mesa; nas secundárias, começa uma nova sessão sem vínculo.
 
 #### `POST /api/v1/tabs/:id/close` (`tabs:close`)
 - **Request:** `{ "expected_version": 6, "customer_document": "12345678909" }` *(CPF/CNPJ opcional para NFC-e)*
@@ -185,7 +191,7 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
     }
     ```
   - Response `201 Created`: `{ "payment_request": PaymentRequestView }`.
-  - Se o mesmo `session_token` já tiver uma solicitação `OPEN`, substitui ou retorna `409 PAYMENT_REQUEST_ALREADY_OPEN` (cliente pode cancelar via `DELETE /public/tab/payment-requests/:id`).
+  - Se o mesmo `session_token` já tiver uma solicitação `OPEN`, retorna `409 PAYMENT_REQUEST_ALREADY_OPEN`. O cliente pode cancelar via `DELETE /public/tab/payment-requests/:id`. Timeout expira a solicitação e o fechamento da comanda cancela solicitações restantes.
 
 ---
 
@@ -214,6 +220,7 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
   - `MANUAL`: `201 Created` `{ "payment": PaymentView, "tab": TabSummary, "auto_closed": true|false }`.
   - `MERCADO_PAGO`: `202 Accepted` `{ "payment": PaymentView (status=PROCESSING), "tab": TabSummary }`.
 - **Idempotência:** mesmo `idempotency_key` com mesmo payload devolve `200 OK` (`replayed: true`); com payload diferente devolve `409 IDEMPOTENCY_CONFLICT`.
+- Ao converter uma solicitação ativa, a seleção e o valor são preenchidos pelo servidor. A equipe pode ajustar o meio efetivo de pagamento. A taxa proporcional informada em `include_service_fee` é limitada ao saldo disponível.
 
 #### `POST /api/v1/tabs/:id/payments/:paymentId/refund` (`payments:refund`)
 - **Request:** `{ "reason": "Cobrança duplicada na maquininha" }`
@@ -222,10 +229,17 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
 ---
 
 ### 3.5 Turno de caixa (`back-end/src/modules/cash-shifts/`)
-- `POST /api/v1/cash-shifts/open` → `{ "opening_cents": 20000 }` → `201 Created`.
-- `GET /api/v1/cash-shifts/current` → turno aberto do operador com totais em tempo real (`expected_cash_cents`, totais por meio, movimentos).
-- `POST /api/v1/cash-shifts/:id/movements` → `{ "type": "SANGRIA", "amount_cents": 50000, "reason": "Depósito cofre" }` → recalcula `expected_cash_cents` (`+` suprimento, `-` sangria).
-- `POST /api/v1/cash-shifts/:id/close` → `{ "counted_cash_cents": 45200, "notes": "Tudo certo" }` → devolve `expected_cash_cents`, `counted_cash_cents`, `difference_cents` e resumo completo por meio de pagamento.
+
+As rotas exigem `cash_shift:operate`. `OWNER` e `MANAGER` administram os turnos do próprio restaurante. `CASHIER` acessa apenas seus turnos. Turnos fora desse escopo retornam `404`.
+
+- `POST /api/v1/cash-shifts/open` recebe `{ "opening_cents": 20000 }` e retorna `201 { "shift": ... }`. Se já houver um turno aberto para o operador, retorna `409 CASH_SHIFT_ALREADY_OPEN`.
+- `GET /api/v1/cash-shifts/current` retorna `{ "shift": ... }` do operador autenticado ou `{ "shift": null }`.
+- `GET /api/v1/cash-shifts` retorna `{ "shifts": [...] }` com filtros opcionais `status`, `limit` e `offset`.
+- `GET /api/v1/cash-shifts/:id` retorna `{ "shift": ... }` com `movements` e `totals_by_method`, um mapa dos totais em centavos de pagamentos aprovados por meio.
+- `POST /api/v1/cash-shifts/:id/movements` recebe `{ "type": "SANGRIA", "amount_cents": 5000, "reason": "Depósito no cofre" }` e retorna `201 { "shift": ... }`. Sangria reduz o saldo e suprimento aumenta.
+- `POST /api/v1/cash-shifts/:id/close` recebe `{ "counted_cash_cents": 45200, "notes": "Tudo certo" }` e retorna `{ "shift": ... }` com a diferença em centavos entre o contado e o esperado.
+
+O pagamento é vinculado ao turno aberto do operador, quando houver. Dinheiro acrescenta apenas o valor líquido pago ao saldo esperado. O estorno corrige o turno vinculado mesmo após o fechamento, preservando a contagem física e recalculando a diferença. Sangria ou estorno que levaria o saldo abaixo de zero retorna `409 CASH_SHIFT_INSUFFICIENT_CASH`.
 
 ---
 

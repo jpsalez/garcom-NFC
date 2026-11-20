@@ -2,6 +2,7 @@
 export interface INotifier {
   toRestaurant(restaurantId: string, event: string, payload: unknown): void;
   toOrders(restaurantId: string, event: string, payload: { order_id: string; version: number }): void;
+  toPos(restaurantId: string, event: string, payload: unknown): void;
   wakePrintStation(restaurantId: string): void;
   disconnectPrintStation(restaurantId: string): void;
   // Usuário desativado/excluído ou restaurante desativado perde a conexão na hora (o JWT só é checado ao conectar)

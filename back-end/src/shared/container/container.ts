@@ -2,6 +2,10 @@ import { container } from "tsyringe";
 import { prisma, type DbClient } from "../providers/prisma.ts";
 
 import type { IAuthService, ITokenCleanupService } from "../../modules/auth/auth.interfaces.ts";
+import {
+  RestaurantSettingsService,
+  type IRestaurantSettingsService,
+} from "../../modules/restaurants/restaurant-settings.service.ts";
 import type { IRestaurantRepository } from "../../modules/restaurants/restaurants.repository.interface.ts";
 import { RestaurantRepository } from "../../modules/restaurants/restaurants.repository.ts";
 import type { IUserRepository } from "../../modules/users/users.repository.interface.ts";
@@ -66,6 +70,41 @@ import { MediaService } from "../../modules/media/media.service.ts";
 import type { IMediaService } from "../../modules/media/media.interfaces.ts";
 import type { IStorageProvider } from "../storage/storage.interface.ts";
 import { LocalStorageProvider } from "../storage/local-storage.ts";
+import type { ITabsRepository } from "../../modules/tabs/tabs.repository.interface.ts";
+import { TabsRepository } from "../../modules/tabs/tabs.repository.ts";
+import { TabsService } from "../../modules/tabs/tabs.service.ts";
+import type { ITabsService } from "../../modules/tabs/tabs.interfaces.ts";
+
+import {
+  PaymentRequestsService,
+  type IPaymentRequestsService,
+} from "../../modules/tabs/payment-requests.service.ts";
+import {
+  TabAdjustmentsService,
+  type ITabAdjustmentsService,
+} from "../../modules/tabs/tab-adjustments.service.ts";
+import type { IPaymentsService } from "../../modules/payments/payments.interfaces.ts";
+import { PaymentsService } from "../../modules/payments/payments.service.ts";
+import { PointCredentialRefreshService } from "../../modules/payments/point-credential-refresh.service.ts";
+import { PointPaymentsService } from "../../modules/payments/point-payments.service.ts";
+import { MercadoPagoProvider } from "../../modules/payments/providers/mercado-pago.provider.ts";
+import { TerminalsService } from "../../modules/payments/terminals.service.ts";
+import { FiscalEmissionService } from "../../modules/fiscal/fiscal-emission.service.ts";
+import type { IFiscalService } from "../../modules/fiscal/fiscal.interfaces.ts";
+import { FiscalService } from "../../modules/fiscal/fiscal.service.ts";
+import { FiscalProviderRegistry } from "../../modules/fiscal/providers/fiscal-provider.registry.ts";
+import { FocusNfeProvider } from "../../modules/fiscal/providers/focus-nfe.provider.ts";
+import { MockFiscalProvider } from "../../modules/fiscal/providers/mock-fiscal.provider.ts";
+import { NotaasProvider } from "../../modules/fiscal/providers/notaas.provider.ts";
+import type { IReportsService } from "../../modules/reports/reports.interfaces.ts";
+import { ReportsService } from "../../modules/reports/reports.service.ts";
+import { ManualPaymentProvider } from "../../modules/payments/providers/manual.provider.ts";
+import { PaymentProviderRegistry } from "../../modules/payments/providers/payment-provider.registry.ts";
+
+import type { ICashShiftsRepository } from "../../modules/cash-shifts/cash-shifts.repository.interface.ts";
+import { CashShiftsRepository } from "../../modules/cash-shifts/cash-shifts.repository.ts";
+import type { ICashShiftsService } from "../../modules/cash-shifts/cash-shifts.interfaces.ts";
+import { CashShiftsService } from "../../modules/cash-shifts/cash-shifts.service.ts";
 
 export function registerDependencies() {
   // Infra
@@ -73,6 +112,26 @@ export function registerDependencies() {
   container.registerSingleton<IRestaurantUnitOfWork>("RestaurantUnitOfWork", RestaurantUnitOfWork);
   container.registerSingleton<IMenuRepository>("MenuRepository", MenuRepository);
   container.registerSingleton<IMenuService>("MenuService", MenuService);
+  container.registerSingleton<ITabsRepository>("TabsRepository", TabsRepository);
+  container.registerSingleton<ITabsService>("TabsService", TabsService);
+  container.registerSingleton<ITabAdjustmentsService>("TabAdjustmentsService", TabAdjustmentsService);
+  container.registerSingleton<IPaymentRequestsService>("PaymentRequestsService", PaymentRequestsService);
+  container.registerSingleton<IPaymentsService>("PaymentsService", PaymentsService);
+  container.registerSingleton<ICashShiftsRepository>("CashShiftsRepository", CashShiftsRepository);
+  container.registerSingleton<ICashShiftsService>("CashShiftsService", CashShiftsService);
+  container.registerSingleton("ManualPaymentProvider", ManualPaymentProvider);
+  container.registerSingleton("MercadoPagoProvider", MercadoPagoProvider);
+  container.registerSingleton("PointPaymentsService", PointPaymentsService);
+  container.registerSingleton("PointCredentialRefreshService", PointCredentialRefreshService);
+  container.registerSingleton("TerminalsService", TerminalsService);
+  container.registerSingleton<IReportsService>("ReportsService", ReportsService);
+  container.registerSingleton("MockFiscalProvider", MockFiscalProvider);
+  container.registerSingleton("NotaasProvider", NotaasProvider);
+  container.registerSingleton("FocusNfeProvider", FocusNfeProvider);
+  container.registerSingleton("FiscalProviderRegistry", FiscalProviderRegistry);
+  container.registerSingleton("FiscalEmissionService", FiscalEmissionService);
+  container.registerSingleton<IFiscalService>("FiscalService", FiscalService);
+  container.registerSingleton("PaymentProviderRegistry", PaymentProviderRegistry);
   container.registerSingleton<IOrdersRepository>("OrdersRepository", OrdersRepository);
   container.registerSingleton<IOrdersService>("OrdersService", OrdersService);
   container.registerSingleton<IOrderSettingsRepository>("OrderSettingsRepository", OrderSettingsRepository);
@@ -106,6 +165,10 @@ export function registerDependencies() {
   container.registerSingleton<ITablesService>("TablesService", TablesService);
   container.registerSingleton<ISessionsService>("SessionsService", SessionsService);
   container.registerSingleton<ICallsService>("CallsService", CallsService);
+  container.registerSingleton<IRestaurantSettingsService>(
+    "RestaurantSettingsService",
+    RestaurantSettingsService,
+  );
 }
 
 export { container };

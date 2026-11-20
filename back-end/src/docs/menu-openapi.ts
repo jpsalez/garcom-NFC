@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { posOrderOperation } from "./pdv-openapi.ts";
 import {
   availabilitySchema,
   createEntitySchemas,
@@ -107,6 +108,7 @@ export const menuPaths: Record<string, PathItem> = {
     patch: operation("Habilita/desabilita novos pedidos imediatamente", "staff", settingsSchema),
   },
   "/orders": {
+    post: posOrderOperation,
     get: operation("Fila persistente por mesa/período/andamento", "staff", undefined, 200, [], ordersQuery),
   },
   "/orders/{id}": { get: operation("Pedido administrativo", "staff", undefined, 200, ["id"]) },

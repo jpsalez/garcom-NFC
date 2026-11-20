@@ -1,5 +1,13 @@
 import express from "express";
 import { menuRoutes } from "./modules/menu/menu.routes.ts";
+import { paymentRequestsRoutes } from "./modules/tabs/payment-requests.routes.ts";
+import { cashShiftsRoutes } from "./modules/cash-shifts/cash-shifts.routes.ts";
+import { paymentsRoutes } from "./modules/payments/payments.routes.ts";
+import { terminalsRoutes } from "./modules/payments/terminals.routes.ts";
+import { reportsRoutes } from "./modules/reports/reports.routes.ts";
+import { fiscalRoutes } from "./modules/fiscal/fiscal.routes.ts";
+import { paymentWebhooksRoutes } from "./modules/payments/webhooks.routes.ts";
+import { tabsRoutes } from "./modules/tabs/tabs.routes.ts";
 import { ordersRoutes } from "./modules/orders/orders.routes.ts";
 import { printingRoutes } from "./modules/printing/printing.routes.ts";
 import { mediaRoutes } from "./modules/media/media.routes.ts";
@@ -14,6 +22,8 @@ import {
 import { AuthController } from "./modules/auth/auth.controller.ts";
 import { AdministrationController } from "./modules/administration/administration.controller.ts";
 import { createRestaurantSchema, setActiveSchema } from "./modules/administration/administration.schema.ts";
+import { RestaurantSettingsController } from "./modules/restaurants/restaurant-settings.controller.ts";
+import { restaurantSettingsPatchSchema } from "./modules/restaurants/restaurant-settings.schema.ts";
 import { CallsController } from "./modules/calls/calls.controller.ts";
 import { createCallSchema, listCallsQuery } from "./modules/calls/calls.schemas.ts";
 import { listSessionsQuery } from "./modules/sessions/sessions.schemas.ts";
@@ -39,7 +49,7 @@ import {
   resetPasswordLimiter,
   scanLimiter,
 } from "./shared/middlewares/rate-limit.middleware.ts";
-import { ensureAuthenticated, ensureRole } from "./shared/middlewares/auth.middleware.ts";
+import { ensureAuthenticated, ensureCapability, ensureRole } from "./shared/middlewares/auth.middleware.ts";
 import { role } from "../generated/prisma/enums.ts";
 import { changePasswordSchema, createUserSchema, loginUserSchema } from "./modules/auth/auth.schema.ts";
 
@@ -53,6 +63,7 @@ export function SetupRoutes() {
   const tablesController = container.resolve(TablesController);
   const sessionsController = container.resolve(SessionsController);
   const callsController = container.resolve(CallsController);
+  const restaurantSettingsController = container.resolve(RestaurantSettingsController);
 
   router.get("/health", (_req: Request, res: Response) => {
     res.send({ message: "API Healthy" });
@@ -165,7 +176,13 @@ export function SetupRoutes() {
   router.post("/public/tables/:code/scan", scanLimiter, sessionsController.scan);
   router.get("/sessions", ...staffOrOwner, validateQuery(listSessionsQuery), sessionsController.list);
   router.post("/tables/:id/session", ...staffOrOwner, validateUuidParams("id"), sessionsController.open);
-  router.post("/sessions/:id/close", ...staffOrOwner, validateUuidParams("id"), sessionsController.close);
+  router.post(
+    "/sessions/:id/close",
+    ensureAuthenticated,
+    ensureCapability("sessions:close"),
+    validateUuidParams("id"),
+    sessionsController.close,
+  );
   router.post("/sessions/:id/extend", ...staffOrOwner, validateUuidParams("id"), sessionsController.extend);
 
   // Chamados: o cliente chama com o token do aparelho; o balcão lista e finaliza
@@ -177,10 +194,33 @@ export function SetupRoutes() {
     callsController.create,
   );
   router.get("/calls", ...staffOrOwner, validateQuery(listCallsQuery), callsController.list);
-  router.patch("/calls/:id/done", ...staffOrOwner, validateUuidParams("id"), callsController.done);
+  router.patch(
+    "/calls/:id/done",
+    ensureAuthenticated,
+    ensureCapability("calls:done"),
+    validateUuidParams("id"),
+    callsController.done,
+  );
+
+  const restaurantSettingsAccess = [ensureAuthenticated, ensureCapability("restaurant:configure")];
+  router.get("/restaurant/settings", ...restaurantSettingsAccess, restaurantSettingsController.get);
+  router.patch(
+    "/restaurant/settings",
+    ...restaurantSettingsAccess,
+    validateSchema(restaurantSettingsPatchSchema),
+    restaurantSettingsController.update,
+  );
 
   router.use(menuRoutes());
   router.use(ordersRoutes());
+  router.use(tabsRoutes());
+  router.use(paymentRequestsRoutes());
+  router.use(paymentsRoutes());
+  router.use(terminalsRoutes());
+  router.use(reportsRoutes());
+  router.use(fiscalRoutes());
+  router.use(paymentWebhooksRoutes());
+  router.use(cashShiftsRoutes());
   router.use(mediaRoutes());
   router.use(printingRoutes());
   return router;

@@ -218,7 +218,7 @@ describe("envio e andamento dos pedidos", () => {
       where: { table_id: f.table.id, status: "ACTIVE" },
     });
     expect((await api().post(`/api/v1/sessions/${session.id}/close`).set(auth(f.token))).body.code).toBe(
-      "SESSION_HAS_PENDING_ORDERS",
+      "TAB_HAS_UNPAID_BALANCE",
     );
     const delivered = await api()
       .post(`/api/v1/orders/${order.id}/transitions`)
@@ -249,7 +249,9 @@ describe("envio e andamento dos pedidos", () => {
     expect(cancelled.body.active_total_cents).toBe(3000);
     expect(cancelled.body.progress.cancelled).toBe(1);
     expect(cancelled.body.progress.is_completed).toBe(true);
-    expect((await api().post(`/api/v1/sessions/${session.id}/close`).set(auth(f.token))).status).toBe(200);
+    const close = await api().post(`/api/v1/sessions/${session.id}/close`).set(auth(f.token));
+    expect(close.status).toBe(409);
+    expect(close.body.code).toBe("TAB_HAS_UNPAID_BALANCE");
     const events = await prisma.order_events.findMany({
       where: { order_id: order.id },
       orderBy: { sequence: "asc" },

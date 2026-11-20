@@ -9,6 +9,7 @@ import type {
 export type CreateTableSessionData = {
   restaurant_id: string;
   table_id: string;
+  tab_id?: string;
   expires_at: Date;
 };
 
@@ -32,7 +33,19 @@ export interface ITableSessionRepository {
   create(data: CreateTableSessionData): Promise<table_sessions>;
   findById(restaurantId: string, id: string): Promise<table_sessions | null>;
   findActiveByTable(restaurantId: string, tableId: string): Promise<table_sessions | null>;
-  findMany(restaurantId: string, filter?: { status?: tableStatus; limit?: number; offset?: number }): Promise<TableSessionListItem[]>;
+  findActiveByTab(restaurantId: string, tabId: string): Promise<table_sessions[]>;
+  findMany(
+    restaurantId: string,
+    filter?: { status?: tableStatus; limit?: number; offset?: number },
+  ): Promise<TableSessionListItem[]>;
+  linkTab(restaurantId: string, id: string, tabId: string): Promise<Prisma.BatchPayload>;
+  moveActiveToTable(
+    restaurantId: string,
+    tabId: string,
+    fromTableId: string,
+    tableId: string,
+  ): Promise<Prisma.BatchPayload>;
+  moveToTab(restaurantId: string, sourceTabId: string, targetTabId: string): Promise<Prisma.BatchPayload>;
   findExpired(now: Date): Promise<table_sessions[]>;
   extendIfActive(restaurantId: string, id: string, expiresAt: Date): Promise<Prisma.BatchPayload>;
   lockActive(restaurantId: string, id: string): Promise<boolean>;
@@ -51,5 +64,15 @@ export type SessionTokenWithSession = Prisma.session_tokensGetPayload<{
 export interface ISessionTokenRepository {
   create(data: CreateSessionTokenData): Promise<session_tokens>;
   findByHash(tokenHash: string): Promise<SessionTokenWithSession | null>;
+  findActiveForSession(
+    restaurantId: string,
+    sessionId: string,
+    tokenId: string,
+  ): Promise<{ guest_label: string | null } | null>;
+  setGuestLabel(
+    restaurantId: string,
+    tokenId: string,
+    guestLabel: string | null,
+  ): Promise<Prisma.BatchPayload>;
   revokeAllBySession(sessionId: string, revokedAt: Date): Promise<Prisma.BatchPayload>;
 }

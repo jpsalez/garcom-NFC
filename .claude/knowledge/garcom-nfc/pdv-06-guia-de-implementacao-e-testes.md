@@ -29,6 +29,10 @@ Regra adicional: todo endpoint novo deve entrar em `back-end/src/docs/` (OpenAPI
 6. **Settings do restaurante:** expor `GET/PATCH /api/v1/restaurant/settings` (`OWNER`/`MANAGER`) para editar `timezone`, `business_day_cutoff_minutes` e `service_fee_bps` (validando IANA timezone com `Intl.DateTimeFormat`).
 7. **Ajuste de segurança pendente:** restringir `POST /sessions/:id/close` e `PATCH /calls/:id/done` para não permitir `CLEANING`/`OTHER`.
 
+`restaurant-settings.controller.ts`, `restaurant-settings.service.ts` e `restaurant-settings.schema.ts`
+implementam consulta e atualização parcial com autorização por restaurante. Mudanças ficam no histórico
+de operações, e `public-restaurant.ts` preserva o formato das respostas de cadastro e administração.
+
 ### Testes obrigatórios (`tests/pdv-foundation.test.ts`)
 - Criar usuário `STAFF` com `category = 'CASHIER'` e validar matriz completa de `hasCapability` para `OWNER`, `MANAGER`, `CASHIER`, `WAITER`, `KITCHEN`, `CLEANING`, `OTHER`.
 - `PATCH /restaurant/settings` aceita `timezone`, `business_day_cutoff_minutes` (`0..719`), `service_fee_bps` (`0..3000`); rejeita timezone inválido e valores fora do intervalo.
@@ -49,7 +53,7 @@ Regra adicional: todo endpoint novo deve entrar em `back-end/src/docs/` (OpenAPI
 3. **Módulo `back-end/src/modules/tabs/`:**
    - `tabs.interfaces.ts`, `tabs.schemas.ts`, `tabs-pricing.ts` (função pura de cálculo de totais).
    - `tabs.repository.interface.ts`, `tabs.repository.ts` (`restaurantId` 1º param, aceita `DbClient`).
-   - `tabs.service.ts` (`open`, `getOrCreateForTable`, `list`, `getDetail`, `update`, `transferTable`, `merge`, `recalculate`).
+   - `tabs.service.ts` (`open`, `list`, `getDetail`, `update`, `transferTable`, `merge`). `getOrCreateForTable` e `recalculateTab` ficam em `tabs-state.ts`, não no service.
    - `tabs.controller.ts`, `tabs.routes.ts`.
 4. **Atualizações em módulos existentes:**
    - `orders/orders.service.ts`: adicionar `posSubmit` (`POST /orders`), gravar `tab_id` e `category_name_snapshot`, recalcular `tab` ao criar pedido ou cancelar item (`TRANSITIONED → CANCELLED` bloqueia se `tab` fechada).
@@ -57,6 +61,10 @@ Regra adicional: todo endpoint novo deve entrar em `back-end/src/docs/` (OpenAPI
    - `tables/tables.service.ts`: bloquear desativação de mesa com comanda aberta (`TABLE_HAS_OPEN_TAB`).
    - `shared/realtime/socket-notifier.ts`: adicionar sala `restaurant:{id}:pos` e método `toPos()`.
    - `shared/container/container.ts` e `src/routes.ts`: registrar `TabsRepository`, `TabsService` e `tabsRoutes`.
+
+`tabs-state.ts` coordena operações dentro da transação do restaurante, `tabs-view.ts` monta os DTOs e
+`tab-events.ts` publica as alterações após o commit. `tab-business-date.ts` aplica o fuso e o corte
+configurado ao fechar uma comanda vazia junto com a sessão manual.
 
 ### Testes obrigatórios (`tests/tabs-core.test.ts`)
 - Abrir comanda `TABLE` (1 aberta por mesa — 2ª retorna `409 TAB_ALREADY_OPEN`) e `COUNTER` (várias simultâneas, numeração sequencial).
@@ -75,6 +83,7 @@ Regra adicional: todo endpoint novo deve entrar em `back-end/src/docs/` (OpenAPI
 ### Checklist de arquivos
 1. **Migration 2 (`tab_closing_and_payments`):**
    - `session_tokens.guest_label`.
+   - `tabs.closed_refunded_cents` e novo CHECK `tabs_valid_invariants` (`paid_cents + closed_refunded_cents = total_cents` quando `CLOSED`).
    - Tabelas `tab_adjustments`, `payment_requests`, `payments`, `payment_allocations` + índice parcial `payment_requests_one_open_per_token` + CHECKs.
 2. **Em `back-end/src/modules/tabs/`:**
    - `tab-adjustments.service.ts` (desconto, couvert, gorjeta, remover 10% com motivo).
@@ -85,6 +94,13 @@ Regra adicional: todo endpoint novo deve entrar em `back-end/src/docs/` (OpenAPI
    - `providers/payment-provider.interface.ts`, `providers/manual.provider.ts`, `providers/payment-provider.registry.ts`.
    - `payments.service.ts` (`create` com `allocations` e `idempotency_key`, `refund`), `payments.controller.ts`, `payments.routes.ts`.
 4. **Eventos Socket.IO:** `tab:opened/updated/closed`, `payment_request:created/updated`, `payment:updated`.
+
+`tab-ledger.ts` carrega os registros financeiros usados no recálculo e nas consultas. `close-tab.ts` reúne
+o fechamento, as sessões vinculadas e as solicitações. `cancel-order-items.ts` encerra unidades ainda
+na fila quando a comanda é cancelada. `payment-allocation.ts` valida saldo dos itens e taxa proporcional,
+e `payment-view.ts` define o DTO de pagamentos da equipe. O fluxo NFC usa `payment-requests.schemas.ts`,
+`payment-requests.routes.ts`, `payment-request-view.ts` e `payment-request-events.ts`.
+As operações no banco usam `payment-requests.repository.ts` e `tab-adjustments.repository.ts`.
 
 ### Testes obrigatórios (`tests/tabs-closing-and-payments.test.ts`)
 - **Permissões (`PDV-D06`):** `WAITER` recebe pagamento e fecha conta, mas toma `403` ao dar desconto, remover 10%, estornar ou cancelar comanda; `CASHIER` remove 10% com motivo mas toma `403` em desconto/estorno/cancelamento; `OWNER`/`MANAGER` fazem tudo.
@@ -103,9 +119,14 @@ Regra adicional: todo endpoint novo deve entrar em `back-end/src/docs/` (OpenAPI
 2. **Módulo `back-end/src/modules/cash-shifts/`:** `cash-shifts.interfaces.ts`, `cash-shifts.schemas.ts`, `cash-shifts.repository.interface.ts`, `cash-shifts.repository.ts`, `cash-shifts.service.ts`, `cash-shifts.controller.ts`, `cash-shifts.routes.ts`.
 3. **Integração em `payments.service.ts`:** ao registrar pagamento, associar automaticamente `cash_shift_id` do turno aberto do operador (e somar `amount_cents` em `expected_cash_cents` quando `method === 'CASH'`; subtrair no estorno).
 
+`cash-shift-balance.ts` aplica o mesmo limite de saldo a movimentações, pagamentos e estornos.
+
 ### Testes obrigatórios (`tests/cash-shifts.test.ts`)
 - Abrir turno (2º turno aberto do mesmo operador retorna `409 CASH_SHIFT_ALREADY_OPEN`), receber em dinheiro com troco (soma só o líquido!), receber em cartão (não altera `expected_cash_cents`), registrar sangria (`-`) e suprimento (`+`), fechar informando `counted_cash_cents` e verificar `difference_cents` exato.
 - `WAITER` toma `403` em `/cash-shifts/*`; `CASHIER` vê apenas o próprio turno na listagem.
+- Saldo insuficiente: sangria ou estorno que levaria a gaveta abaixo de zero retorna `409 CASH_SHIFT_INSUFFICIENT_CASH` sem alterar movimentos, pagamento nem comanda.
+- Estorno com turno fechado: corrige `expected_cash_cents` do turno vinculado, preserva `counted_cash_cents` e recalcula `difference_cents`.
+- Pagamento sem turno aberto do operador continua aceito, com `cash_shift_id` nulo, e não usa o caixa de outro operador.
 
 ---
 
@@ -116,7 +137,7 @@ Regra adicional: todo endpoint novo deve entrar em `back-end/src/docs/` (OpenAPI
 1. **Migration 4 (`payment_providers_and_terminals`):** `payment_provider_accounts`, `payment_terminals` + índice parcial `payment_terminals_unique_device` + FK em `payments.terminal_id`.
 2. **Infra compartilhada:**
    - `back-end/src/shared/utils/crypto.ts` (`encryptSecret` / `decryptSecret` AES-256-GCM).
-   - `back-end/src/server.ts`: captura de `req.rawBody` para `/api/v1/webhooks/*`.
+   - Sem captura de `req.rawBody`: o HMAC do Mercado Pago usa `data.id`, `x-request-id` e `ts`. Captura do corpo bruto fica para a Etapa 6, só se um provedor fiscal exigir.
 3. **Em `back-end/src/modules/payments/`:**
    - `providers/mercado-pago.provider.ts` (OAuth, `listTerminals`, `createCharge`, `getChargeStatus`, `cancelCharge`, `parseWebhook` com `timingSafeEqual`).
    - `terminals.service.ts` (OAuth URL + callback + sync + CRUD terminais).
@@ -128,7 +149,8 @@ Regra adicional: todo endpoint novo deve entrar em `back-end/src/docs/` (OpenAPI
 - Criptografia `crypto.ts` (roundtrip, tamper no authTag falha, nunca vaza plaintext).
 - Cobrança N1 com `MercadoPagoProvider` mockado via `nock`/stub: grava `PENDING` → HTTP fora do lock → `PROCESSING` → webhook com assinatura HMAC inválida retorna `401` → webhook válido confirma `APPROVED`, grava NSU/bandeira/parcelas e soma `paid_cents`.
 - Falha HTTP na criação da cobrança marca `CANCELLED` e libera saldo/alocações da comanda.
-- Job de reconciliação expira cobrança travada após 5 min e libera saldo.
+- Criação sem ID é retomada com a mesma chave até 5 min; só `400`/`422` cancelam e liberam a reserva (`409`, `401`/`403`, `404` mantêm `PENDING`).
+- Depois de 11 min sem retorno, o pagamento sai com `needs_review` e a conferência é manual em `POST /tabs/:id/payments/:paymentId/resolve` (`NOT_CHARGED` libera a reserva; `CHARGED` consolida após consulta ao Mercado Pago); antes disso, `409 POINT_PAYMENT_NOT_REVIEWABLE` (pdv-04 §3.4, DEC-16).
 
 ---
 
