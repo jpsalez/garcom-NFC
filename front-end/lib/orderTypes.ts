@@ -12,25 +12,11 @@ export type OrderSubmission = {
   }[];
 };
 
-export type PosOrderSubmission = {
-  table_id: string;
-  publication_id: string;
-  submission_key: string;
-  items: {
-    product_id: string;
-    variant_id: string;
-    quantity: number;
-    selections: { option_id: string; quantity: number }[];
-    notes?: string;
-  }[];
-};
-
 export type Order = {
   id: string;
   session_id?: string | null;
   table_label: string;
-  tab_number?: number;
-  source?: "LOCAL_MENU" | "POS";
+  source: "LOCAL_MENU";
   fulfillment_type: "DINE_IN";
   currency: string;
   total_cents: number;
@@ -109,9 +95,3 @@ export type TableContext = {
   reason: "CUSTOMER_ORDERING_DISABLED" | "MENU_NOT_PUBLISHED" | null;
 };
 export type OrderingSettings = { customer_ordering_enabled: boolean; version: number };
-
-export function formatTableTab(tableLabel: string, tabNumber?: number | null) {
-  return typeof tabNumber === "number" && Number.isFinite(tabNumber) && tabNumber > 0
-    ? `${tableLabel} · Comanda #${tabNumber}`
-    : tableLabel;
-}

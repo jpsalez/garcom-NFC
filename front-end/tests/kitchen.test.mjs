@@ -137,7 +137,6 @@ test('cartão mostra a espera e os três estágios da mesma linha com variante, 
     }) },
     '@/lib/format': load('../lib/format.ts'),
     '@/lib/kitchenQueue': load('../lib/kitchenQueue.ts'),
-    '@/lib/orderTypes': load('../lib/orderTypes.ts'),
   });
   const card = renderToStaticMarkup(React.createElement(CozinhaPage));
   for (const label of ['Mesa 12', order.id, 'Espera 1:02:09', 'Hambúrguer', 'Grande', '2× Queijo', 'Sem cebola']) {

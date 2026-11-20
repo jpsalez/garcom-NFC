@@ -20,7 +20,6 @@ export interface PrintPayload {
   order_id: string;
   created_at: string;
   table_label: string;
-  tab_number?: number;
   items: PrintItem[];
   reprint?: { label: string };
 }

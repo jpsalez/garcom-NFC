@@ -16,7 +16,6 @@ export type ActiveSession = {
   id: string;
   table: { id: string; label: string };
   expires_at: string;
-  tab_number?: number;
 };
 
 export type Table = {

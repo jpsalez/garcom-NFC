@@ -8,7 +8,6 @@ Implantação, logs, backup e restauração são detalhados neste apêndice.
 
 - `back-end/prisma/schema.prisma` com 18 tabelas novas para catálogo, publicações, mídia, pedidos e auditoria.
 - `back-end/prisma/migrations/20261119100000_menu_and_orders_foundation/migration.sql` aditiva, transacional, com relações entre tenants, checks monetários/quantidades, imutabilidade e backfill.
-- `back-end/prisma/migrations/20261120000000_pos_order_source/migration.sql` e `20261120000100_pos_orders_and_tabs/migration.sql`: adicionam `order_source.POS`, `restaurants.next_tab_number`, `table_sessions.tab_number` (sequencial por restaurante), `orders.tab_number_snapshot` e `orders.submitted_by_user_id`.
 - Cadastro pelo próprio dono e criação pela plataforma geram restaurante, rascunho vazio, configuração com pedidos desabilitados e evento SYSTEM na mesma escrita transacional.
 - Seed de demonstração usa os mesmos valores de inicialização para restaurantes novos.
 - Preços/nomes do pedido são snapshots históricos; publicações e eventos são imutáveis, com preservação do tenant quando a referência de usuário removido fica nula.
@@ -100,29 +99,9 @@ Cliente deve considerar variante, produto e escolhas obrigatórias disponíveis,
 - PATCH `/ordering-settings`: `{ expected_version, customer_ordering_enabled }`. Efeito imediato, sem publicar rascunho. Pedidos existentes continuam em operação.
 - PATCH `/menu/availability`: `{ kind, id, is_available, expected_version }`, kind = **products/variants/options**. Retorna `{ id, is_available, availability_version }`. Não altera draft_version nem preços publicados. Registra auditoria.
 
-- GET `/menu/published`: retorna `{ publication_id, content, availability, customer_ordering_enabled, media_paths }` para OWNER, MANAGER e WAITER (`orders:create`), ou `404 MENU_NOT_PUBLISHED` se não houver publicação.
-- GET `/public/table-context` com token: `{ session_id, tab_number, expires_at, table: { label }, can_order, reason }`. Não abre sessão nem renova token. reason é CUSTOMER_ORDERING_DISABLED, MENU_NOT_PUBLISHED ou null; token inválido/expirado responde 401.
+GET `/public/table-context` com token: `{ session_id, expires_at, table: { label }, can_order, reason }`. Não abre sessão nem renova token. reason é CUSTOMER_ORDERING_DISABLED, MENU_NOT_PUBLISHED ou null; token inválido/expirado responde 401.
 
 ### Enviar pedido
-
-POST `/orders` (PDV interno, cookie com capacidade `orders:create` para OWNER, MANAGER e WAITER):
-
-```json
-{
-  "table_id": "UUID da mesa",
-  "publication_id": "UUID da revisão exibida",
-  "submission_key": "UUID novo por envio",
-  "items": [{
-    "product_id": "UUID",
-    "variant_id": "UUID",
-    "quantity": 1,
-    "selections": [{ "option_id": "UUID", "quantity": 1 }],
-    "notes": "Sem gelo"
-  }]
-}
-```
-
-Ignora `customer_ordering_enabled` (lançamento interno da equipe). Abre automaticamente uma `table_sessions` com `tab_number` sequencial caso não haja sessão ativa (ou se a ativa estiver expirada, encerrando-a por `TIMEOUT`), registra `source: "POS"`, `tab_number_snapshot`, `submitted_by_user_id` e evento `CREATED` (`actor_type: "USER"`), e enfileira a comanda original se a cozinha estiver habilitada. Replay idêntico (mesmo autor, mesa, chave e hash) retorna `200 { order, replayed: true }`; divergência retorna `409 IDEMPOTENCY_CONFLICT`; mesa inativa retorna `409 TABLE_INACTIVE`.
 
 POST `/public/orders` com X-Table-Token:
 
@@ -159,7 +138,7 @@ Mudança de revisão exige reconfirmação (MENU_REVISION_CHANGED). Esgotamento 
 
 Listas: `{ items, next_cursor, server_time }`, default limit 50, máximo 100. Cursor é opaco. progress = open (padrão administrativo), ready, completed ou cancelled. ready inclui pedidos que também têm itens em preparo. Filtros de estado não são aplicados à lista do cliente, que consulta os próprios pedidos da sessão.
 
-Order DTO: id, tab_number, table_label, source, fulfillment_type, currency, total_cents original, cancelled_cents, active_total_cents, version, created_at, updated_at, progress e items. Administrativo também contém session_id. Não expõe request_hash, token autor ou submission_key. progress contém quantidades pending/preparing/ready/delivered/cancelled e flags is_completed/is_cancelled. Cada item contém identificação/nome históricos, quantity, preços, observação, contadores por etapa e escolhas históricas.
+Order DTO: id, table_label, source, fulfillment_type, currency, total_cents original, cancelled_cents, active_total_cents, version, created_at, updated_at, progress e items. Administrativo também contém session_id. Não expõe request_hash, token autor ou submission_key. progress contém quantidades pending/preparing/ready/delivered/cancelled e flags is_completed/is_cancelled. Cada item contém identificação/nome históricos, quantity, preços, observação, contadores por etapa e escolhas históricas.
 
 ```json
 {
@@ -223,7 +202,7 @@ O servidor deriva restaurante e destino a partir do hash exclusivo do código ou
 
 Um pedido novo criado com a impressão ativa grava uma tarefa `PENDING` de origem `ORDER_CREATED` na mesma transação do pedido, dos itens e do evento de auditoria. Replay de envio retorna antes da gravação da comanda. A chave única usa restaurante, pedido, destino e evento de origem. Chaves estrangeiras compostas ligam tarefa, pedido e destino ao mesmo restaurante.
 
-O payload versão 1 reúne `order_id`, `created_at` em UTC, `table_label`, `tab_number` e `items`. Cada item contém `item_id`, `product_name`, `variant_name`, `quantity`, `notes` e `selections` com `group_name`, `option_name` e `quantity` por unidade. A comanda usa snapshots persistidos na confirmação do pedido. A ativação vale para novos envios. No `print-agent/`, o ticket imprime `<table_label> · Comanda #<tab_number>` quando `tab_number` está presente.
+O payload versão 1 reúne `order_id`, `created_at` em UTC, `table_label` e `items`. Cada item contém `item_id`, `product_name`, `variant_name`, `quantity`, `notes` e `selections` com `group_name`, `option_name` e `quantity` por unidade. A comanda usa snapshots persistidos na confirmação do pedido. A ativação vale para novos envios.
 
 ### Reserva, resultado e segunda via [Implementado]
 

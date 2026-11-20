@@ -14,7 +14,6 @@ export function ordersRoutes() {
   });
   const staff = [ensureAuthenticated, ensureCapability("orders:read")];
   router.get("/orders", ...staff, controller.list);
-  router.post("/orders", ensureAuthenticated, ensureCapability("orders:create"), controller.posSubmit);
   router.get("/orders/:id", ...staff, validateUuidParams("id"), controller.get);
   router.get("/orders/:id/events", ...staff, validateUuidParams("id"), controller.events);
   router.post("/orders/:id/transitions", ...staff, validateUuidParams("id"), controller.transition);

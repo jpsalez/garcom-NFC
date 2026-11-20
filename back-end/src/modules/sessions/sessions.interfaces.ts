@@ -4,7 +4,6 @@ import type { TableSessionListItem } from "./sessions.repository.interface.ts";
 
 export type ScanResult = {
   token: string;
-  tab_number: number;
   expires_at: Date;
   table: { label: string };
   restaurant: { name: string };

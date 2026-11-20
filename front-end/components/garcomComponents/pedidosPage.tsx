@@ -3,7 +3,7 @@
 import { useState } from "react";
 import OrderQueueFeedback, { orderStages } from "@/components/orderComponents/orderQueueFeedback";
 import { useOrderQueue } from "@/hooks/useOrderQueue";
-import { formatTableTab, type Order, type OrderTransition } from "@/lib/orderTypes";
+import type { Order, OrderTransition } from "@/lib/orderTypes";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 type Item = Order["items"][number];
@@ -101,12 +101,7 @@ export default function PedidosPage() {
               <article key={order.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex justify-between gap-3">
                   <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg font-bold">{formatTableTab(order.table_label, order.tab_number)}</h2>
-                      {order.source === "POS" && (
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">PDV</span>
-                      )}
-                    </div>
+                    <h2 className="text-lg font-bold">{order.table_label}</h2>
                     <p className="text-xs text-slate-500">{new Date(order.created_at).toLocaleString("pt-BR")}</p>
                   </div>
                   <p className="font-semibold">{money.format(order.active_total_cents / 100)}</p>

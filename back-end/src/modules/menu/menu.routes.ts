@@ -67,12 +67,6 @@ export function menuRoutes() {
     validateUuidParams("id"),
     controller.associate("images"),
   );
-  router.get(
-    "/menu/published",
-    ensureAuthenticated,
-    ensureCapability("orders:create"),
-    controller.published,
-  );
   router.get("/public/restaurants/:slug/menu", menuReadLimiter, controller.publicMenu("slug"));
   router.get("/public/tables/:code/menu", menuReadLimiter, controller.publicMenu("table"));
   return router;

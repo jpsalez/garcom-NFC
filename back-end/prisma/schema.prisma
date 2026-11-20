@@ -20,7 +20,6 @@ model restaurants {
   name             String
   slug             String                        @unique
   active           Boolean                       @default(true)
-  next_tab_number  Int                           @default(1)
   created_at       DateTime                      @default(now())
   users            users[]
   tables           tables[]
@@ -52,7 +51,6 @@ model users {
   created_media               media_assets[]                @relation("media_assets_created_by_user")
   published_menus             menu_publications[]           @relation("menu_publications_published_by_user")
   order_events                order_events[]                @relation("order_events_actor")
-  submitted_orders            orders[]                      @relation("orders_submitted_by_user")
   restaurant_operation_events restaurant_operation_events[] @relation("restaurant_operation_events_actor")
 }
 
@@ -79,7 +77,6 @@ model table_sessions {
   restaurant     restaurants      @relation(fields: [restaurant_id], references: [id])
   table_id       String
   table          tables           @relation(fields: [table_id], references: [id])
-  tab_number     Int
   status         tableStatus      @default(ACTIVE)
   keep_open      Boolean          @default(false)
   expires_at     DateTime
@@ -94,7 +91,6 @@ model table_sessions {
   orders         orders[]         @relation("orders_session")
 
   @@unique([restaurant_id, id])
-  @@unique([restaurant_id, tab_number])
   @@index([restaurant_id, status])
   @@index([table_id])
 }
@@ -456,8 +452,6 @@ model orders {
   session_id            String?
   publication_id        String?
   submitted_by_token_id String?
-  submitted_by_user_id  String?
-  tab_number_snapshot   Int
   table_label_snapshot  String             @db.VarChar(120)
   submission_key        String             @db.VarChar(64)
   request_hash          String             @db.VarChar(64)
@@ -471,7 +465,6 @@ model orders {
   session               table_sessions?    @relation("orders_session", fields: [restaurant_id, session_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
   publication           menu_publications? @relation("orders_publication", fields: [restaurant_id, publication_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
   submitted_by_token    session_tokens?    @relation("orders_submitted_by_token", fields: [submitted_by_token_id, session_id], references: [id, session_id], onDelete: Restrict, onUpdate: Restrict)
-  submitted_by_user     users?             @relation("orders_submitted_by_user", fields: [submitted_by_user_id], references: [id], onDelete: SetNull, onUpdate: Restrict)
   items                 order_items[]      @relation("order_items_order")
   events                order_events[]     @relation("order_events_order")
   print_jobs            print_jobs[]
@@ -482,7 +475,6 @@ model orders {
   @@index([restaurant_id, session_id, created_at])
   @@index([restaurant_id, publication_id])
   @@index([submitted_by_token_id, session_id])
-  @@index([submitted_by_user_id])
 }
 
 model order_items {
@@ -603,7 +595,6 @@ enum media_derivative_kind {
 
 enum order_source {
   LOCAL_MENU
-  POS
 }
 
 enum order_fulfillment {

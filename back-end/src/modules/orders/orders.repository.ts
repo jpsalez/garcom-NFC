@@ -9,22 +9,6 @@ import { orderInclude, type IOrdersRepository, type TableContext } from "./order
 import type { PricedLine } from "./order-pricing.ts";
 import type { OrdersQuery, Transition } from "./orders.schemas.ts";
 
-export type CreateOrderData = {
-  restaurantId: string;
-  source: "LOCAL_MENU" | "POS";
-  sessionId: string;
-  tabNumberSnapshot: number;
-  tableLabelSnapshot: string;
-  submittedByTokenId: string | null;
-  submittedByUserId: string | null;
-  publicationId: string;
-  submissionKey: string;
-  requestHash: string;
-  totalCents: number;
-  lines: PricedLine[];
-  actor?: ActorContext;
-};
-
 @injectable()
 export class OrdersRepository implements IOrdersRepository {
   constructor(@inject("DbClient") private db: DbClient) {}
@@ -39,7 +23,7 @@ export class OrdersRepository implements IOrdersRepository {
   findSubmission(restaurantId: string, key: string) {
     return this.db.orders.findUnique({
       where: { restaurant_id_submission_key: { restaurant_id: restaurantId, submission_key: key } },
-      include: { ...orderInclude, session: { select: { table_id: true } } },
+      include: orderInclude,
     });
   }
   async device(context: TableContext, now: Date) {
@@ -124,26 +108,30 @@ export class OrdersRepository implements IOrdersRepository {
       })) > 0
     );
   }
-  async create(input: CreateOrderData) {
+  async create(
+    context: TableContext,
+    key: string,
+    hash: string,
+    publicationId: string,
+    total: number,
+    lines: PricedLine[],
+  ) {
     const id = randomUUID(),
-      rest = input.restaurantId;
+      rest = context.restaurantId;
     await this.db.orders.create({
       data: {
         id,
         restaurant_id: rest,
-        source: input.source,
-        session_id: input.sessionId,
-        tab_number_snapshot: input.tabNumberSnapshot,
-        submitted_by_token_id: input.submittedByTokenId,
-        submitted_by_user_id: input.submittedByUserId,
-        publication_id: input.publicationId,
-        table_label_snapshot: input.tableLabelSnapshot,
-        submission_key: input.submissionKey,
-        request_hash: input.requestHash,
-        total_cents: input.totalCents,
+        session_id: context.sessionId,
+        submitted_by_token_id: context.tokenId,
+        publication_id: publicationId,
+        table_label_snapshot: context.tableLabel,
+        submission_key: key,
+        request_hash: hash,
+        total_cents: total,
       },
     });
-    for (const [position, { selections, ...line }] of input.lines.entries()) {
+    for (const [position, { selections, ...line }] of lines.entries()) {
       const itemId = randomUUID();
       await this.db.order_items.create({
         data: {
@@ -172,16 +160,8 @@ export class OrdersRepository implements IOrdersRepository {
         order_id: id,
         sequence: 1,
         action: "CREATED",
+        actor_type: "TABLE_DEVICE",
         resulting_order_version: 1,
-        ...(input.actor
-          ? {
-              actor_type: "USER",
-              actor_user_id: input.actor.id,
-              actor_role_snapshot: input.actor.role,
-              actor_category_snapshot: input.actor.category,
-              actor_label_snapshot: input.actor.id,
-            }
-          : { actor_type: "TABLE_DEVICE" }),
       },
     });
     return this.get(rest, id);

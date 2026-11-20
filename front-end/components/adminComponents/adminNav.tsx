@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "@/lib/session";
-import { canAccessKitchen, canConfigurePrinting, canUsePdv } from "@/lib/kitchenQueue";
+import { canAccessKitchen, canConfigurePrinting } from "@/lib/kitchenQueue";
 
 export default function AdminNav() {
     const session = useSession()
@@ -15,8 +15,6 @@ export default function AdminNav() {
     if (session.user.role === 'OWNER' || (session.user.role === 'STAFF' && session.user.category === 'MANAGER')) items.push({ href: '/admin/cardapio', label: 'Cardápio' })
 
     if (session.user.role === 'OWNER' || (session.user.role === 'STAFF' && ['MANAGER', 'WAITER', 'KITCHEN'].includes(session.user.category ?? ''))) items.push({ href: '/admin/pedidos', label: 'Pedidos' })
-
-    if (canUsePdv(session.user)) items.push({ href: '/admin/pdv', label: 'PDV' })
 
     if (canAccessKitchen(session.user)) items.push({ href: '/admin/cozinha', label: 'Cozinha' })
 
