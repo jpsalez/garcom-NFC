@@ -56,12 +56,12 @@ function TableCard({table, onQr, onRename, onActive, onDelete, tableIndex}: {
                 <div className="w-full md:col-span-4 md:flex md:justify-start! md:opacity-80">
                     {table.active
                         ?
-                        <button type="button" aria-label="Desativar mesa" onClick={() => setMode('confirmOff')} className="flex items-center gap-x-1 bg-linear-130 from-white to-psiu-green/40 py-1 px-3 rounded-xl">
+                        <button type="button" aria-label="Desativar mesa" onClick={() => setMode('confirmOff')} className="flex w-auto items-center gap-x-1 bg-linear-130 from-white to-psiu-green/40 py-1 px-3 rounded-xl">
                             <GoDotFill className="text-green-700"/> <span className="text-sm font-bold hidden md:block">Ativa</span>
                         </button>
                         :
 
-                        <button type="button" aria-label="Ativar mesa" onClick={() => onActive(true)} className="flex items-center gap-x-1 bg-linear-130 from-white to-yellow-400/40 py-1 px-3 rounded-xl">
+                        <button type="button" aria-label="Ativar mesa" onClick={() => onActive(true)} className="flex w-auto items-center gap-x-1 bg-linear-130 from-white to-yellow-400/40 py-1 px-3 rounded-xl">
                             <GoDotFill className="text-yellow-700"/> <span className="text-sm hidden md:block">Inativa</span>
                         </button>
                     }
@@ -80,12 +80,12 @@ function TableCard({table, onQr, onRename, onActive, onDelete, tableIndex}: {
                 </div>
 
                 <div>
-                    <button type="button" aria-label="Renomear mesa" onClick={() => setMode('rename')}><FaPencil /></button>
+                    <button type="button" aria-label="Renomear mesa" onClick={() => setMode('rename')} className="w-auto p-0 text-lg hover:scale-110 hover:shadow-none"><FaPencil /></button>
                 </div>
 
 
                 <div>
-                    <button type="button" aria-label="Excluir mesa" onClick={() => setMode('confirmDelete')}><FaTrash /></button>
+                    <button type="button" aria-label="Excluir mesa" onClick={() => setMode('confirmDelete')} className="w-auto p-0 text-lg hover:scale-110 hover:shadow-none"><FaTrash /></button>
                 </div>
             </div>
 

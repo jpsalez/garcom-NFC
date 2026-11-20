@@ -88,7 +88,7 @@ function StaffCard({user, onCategory, onActive, onDelete, rowI}: {
                     <button type="button" aria-label={confirmDelete ? `Confirmar exclusão de ${user.name}` : `Excluir ${user.name}`}
                     onClick={() => { if (confirmDelete) onDelete(); setConfirmDelete(!confirmDelete) }}
                     onBlur={() => setConfirmDelete(false)}
-                    className="w-15 aspect-square flex items-center justify-center border border-gray-300 rounded-xl cursor-pointer
+                    className="w-15 p-0 aspect-square flex items-center justify-center border border-gray-300 rounded-xl cursor-pointer
                     text-gray-600
                     transition-all duration-300
                     hover:scale-110 hover:bg-foreground hover:text-background
@@ -159,14 +159,14 @@ function MobileStaffCard({user, onCategory, onActive, onDelete, rowI}: {
 
                 <button type="button" aria-label={`${user.active ? 'Desativar' : 'Ativar'} ${user.name}`}
                 onClick={() => onActive(!user.active)}
-                className="w-8 aspect-square flex items-center justify-center text-lg rounded-lg shadow-lg border border-foreground">
+                className="w-8 p-0 aspect-square flex items-center justify-center text-lg rounded-lg shadow-lg border border-foreground">
                     <FaPencil />
                 </button>
 
                 <button type="button" aria-label={confirmDelete ? `Confirmar exclusão de ${user.name}` : `Excluir ${user.name}`}
                 onClick={() => { if (confirmDelete) onDelete(); setConfirmDelete(!confirmDelete) }}
                 onBlur={() => setConfirmDelete(false)}
-                className="w-8 aspect-square flex items-center justify-center text-lg rounded-lg shadow-lg border border-foreground">
+                className="w-8 p-0 aspect-square flex items-center justify-center text-lg rounded-lg shadow-lg border border-foreground">
                     {confirmDelete ? <span>OK</span> : <FaRegTrashAlt />}
                 </button>
             </div>

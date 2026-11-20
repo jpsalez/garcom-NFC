@@ -92,7 +92,11 @@ export default function LoginPage() {
                         </div>
 
                         <div className="w-full text-center space-y-2">
-                            <div className="w-full flex items-center justify-end">
+                            <div className="w-full flex items-center justify-between">
+                                <label className="flex items-center space-x-2">
+                                    <input type="checkbox" className="cursor-pointer"/>
+                                    <span className="text-sm line-clamp-1">Salvar login</span>
+                                </label>
                                 <Link href="/esqueci-senha" className="font-extrabold text-sm line-clamp-1">Esqueci minha senha</Link>
                             </div>
 
