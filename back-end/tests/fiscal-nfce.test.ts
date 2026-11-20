@@ -433,7 +433,12 @@ describe("provedor e ambiente em andamento", () => {
     // DEC-20: sem ID, o job nunca reenvia; só a conferência humana decide.
     await prisma.fiscal_documents.update({ where: { id: lost.id }, data: { updated_at: new Date(0) } });
     await reconcile();
+    // Mesmo chamados direto, o envio e a consulta respeitam o guard de nota já despachada.
+    const emission = container.resolve<FiscalEmissionService>("FiscalEmissionService");
+    await emission.dispatch(lost);
+    await emission.syncNow(lost);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await document(tabId)).toMatchObject({ status: "PENDING", external_id: null, attempt: 1 });
     const review = await api().get(`/api/v1/tabs/${tabId}/nfce`).set(auth(f.token));
     expect(review.body.fiscal_document.sefaz_message).toContain("confira no painel");
 
@@ -442,7 +447,7 @@ describe("provedor e ambiente em andamento", () => {
     const doc = await document(second.tabId);
     await prisma.fiscal_documents.update({
       where: { id: doc.id },
-      data: { status: "AUTHORIZED", access_key: "7".repeat(44) },
+      data: { status: "AUTHORIZED", access_key: "7".repeat(44), sefaz_message: "Autorizado o uso da NF-e" },
     });
     fetchMock
       .mockResolvedValueOnce(respond({ error: { code: "INVALID_STATUS", message: "Já cancelada" } }, 422))
@@ -451,7 +456,11 @@ describe("provedor e ambiente em andamento", () => {
       .post(`/api/v1/tabs/${second.tabId}/nfce/cancel`)
       .set(auth(f.token))
       .send({ reason: "Cliente desistiu da compra inteira" });
-    expect(cancelled.body.fiscal_document).toMatchObject({ status: "CANCELLED" });
+    // CANCELLED sem mensagem do provedor não apaga a autorização registrada.
+    expect(cancelled.body.fiscal_document).toMatchObject({
+      status: "CANCELLED",
+      sefaz_message: "Autorizado o uso da NF-e",
+    });
   });
 });
 

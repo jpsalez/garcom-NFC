@@ -22,7 +22,10 @@ import type { FiscalProviderRegistry } from "./providers/fiscal-provider.registr
 export type DocumentKey = Pick<fiscal_documents, "id" | "restaurant_id">;
 const inFlight = { allowInactive: true };
 
-export function resultData(result: NfceResult, now: Date): DocumentUpdate {
+// Em emissão, campos SEFAZ ausentes limpam mensagens antigas (ex.: "Aguardando configuração").
+// Numa nota já autorizada (cancelamento), ausentes preservam o "Autorizado o uso".
+export function resultData(result: NfceResult, now: Date, from: DocumentGuard["status"]): DocumentUpdate {
+  const missing = from.includes("AUTHORIZED") ? undefined : null;
   return {
     status: result.status,
     external_id: result.externalId,
@@ -30,8 +33,8 @@ export function resultData(result: NfceResult, now: Date): DocumentUpdate {
     series: result.series,
     access_key: result.accessKey,
     protocol: result.protocol,
-    sefaz_status: result.sefazStatus ?? null,
-    sefaz_message: result.sefazMessage ?? null,
+    sefaz_status: result.sefazStatus ?? missing,
+    sefaz_message: result.sefazMessage ?? missing,
     xml_url: result.xmlUrl,
     danfe_url: result.danfeUrl,
     qrcode_url: result.qrcodeUrl,
@@ -176,7 +179,7 @@ export class FiscalEmissionService {
           document.restaurant_id,
           document.id,
           { status: from, attempt: document.attempt },
-          { ...resultData(result, now), ...extra },
+          { ...resultData(result, now, from), ...extra },
         ),
       inFlight,
     );
@@ -268,7 +271,11 @@ export class FiscalEmissionService {
   // ID sem nota no provedor (atraso de consistência ou vínculo errado): volta para conferência humana,
   // guardando o ID antigo para a pessoa conferir no painel antes de qualquer reenvio.
   private lostExternalId(document: fiscal_documents) {
-    logOperation({ event: "fiscal.external_id_not_found", document_id: document.id });
+    logOperation({
+      event: "fiscal.external_id_not_found",
+      document_id: document.id,
+      external_id: document.external_id ?? undefined,
+    });
     return this.update(
       document,
       { status: ["PROCESSING"] },
