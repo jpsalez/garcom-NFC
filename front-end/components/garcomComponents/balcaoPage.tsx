@@ -18,11 +18,12 @@ export default function BalcaoPage() {
     const { error, act } = useAct(reload)
 
     return(
-        <div className="w-full md:max-w-300 mx-auto flex flex-col">
+        <div className="w-full py-10 md:max-w-300 mx-auto gap-y-10 flex flex-col">
+
             <div className="w-full  flex items-center justify-between">
             
                 <div className="">
-                    <h2 className="text-3xl font-bold">Chamados</h2>
+                    <h2 className="text-4xl font-bold">Chamados</h2>
                     <p className="text-sm text-gray-600">Marque o chamado como atendido e finalize quando a mesa for liberada.</p>
                 </div>
 

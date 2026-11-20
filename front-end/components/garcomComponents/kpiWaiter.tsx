@@ -1,3 +1,4 @@
+import { MdEmojiPeople } from "react-icons/md"
 import { NumberTicker } from "../ui/number-ticker"
 
 type Kpis = { pending: number, activeTables: number, bills: number, doneToday: number }
@@ -7,7 +8,7 @@ export default function KpiWaiter({ pending, activeTables, bills, doneToday }: K
     return(
         <>
             <div
-            className="w-full grid  py-10 px-5 
+            className={`w-full grid
             gap-5 md:gap-10 grid-cols-2 
             md:grid-cols-4
             
@@ -18,17 +19,24 @@ export default function KpiWaiter({ pending, activeTables, bills, doneToday }: K
             [&>div]:transition-all [&>div]:duration-300
             [&>div]:hover:scale-105 [&>div]:hover:shadow-xl
 
-            [&>div]:[&>span]:text-3xl
-            "
+            [&>div]:[&>span]:text-4xl 
+            `}
             >
                 <div 
                 className={`
                     kpi-card
-                    ${pending > 0 ? 'bg-yellow-400/50' : ''}
+                    ${pending > 0 ? 'bg-linear-130 from-white via-yellow-300/50 to-yellow-600/50' : ''}
                 `}
                 >
-                    <NumberTicker value={pending} delay={0}/>
-                    <p>Chamados Pendentes</p>
+                    <div className="w-full flex items-center justify-between">
+                        <p className="text-left text-sm font-bold text-gray-600">Chamados Pendentes</p>
+                        <div className={`w-8 aspect-square flex items-center justify-center text-background rounded-lg shadow-lg
+                            ${pending ? 'bg-linear-130 from-yellow-600/90 to-yellow-300/90 text-foreground' : 'bg-linear-130 from-[#4a60a3] to-foreground'}
+                            `}>
+                            <MdEmojiPeople className="text-lg"/>
+                        </div>
+                    </div>
+                    <NumberTicker value={pending} delay={0} className={`text-left w-full font-bold ${pending > 0 ? 'text-foreground' : 'text-gray-600'}`}/>
                 </div>
 
                 <div className="kpi-card">

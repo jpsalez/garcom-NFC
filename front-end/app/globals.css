@@ -167,7 +167,7 @@
   /* ESTILOS DOS KPIS */
 
   .kpi-card {
-    @apply bg-linear-145 from-[#EDEDED] via-[#ffffff] to-[#EDEDED] text-foreground border-foreground/30 shadow-lg;
+    @apply bg-white text-foreground border-foreground/30 shadow-lg;
   }
 
   /* Mensagens que abrem e fecham com animação: <p className={`error ${texto ? 'visible' : ''}`}> */
