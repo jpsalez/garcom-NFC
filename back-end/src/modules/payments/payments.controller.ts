@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { inject, injectable } from "tsyringe";
 import { actorOf } from "../../shared/middlewares/auth.middleware.ts";
 import type { IPaymentsService } from "./payments.interfaces.ts";
-import type { CreatePayment, RefundPayment } from "./payments.schemas.ts";
+import type { CreatePayment, RefundPayment, ResolvePointPayment } from "./payments.schemas.ts";
 
 @injectable()
 export class PaymentsController {
@@ -21,6 +21,16 @@ export class PaymentsController {
         String(req.params.id),
         String(req.params.paymentId),
         req.body as RefundPayment,
+      ),
+    );
+
+  resolvePoint = async (req: Request, res: Response) =>
+    res.json(
+      await this.service.resolvePoint(
+        actorOf(req),
+        String(req.params.id),
+        String(req.params.paymentId),
+        req.body as ResolvePointPayment,
       ),
     );
 }

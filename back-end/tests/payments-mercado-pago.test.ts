@@ -516,3 +516,100 @@ describe("reconciliação Point", () => {
     });
   });
 });
+
+describe("conferência de cobrança Point sem retorno", () => {
+  async function stalePending(f: TerminalFixture) {
+    const input = chargeInput(f);
+    fetchMock.mockResolvedValueOnce(respond({ errors: [{ code: "service_unavailable" }] }, 503));
+    expect((await pay(f, input)).status).toBe(202);
+    const old = new Date(Date.now() - 12 * 60 * 1000);
+    await prisma.payments.updateMany({
+      where: { restaurant_id: f.restaurantId },
+      data: { created_at: old, updated_at: old },
+    });
+    return savedPayment(f, input.idempotency_key);
+  }
+  const resolve = (f: TerminalFixture, token: string, paymentId: string, body: object) =>
+    api()
+      .post(`${tabPath(f.tabId)}/payments/${paymentId}/resolve`)
+      .set(auth(token))
+      .send(body);
+
+  it("garçom marca como não cobrada, libera a reserva e registra quem decidiu", async () => {
+    const f = await terminalFixture();
+    const payment = await stalePending(f);
+    expect((await readTab(f)).body.tab.pending_cents).toBe(price);
+    const waiter = (await categoryToken(f.restaurantId, "WAITER")).token;
+
+    const res = await resolve(f, waiter, payment.id, { outcome: "NOT_CHARGED", reason: "Sem comprovante" });
+    expect(res.status).toBe(200);
+    expect(res.body.payment.status).toBe("CANCELLED");
+    expect(res.body.tab).toMatchObject({ pending_cents: 0, remaining_cents: price });
+    const audit = await prisma.restaurant_operation_events.findFirstOrThrow({
+      where: { entity_id: payment.id, action: "POINT_PAYMENT_RELEASED" },
+    });
+    expect(audit).toMatchObject({ actor_type: "USER", actor_category_snapshot: "WAITER" });
+    expect(audit.new_value).toMatchObject({ reason: "Sem comprovante" });
+  });
+
+  it("caixa vincula a order informada e só aprova após consulta ao Mercado Pago", async () => {
+    const f = await terminalFixture();
+    const payment = await stalePending(f);
+    const cashier = (await categoryToken(f.restaurantId, "CASHIER")).token;
+    fetchMock.mockResolvedValueOnce(respond(rawOrder(payment.id, "processed")));
+
+    const res = await resolve(f, cashier, payment.id, { outcome: "CHARGED", order_id: providerOrderId });
+    expect(res.status).toBe(200);
+    expect(fetchMock.mock.calls.at(-1)?.[0]?.toString()).toBe(`${ordersUrl}/${providerOrderId}`);
+    expect(await savedPayment(f, payment.idempotency_key)).toMatchObject({
+      status: "APPROVED",
+      external_payment_id: providerOrderId,
+    });
+    expect(res.body.tab).toMatchObject({ pending_cents: 0, paid_cents: price });
+    const audit = await prisma.restaurant_operation_events.findFirstOrThrow({
+      where: { entity_id: payment.id, action: "POINT_PAYMENT_ORDER_LINKED" },
+    });
+    expect(audit).toMatchObject({ actor_type: "USER", actor_category_snapshot: "CASHIER" });
+
+    const again = await resolve(f, cashier, payment.id, {
+      outcome: "NOT_CHARGED",
+      reason: "Sem comprovante",
+    });
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe("POINT_PAYMENT_NOT_REVIEWABLE");
+  });
+
+  it("recusa order de outra cobrança e mantém a reserva", async () => {
+    const f = await terminalFixture();
+    const payment = await stalePending(f);
+    fetchMock.mockResolvedValueOnce(respond(rawOrder(randomUUID(), "processed")));
+
+    const res = await resolve(f, f.token, payment.id, { outcome: "CHARGED", order_id: providerOrderId });
+    expect(res.status).toBe(502);
+    expect(await savedPayment(f, payment.idempotency_key)).toMatchObject({
+      status: "PENDING",
+      external_payment_id: null,
+    });
+  });
+
+  it("só permite conferir depois de 11 minutos e para quem opera pagamentos", async () => {
+    const f = await terminalFixture();
+    const input = chargeInput(f);
+    fetchMock.mockResolvedValueOnce(respond({ errors: [{ code: "service_unavailable" }] }, 503));
+    await pay(f, input);
+    const recent = await savedPayment(f, input.idempotency_key);
+    const body = { outcome: "NOT_CHARGED", reason: "Sem comprovante" };
+
+    const early = await resolve(f, f.token, recent.id, body);
+    expect(early.status).toBe(409);
+    expect(early.body.code).toBe("POINT_PAYMENT_NOT_REVIEWABLE");
+    // A order da última retomada ainda pode ser paga no terminal aos 6 minutos.
+    const sixMinutes = new Date(Date.now() - 6 * 60 * 1000);
+    await prisma.payments.update({ where: { id: recent.id }, data: { created_at: sixMinutes } });
+    expect((await resolve(f, f.token, recent.id, body)).status).toBe(409);
+    const invalid = await resolve(f, f.token, recent.id, { outcome: "CHARGED", order_id: "../x" });
+    expect(invalid.status).toBe(400);
+    const kitchen = (await categoryToken(f.restaurantId, "KITCHEN")).token;
+    expect((await resolve(f, kitchen, recent.id, body)).status).toBe(403);
+  });
+});

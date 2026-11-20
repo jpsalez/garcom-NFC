@@ -1,4 +1,5 @@
 import { inject, injectable } from "tsyringe";
+import type { ActorContext } from "../../shared/authorization/capabilities.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
 import type { IRestaurantUnitOfWork } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
@@ -9,11 +10,15 @@ import { findPaymentForWebhook, findPaymentsToReconcile } from "./payment-sync.q
 import { PaymentTerminalsRepository } from "./payment-terminals.repository.ts";
 import type { PaymentRecord } from "./payments.repository.interface.ts";
 import { PaymentsRepository } from "./payments.repository.ts";
+import type { ResolvePointPayment } from "./payments.schemas.ts";
 import { activePointAccount } from "./point-account.ts";
 import {
+  linkPointOrder,
+  notReviewable,
   type PointPayment,
   pointExpiryMs,
   pointStatusData,
+  releasePointPayment,
   updatePointPayment,
   validatePointCharge,
 } from "./point-payment-state.ts";
@@ -45,6 +50,17 @@ export class PointPaymentsService {
       }
       logOperation({ event: "point.charge_undetermined", payment_id: payment.id });
     }
+  }
+
+  async resolve(actor: ActorContext, payment: PaymentRecord, input: ResolvePointPayment) {
+    if (input.outcome === "NOT_CHARGED")
+      return releasePointPayment(this.unit, this.notifier, actor, payment, input.reason);
+    const context = await this.context(payment);
+    if (!context) throw notReviewable();
+    // A order informada só vale se a consulta ao provedor confirmar referência, conta, terminal e valor.
+    const linked = { ...context, payment: { ...payment, external_payment_id: input.order_id } };
+    const charge = await this.fetchCharge(linked, input.order_id);
+    await linkPointOrder(this.unit, this.notifier, actor, linked, pointStatusData(charge));
   }
 
   async handleWebhook(dataId: unknown, requestId?: string, signature?: string) {
@@ -111,14 +127,17 @@ export class PointPaymentsService {
     }
   }
 
-  private async sync(context: PointPayment) {
-    const { payment, account } = context;
-    const id = payment.external_payment_id;
-    if (!id) return;
-    const provider = this.providers.get("MERCADO_PAGO");
-    const access = decryptSecret(account.access_token_encrypted);
-    const charge = await provider.getChargeStatus(access, id);
+  private async fetchCharge(context: PointPayment, id: string) {
+    const access = decryptSecret(context.account.access_token_encrypted);
+    const charge = await this.providers.get("MERCADO_PAGO").getChargeStatus(access, id);
     validatePointCharge(context, charge);
+    return charge;
+  }
+
+  private async sync(context: PointPayment) {
+    const id = context.payment.external_payment_id;
+    if (!id) return;
+    const charge = await this.fetchCharge(context, id);
     await updatePointPayment(this.unit, this.notifier, context, pointStatusData(charge));
     return charge;
   }

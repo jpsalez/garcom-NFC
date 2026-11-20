@@ -1,4 +1,5 @@
 import type { PaymentRecord } from "./payments.repository.interface.ts";
+import { needsPointReview } from "./point-payment-state.ts";
 
 export function paymentView(payment: PaymentRecord) {
   return {
@@ -21,6 +22,7 @@ export function paymentView(payment: PaymentRecord) {
     created_at: payment.created_at,
     refunded_at: payment.refunded_at,
     refund_reason: payment.refund_reason,
+    needs_review: needsPointReview(payment),
     allocations: payment.allocations.map(({ id, order_item_id, covered_cents, covered_units_bps }) => ({
       id,
       order_item_id,

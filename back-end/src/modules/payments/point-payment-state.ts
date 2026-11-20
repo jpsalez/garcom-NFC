@@ -1,4 +1,5 @@
 import type { payment_provider_accounts, payment_terminals } from "../../../generated/prisma/client.ts";
+import type { ActorContext } from "../../shared/authorization/capabilities.ts";
 import { ConflictError } from "../../shared/errors/http-errors.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
@@ -8,6 +9,7 @@ import type {
 } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
 import { decryptSecret } from "../../shared/utils/crypto.ts";
 import { applyPaymentToCashShift } from "../cash-shifts/cash-shift-balance.ts";
+import { MenuRepository } from "../menu/menu.repository.ts";
 import { notifyPaymentRequestUpdated } from "../tabs/payment-request-events.ts";
 import { PaymentRequestsRepository } from "../tabs/payment-requests.repository.ts";
 import { notifyTabUpdated } from "../tabs/tab-events.ts";
@@ -28,6 +30,8 @@ import type { PointChargeResult } from "./providers/payment-provider.interface.t
 export const pendingPointStatuses = ["PENDING", "PROCESSING"] as const;
 const failedPointStatuses = new Set<PaymentRecord["status"]>(["DECLINED", "CANCELLED", "EXPIRED"]);
 export const pointExpiryMs = 5 * 60 * 1_000;
+// A última retomada pode criar a order perto dos 5 min, e ela ainda vale outros 5 no terminal.
+const pointReviewAfterMs = 2 * pointExpiryMs + 60 * 1_000;
 
 export type PointPayment = {
   payment: PaymentRecord;
@@ -35,6 +39,19 @@ export type PointPayment = {
   terminal: payment_terminals;
   deviceId: string;
 };
+
+// Sem ID externo após a validade da order, só uma pessoa conferindo o terminal sabe se houve cobrança.
+export function needsPointReview(payment: PaymentRecord, now = Date.now()) {
+  return (
+    payment.provider === "MERCADO_PAGO" &&
+    payment.status === "PENDING" &&
+    !payment.external_payment_id &&
+    payment.created_at.getTime() <= now - pointReviewAfterMs
+  );
+}
+
+export const notReviewable = () =>
+  new ConflictError("Cobrança não está aguardando conferência", "POINT_PAYMENT_NOT_REVIEWABLE");
 
 export async function pointBinding(db: DbClient, restaurantId: string, input: CreatePayment, now: Date) {
   if (
@@ -132,20 +149,97 @@ export async function updatePointPayment(
       if (!(await remainsBound(transaction, context, current))) return null;
       if (current.external_payment_id && current.external_payment_id !== data.external_payment_id)
         return null;
-
-      const statusChanged = data.status !== undefined && data.status !== current.status;
-      const updated = await repository.transition(restaurantId, id, [...pendingPointStatuses], {
-        ...data,
-        updated_at: now,
-        confirmed_at: data.status === "APPROVED" ? now : undefined,
-      });
-      if (!updated || !statusChanged) return null;
-      await repository.auditPointTransition(restaurantId, updated, current.status);
-      return updateTabAfterPoint(transaction, updated);
+      return (await writePointUpdate(transaction, current, data)).change;
     },
     { allowInactive: true },
   );
-  if (!change) return;
+  if (change) notifyPointChange(notifier, change);
+}
+
+export async function linkPointOrder(
+  unit: IRestaurantUnitOfWork,
+  notifier: INotifier,
+  actor: ActorContext,
+  context: PointPayment,
+  data: UpdatePaymentData,
+) {
+  const { restaurant_id: restaurantId, id } = context.payment;
+  const change = await unit.run(
+    restaurantId,
+    async (transaction) => {
+      const current = await new PaymentsRepository(transaction.db).get(restaurantId, id);
+      if (!current || !needsPointReview(current, transaction.now.getTime())) throw notReviewable();
+      if (!(await remainsBound(transaction, context, current))) throw notReviewable();
+      const { updated, change } = await writePointUpdate(transaction, current, data);
+      if (!updated) throw notReviewable();
+      await new MenuRepository(transaction.db).audit(
+        transaction.actor ?? actor,
+        "POINT_PAYMENT_ORDER_LINKED",
+        "PAYMENT",
+        id,
+        { status: current.status },
+        { tab_id: current.tab_id, order_id: data.external_payment_id, status: updated.status },
+      );
+      return change;
+    },
+    { actor, capability: "payments:create" },
+  );
+  if (change) notifyPointChange(notifier, change);
+}
+
+async function writePointUpdate(
+  transaction: RestaurantTransaction,
+  current: PaymentRecord,
+  data: UpdatePaymentData,
+) {
+  const { restaurant_id: restaurantId, id } = current;
+  const repository = new PaymentsRepository(transaction.db);
+  const updated = await repository.transition(restaurantId, id, [...pendingPointStatuses], {
+    ...data,
+    updated_at: transaction.now,
+    confirmed_at: data.status === "APPROVED" ? transaction.now : undefined,
+  });
+  if (!updated || data.status === undefined || data.status === current.status)
+    return { updated, change: null };
+  await repository.auditPointTransition(restaurantId, updated, current.status);
+  return { updated, change: await updateTabAfterPoint(transaction, updated) };
+}
+
+export async function releasePointPayment(
+  unit: IRestaurantUnitOfWork,
+  notifier: INotifier,
+  actor: ActorContext,
+  { restaurant_id: restaurantId, id }: PaymentRecord,
+  reason: string,
+) {
+  const change = await unit.run(
+    restaurantId,
+    async (transaction) => {
+      const { db, now } = transaction;
+      const repository = new PaymentsRepository(db);
+      const current = await repository.get(restaurantId, id);
+      if (!current || !needsPointReview(current, now.getTime())) throw notReviewable();
+      const released = await repository.transition(restaurantId, id, ["PENDING"], {
+        status: "CANCELLED",
+        updated_at: now,
+      });
+      if (!released) throw notReviewable();
+      await new MenuRepository(db).audit(
+        transaction.actor ?? actor,
+        "POINT_PAYMENT_RELEASED",
+        "PAYMENT",
+        id,
+        { status: current.status },
+        { tab_id: current.tab_id, amount_cents: current.amount_cents, reason },
+      );
+      return updateTabAfterPoint(transaction, released);
+    },
+    { actor, capability: "payments:create" },
+  );
+  notifyPointChange(notifier, change);
+}
+
+function notifyPointChange(notifier: INotifier, change: Awaited<ReturnType<typeof updateTabAfterPoint>>) {
   notifyPayment(notifier, change.payment);
   notifyTabUpdated(notifier, change.tab, change.pendingCents);
   for (const request of change.reopened) notifyPaymentRequestUpdated(notifier, request);

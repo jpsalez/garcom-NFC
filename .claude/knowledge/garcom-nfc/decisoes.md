@@ -12,6 +12,7 @@ Nenhuma no momento.
 (A lista anterior, sem ids, está em `../_arquivo/decisoes-lista-antiga.md`.)
 
 ## Resolvidas que estavam na lista de tarefas
+- [x] DEC-16 · Cobrança Point sem retorno (liberada para conferência após 11 min: 5 de retomada + 5 de validade da order + 1 de margem) — resolução manual verificada: OWNER, MANAGER, CASHIER e WAITER (`payments:create`) marcam `NOT_CHARGED` (motivo obrigatório; libera a reserva e audita quem decidiu) ou `CHARGED` informando o ID da order do Mercado Pago, que só vale após a consulta autenticada conferir referência, conta, terminal e valor. Nunca liberar sozinho por tempo nem reenviar às cegas. Busca automática por `external_reference` fica para depois de validar no sandbox (20/11/2026).
 - [x] DEC-03 · Chamados repetidos — um chamado aberto por tipo (garçom/conta) por sessão; tocar de novo devolve o chamado já aberto (200), sem card novo. O balcão mostra há quanto tempo o chamado está aberto, contado de `created_at`, que não é reiniciado pelo toque repetido. O cronômetro roda no front; a API só envia `created_at` e `serverTime` (para corrigir o relógio do balcão) e o Socket.IO só avisa chamado novo/finalizado. Contador de toques repetidos fica para depois do MVP (14/11/2026).
 - [x] DEC-01 · Quem abre o atendimento da mesa — o primeiro scan do QR abre; o garçom (OWNER/STAFF) também pode abrir e encerrar pelo balcão (13/11/2026).
 - [x] DEC-02 · Duração do atendimento — 4 h (`TABLE_SESSION_TTL`); 15 min antes de expirar, o balcão recebe um aviso; estender acrescenta mais 4 h (14/11/2026).

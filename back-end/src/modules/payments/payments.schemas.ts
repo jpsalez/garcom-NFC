@@ -51,6 +51,14 @@ export const createPaymentSchema = z
   );
 
 export const refundPaymentSchema = z.strictObject({ reason: paymentReason });
+export const resolvePointPaymentSchema = z.discriminatedUnion("outcome", [
+  z.strictObject({ outcome: z.literal("NOT_CHARGED"), reason: paymentReason }),
+  z.strictObject({
+    outcome: z.literal("CHARGED"),
+    order_id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  }),
+]);
 export type PaymentAllocation = z.infer<typeof allocationsSchema>[number];
 export type CreatePayment = z.infer<typeof createPaymentSchema>;
 export type RefundPayment = z.infer<typeof refundPaymentSchema>;
+export type ResolvePointPayment = z.infer<typeof resolvePointPaymentSchema>;

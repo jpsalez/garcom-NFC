@@ -5,15 +5,19 @@ import {
   closeCashShiftSchema,
   openCashShiftSchema,
 } from "../modules/cash-shifts/cash-shifts.schemas.ts";
+import { posSubmitSchema } from "../modules/orders/orders.schemas.ts";
+
+import {
+  createPaymentSchema,
+  refundPaymentSchema,
+  resolvePointPaymentSchema,
+} from "../modules/payments/payments.schemas.ts";
+import { createTerminalSchema, updateTerminalSchema } from "../modules/payments/terminals.schemas.ts";
 import {
   restaurantSettingsPatchSchema,
   restaurantSettingsSchema,
 } from "../modules/restaurants/restaurant-settings.schema.ts";
-
-import { createPaymentSchema, refundPaymentSchema } from "../modules/payments/payments.schemas.ts";
-import { createTerminalSchema, updateTerminalSchema } from "../modules/payments/terminals.schemas.ts";
 import { guestSchema, paymentRequestSchema } from "../modules/tabs/payment-requests.schemas.ts";
-import { posSubmitSchema } from "../modules/orders/orders.schemas.ts";
 import {
   cancelTabSchema,
   closeTabSchema,
@@ -294,6 +298,20 @@ export const pdvPaths = {
       ),
       parameters: [tabId, { ...tabId, name: "paymentId" }],
       responses: { ...tabErrors, 200: { description: "Pagamento estornado e comanda atualizada" } },
+    },
+  },
+  "/tabs/{id}/payments/{paymentId}/resolve": {
+    post: {
+      ...tabMutation(
+        "Confere cobrança Point sem retorno após 11 min: NOT_CHARGED libera a reserva; CHARGED vincula a order após consulta ao Mercado Pago",
+        resolvePointPaymentSchema,
+      ),
+      parameters: [tabId, { ...tabId, name: "paymentId" }],
+      responses: {
+        ...tabErrors,
+        200: { description: "Cobrança conferida e comanda atualizada" },
+        502: { description: "Mercado Pago indisponível ou order não corresponde à cobrança" },
+      },
     },
   },
   "/public/table-session/guest": {

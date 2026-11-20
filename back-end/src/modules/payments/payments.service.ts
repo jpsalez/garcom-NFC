@@ -24,17 +24,22 @@ import { requestForConversion } from "../tabs/payment-requests.service.ts";
 import { businessDate } from "../tabs/tab-business-date.ts";
 import { notifyTabUpdated } from "../tabs/tab-events.ts";
 import { loadTabLedger, summarizeLedger } from "../tabs/tab-ledger.ts";
+import { TabsRepository } from "../tabs/tabs.repository.ts";
 import { ensureOpenTab, getTab } from "../tabs/tabs-state.ts";
 import { tabSummary } from "../tabs/tabs-view.ts";
-import { TabsRepository } from "../tabs/tabs.repository.ts";
 import { allocatedByItem, validateAllocations, validatePaymentAmount } from "./payment-allocation.ts";
 import { notifyPayment } from "./payment-events.ts";
 import { paymentView } from "./payment-view.ts";
 import type { IPaymentsService } from "./payments.interfaces.ts";
 import type { PaymentRecord } from "./payments.repository.interface.ts";
 import { PaymentsRepository } from "./payments.repository.ts";
-import type { CreatePayment, PaymentAllocation, RefundPayment } from "./payments.schemas.ts";
-import { pointBinding } from "./point-payment-state.ts";
+import type {
+  CreatePayment,
+  PaymentAllocation,
+  RefundPayment,
+  ResolvePointPayment,
+} from "./payments.schemas.ts";
+import { needsPointReview, notReviewable, pointBinding } from "./point-payment-state.ts";
 import type { PointPaymentsService } from "./point-payments.service.ts";
 import type { PaymentProviderRegistry } from "./providers/payment-provider.registry.ts";
 
@@ -142,8 +147,26 @@ export class PaymentsService implements IPaymentsService {
   }
 
   private async dispatchPointPayment(payment: PaymentRecord) {
-    const { restaurant_id: restaurantId, id } = payment;
     await this.point.dispatch(payment);
+    return this.current(payment);
+  }
+
+  async resolvePoint(actor: ActorContext, id: string, paymentId: string, input: ResolvePointPayment) {
+    const payment = await this.unit.run(
+      restaurantOf(actor),
+      async ({ db, now, restaurant }) => {
+        const found = await new PaymentsRepository(db).findById(restaurant.id, id, paymentId);
+        if (!found) throw new NotFoundError("Pagamento não encontrado");
+        if (!needsPointReview(found, now.getTime())) throw notReviewable();
+        return found;
+      },
+      { actor, capability: "payments:create" },
+    );
+    await this.point.resolve(actor, payment, input);
+    return this.response(await this.current(payment));
+  }
+
+  private current({ restaurant_id: restaurantId, id }: PaymentRecord) {
     return this.unit.run(
       restaurantId,
       async (transaction) => {
