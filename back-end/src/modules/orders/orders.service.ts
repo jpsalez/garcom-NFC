@@ -14,6 +14,7 @@ import { encodeCursor } from "../../shared/utils/cursor.ts";
 import { enqueueOriginal } from "../printing/print-job.ts";
 import { MenuRepository } from "../menu/menu.repository.ts";
 import { TableSessionRepository } from "../sessions/sessions.repository.ts";
+import { loadTabLedger, summarizeLedger } from "../tabs/tab-ledger.ts";
 import { notifyTabOpened, notifyTabUpdated } from "../tabs/tab-events.ts";
 import {
   ensureOpenTab,
@@ -130,7 +131,7 @@ export class OrdersService implements IOrdersService {
           lines,
         );
         const result = await this.finishSubmission(transaction.db, record, target.tab, target.opened);
-        return { ...result, summary: tabSummary(result.changedTab, result.hasPendingKitchenItems) };
+        return { ...result, summary: tabSummary(result.changedTab, result.hasPendingKitchenItems, result) };
       },
       { actor, capability: "orders:create" },
     );
@@ -172,10 +173,10 @@ export class OrdersService implements IOrdersService {
       throw new ConflictError("Chave de envio já utilizada", "IDEMPOTENCY_CONFLICT");
     const repository = new TabsRepository(db);
     const tab = await getTab(repository, record.restaurant_id, record.tab_id);
-    const orders = await repository.orders(record.restaurant_id, tab.id);
+    const summary = summarizeLedger(await loadTabLedger(db, tab));
     return {
       record,
-      summary: tabSummary(tab, hasPendingOrderItems(orders)),
+      summary: tabSummary(tab, summary.hasPendingKitchenItems, summary),
       replayed: true,
       changedTab: null,
       wakeStation: false,
@@ -190,6 +191,8 @@ export class OrdersService implements IOrdersService {
       opened,
       changedTab: recalculated.tab,
       hasPendingKitchenItems: recalculated.hasPendingKitchenItems,
+      pendingCents: recalculated.pendingCents,
+      openRequests: recalculated.openRequests,
       wakeStation: await enqueueOriginal(db, record),
     };
   }
@@ -199,13 +202,14 @@ export class OrdersService implements IOrdersService {
     replayed: boolean;
     opened?: boolean;
     changedTab: tabs | null;
+    pendingCents?: number;
     wakeStation: boolean;
   }) {
     if (result.replayed) return;
     notifyOrder(this.notifier, result.record, "order:created");
     if (result.changedTab) {
       if (result.opened) notifyTabOpened(this.notifier, result.changedTab);
-      notifyTabUpdated(this.notifier, result.changedTab);
+      notifyTabUpdated(this.notifier, result.changedTab, result.pendingCents);
     }
     if (result.wakeStation) this.notifier.wakePrintStation(result.record.restaurant_id);
   }
@@ -282,15 +286,16 @@ export class OrdersService implements IOrdersService {
         const updated = await repo.get(restaurantId, id, { includeReadyHistory: true });
         return {
           order: updated,
-          tab: tab
-            ? (await recalculateTab(db, tab)).tab
+          tabChange: tab
+            ? await recalculateTab(db, tab)
             : await this.finishTabDelivery(db, updated, parsed.operations),
         };
       },
       { actor, capability: "orders:read" },
     );
     notifyOrder(this.notifier, result.order, "order:updated");
-    if (result.tab) notifyTabUpdated(this.notifier, result.tab);
+    if (result.tabChange)
+      notifyTabUpdated(this.notifier, result.tabChange.tab, result.tabChange.pendingCents);
     return orderView(result.order, true);
   }
 
@@ -300,8 +305,10 @@ export class OrdersService implements IOrdersService {
     const restaurantId = order.restaurant_id;
     const tab = await getTab(repository, restaurantId, order.tab_id);
     if (!isOpenTab(tab)) return null;
-    if (hasPendingOrderItems(await repository.orders(restaurantId, tab.id))) return null;
-    return repository.update(restaurantId, tab.id, { version: tab.version + 1 });
+    const state = summarizeLedger(await loadTabLedger(db, tab));
+    if (state.hasPendingKitchenItems) return null;
+    const updated = await repository.update(restaurantId, tab.id, { version: tab.version + 1 });
+    return { tab: updated, pendingCents: state.pendingCents };
   }
 
   private planTransitions(order: OrderRecord, operations: Transition[], actor: ActorContext) {

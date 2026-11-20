@@ -1,20 +1,16 @@
 import { inject, injectable } from "tsyringe";
-import type { reason, table_sessions, tableStatus } from "../../../generated/prisma/client.ts";
+import type { reason, tableStatus } from "../../../generated/prisma/client.ts";
 import type { ActorContext } from "../../shared/authorization/capabilities.ts";
 import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
-import type {
-  IRestaurantUnitOfWork,
-  RestaurantTransaction,
-} from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
+import type { IRestaurantUnitOfWork } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
 import { generateSessionToken, isPublicCode } from "../../shared/utils/token.ts";
-import { closeSessionResources } from "./close-session.ts";
-import { businessDate } from "../tabs/tab-business-date.ts";
-import { notifyTabClosed } from "../tabs/tab-events.ts";
+import { closeSessionResources, notifySessionClosed, type ClosedSession } from "./close-session.ts";
+import { closeTab, notifyClosedTab } from "../tabs/close-tab.ts";
+import { loadTabLedger, summarizeLedger } from "../tabs/tab-ledger.ts";
 import { isOpenTab } from "../tabs/tabs-state.ts";
 import { TabsRepository } from "../tabs/tabs.repository.ts";
-import { MenuRepository } from "../menu/menu.repository.ts";
 import { OrdersRepository } from "../orders/orders.repository.ts";
 import type { ITableRepository } from "../tables/tables.repository.interface.ts";
 import { TableRepository } from "../tables/tables.repository.ts";
@@ -39,10 +35,9 @@ export class SessionsService implements ISessionsService {
       if (!fresh?.active || !fresh.restaurant.active) throw new NotFoundError("Mesa não encontrada");
       const sessions = new TableSessionRepository(db);
       let session = await sessions.findActiveByTable(fresh.restaurant_id, fresh.id);
-      let expiredId: string | null = null;
+      let expired: ClosedSession | null = null;
       if (session && !session.keep_open && session.expires_at <= now) {
-        expiredId = session.id;
-        await this.finishInTransaction(db, fresh.restaurant_id, session.id, "TIMEOUT", now);
+        expired = await this.finishInTransaction(db, fresh.restaurant_id, session.id, "TIMEOUT", now);
         session = null;
       }
       const opened = !session;
@@ -55,13 +50,9 @@ export class SessionsService implements ISessionsService {
       });
       const { token, tokenHash } = generateSessionToken();
       await new SessionTokenRepository(db).create({ session_id: session.id, token_hash: tokenHash });
-      return { session, token, opened, expiredId, table: fresh };
+      return { session, token, opened, expired, table: fresh };
     });
-    if (result.expiredId)
-      this.notifier.toRestaurant(table.restaurant_id, "session:closed", {
-        id: result.expiredId,
-        reason: "TIMEOUT",
-      });
+    if (result.expired) notifySessionClosed(this.notifier, result.expired);
     if (result.opened)
       this.notifier.toRestaurant(table.restaurant_id, "session:opened", {
         id: result.session.id,
@@ -84,11 +75,13 @@ export class SessionsService implements ISessionsService {
         active = await sessions.findActiveByTable(restaurantId, tableId);
       if (active && (active.keep_open || active.expires_at > now))
         throw new ConflictError("A mesa já tem um atendimento ativo", "SESSION_ALREADY_ACTIVE");
-      if (active) await this.finishInTransaction(db, restaurantId, active.id, "TIMEOUT", now);
+      const expired = active
+        ? await this.finishInTransaction(db, restaurantId, active.id, "TIMEOUT", now)
+        : null;
       const tab = await new TabsRepository(db).findOpenByTable(restaurantId, tableId);
       return {
         table,
-        expiredId: active?.id,
+        expired,
         session: await sessions.create({
           restaurant_id: restaurantId,
           table_id: tableId,
@@ -97,8 +90,7 @@ export class SessionsService implements ISessionsService {
         }),
       };
     });
-    if (result.expiredId)
-      this.notifier.toRestaurant(restaurantId, "session:closed", { id: result.expiredId, reason: "TIMEOUT" });
+    if (result.expired) notifySessionClosed(this.notifier, result.expired);
     this.notifier.toRestaurant(restaurantId, "session:opened", {
       id: result.session.id,
       table: { id: tableId, label: result.table.label },
@@ -115,80 +107,30 @@ export class SessionsService implements ISessionsService {
         if (!session) throw new NotFoundError("Atendimento não encontrado");
         if (session.status !== "ACTIVE")
           throw new ConflictError("O atendimento já foi encerrado", "SESSION_CLOSED");
-        const tab = await this.closeEmptyTab(transaction, session, transaction.actor ?? actor);
+        const repository = new TabsRepository(db);
+        const tab = session.tab_id ? await repository.get(restaurantId, session.tab_id) : null;
+        if (isOpenTab(tab)) {
+          if (tab.total_cents > 0 || (await repository.hasOrders(restaurantId, tab.id)))
+            throw new ConflictError("Encerre o consumo pela comanda", "TAB_HAS_UNPAID_BALANCE");
+          const balance = summarizeLedger(await loadTabLedger(db, tab));
+          const closedTab = await closeTab(transaction, tab, balance, transaction.actor ?? actor);
+          const closed = closedTab.closedSessions.find(({ session }) => session.id === id);
+          if (!closed) throw new ConflictError("O atendimento já foi encerrado", "SESSION_CLOSED");
+          return { closed, closedTab };
+        }
+        if (await new OrdersRepository(db).hasPendingForSession(restaurantId, id))
+          throw new ConflictError("Conclua ou cancele os pedidos pendentes", "SESSION_HAS_PENDING_ORDERS");
         const closed = await closeSessionResources(db, restaurantId, id, now, "STAFF", actor.id);
         if (!closed) throw new ConflictError("O atendimento já foi encerrado", "SESSION_CLOSED");
-        return { closed, tab };
+        return { closed, closedTab: null };
       },
       { actor, capability: "sessions:close" },
     );
-    for (const closedId of [id, ...(result.tab?.otherSessions ?? [])])
-      this.notifier.toRestaurant(restaurantId, "session:closed", { id: closedId, reason: "STAFF" });
-    if (result.tab) notifyTabClosed(this.notifier, result.tab.closed);
-    return result.closed;
+    if (result.closedTab) notifyClosedTab(this.notifier, result.closedTab);
+    else notifySessionClosed(this.notifier, result.closed);
+    return result.closed.session;
   }
 
-  private async closeEmptyTab(
-    { db, restaurant, now }: RestaurantTransaction,
-    session: table_sessions,
-    actor: ActorContext,
-  ) {
-    const restaurantId = restaurant.id;
-    const repository = new TabsRepository(db);
-    const tab = session.tab_id ? await repository.get(restaurantId, session.tab_id) : null;
-    if (!isOpenTab(tab)) {
-      if (await new OrdersRepository(db).hasPendingForSession(restaurantId, session.id))
-        throw new ConflictError("Conclua ou cancele os pedidos pendentes", "SESSION_HAS_PENDING_ORDERS");
-      return null;
-    }
-    if (tab.total_cents > 0 || (await repository.hasOrders(restaurantId, tab.id)))
-      throw new ConflictError("Encerre o consumo pela comanda", "TAB_HAS_UNPAID_BALANCE");
-
-    const closed = await repository.update(restaurantId, tab.id, {
-      status: "CLOSED",
-      closed_at: now,
-      closed_by_user_id: actor.id,
-      business_date: businessDate(now, restaurant),
-      version: tab.version + 1,
-    });
-    const otherSessions = await this.closeOtherTabSessions(
-      db,
-      restaurantId,
-      tab.id,
-      session.id,
-      now,
-      actor.id,
-    );
-    await new MenuRepository(db).audit(
-      actor,
-      "TAB_CLOSED",
-      "TAB",
-      tab.id,
-      { status: tab.status },
-      { status: closed.status },
-    );
-    return { closed, otherSessions };
-  }
-
-  private async closeOtherTabSessions(
-    db: DbClient,
-    restaurantId: string,
-    tabId: string,
-    sessionId: string,
-    now: Date,
-    userId: string,
-  ) {
-    const active = await new TableSessionRepository(db).findActiveByTab(restaurantId, tabId);
-    const closedIds: string[] = [];
-    for (const session of active) {
-      if (
-        session.id !== sessionId &&
-        (await closeSessionResources(db, restaurantId, session.id, now, "STAFF", userId))
-      )
-        closedIds.push(session.id);
-    }
-    return closedIds;
-  }
   async extend(restaurantId: string, id: string) {
     const session = await this.unit.run(restaurantId, async ({ db, now }) => {
       const repository = new TableSessionRepository(db),
@@ -255,7 +197,7 @@ export class SessionsService implements ISessionsService {
       ({ db, now }) => this.finishInTransaction(db, restaurantId, id, closedReason, now, closedBy),
       { allowInactive: true },
     );
-    if (closed) this.notifier.toRestaurant(restaurantId, "session:closed", { id, reason: closedReason });
+    if (closed) notifySessionClosed(this.notifier, closed);
     return closed;
   }
 }

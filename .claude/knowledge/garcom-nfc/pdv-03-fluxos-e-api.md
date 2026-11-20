@@ -139,7 +139,7 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
 
 #### `POST /api/v1/tabs/:id/merge` (`tabs:manage`)
 - **Request:** `{ "source_tab_id": "uuid-comanda-origem", "expected_version": 5 }`
-- Transfere pedidos e sessões da origem para `:id`, e marca a origem como `CANCELLED`. Na Etapa 2, transfere ajustes e pagamentos aprovados e bloqueia se a origem tiver pagamento `PENDING`/`PROCESSING`.
+- Transfere pedidos, sessões, ajustes, pagamentos e solicitações da origem para `:id`. Marca a origem como `CANCELLED` e bloqueia se houver pagamento `PENDING` ou `PROCESSING` nela. As parcelas pagas continuam ligadas aos mesmos itens.
 - O vínculo secundário dura até o fim da sessão original. Depois de um timeout, o scan na mesa principal reencontra a comanda aberta pela mesa; nas secundárias, começa uma nova sessão sem vínculo.
 
 #### `POST /api/v1/tabs/:id/close` (`tabs:close`)
@@ -191,7 +191,7 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
     }
     ```
   - Response `201 Created`: `{ "payment_request": PaymentRequestView }`.
-  - Se o mesmo `session_token` já tiver uma solicitação `OPEN`, substitui ou retorna `409 PAYMENT_REQUEST_ALREADY_OPEN` (cliente pode cancelar via `DELETE /public/tab/payment-requests/:id`).
+  - Se o mesmo `session_token` já tiver uma solicitação `OPEN`, retorna `409 PAYMENT_REQUEST_ALREADY_OPEN`. O cliente pode cancelar via `DELETE /public/tab/payment-requests/:id`. Timeout expira a solicitação e o fechamento da comanda cancela solicitações restantes.
 
 ---
 
@@ -220,6 +220,7 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
   - `MANUAL`: `201 Created` `{ "payment": PaymentView, "tab": TabSummary, "auto_closed": true|false }`.
   - `MERCADO_PAGO`: `202 Accepted` `{ "payment": PaymentView (status=PROCESSING), "tab": TabSummary }`.
 - **Idempotência:** mesmo `idempotency_key` com mesmo payload devolve `200 OK` (`replayed: true`); com payload diferente devolve `409 IDEMPOTENCY_CONFLICT`.
+- Ao converter uma solicitação ativa, a seleção e o valor são preenchidos pelo servidor. A equipe pode ajustar o meio efetivo de pagamento. A taxa proporcional informada em `include_service_fee` é limitada ao saldo disponível.
 
 #### `POST /api/v1/tabs/:id/payments/:paymentId/refund` (`payments:refund`)
 - **Request:** `{ "reason": "Cobrança duplicada na maquininha" }`

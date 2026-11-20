@@ -128,6 +128,29 @@ export class SessionTokenRepository implements ISessionTokenRepository {
     });
   }
 
+  findActiveForSession(restaurantId: string, sessionId: string, tokenId: string) {
+    return this.db.session_tokens.findFirst({
+      where: {
+        id: tokenId,
+        session_id: sessionId,
+        revoked_at: null,
+        table_session: { restaurant_id: restaurantId, status: tableStatus.ACTIVE, table: { active: true } },
+      },
+      select: { guest_label: true },
+    });
+  }
+
+  setGuestLabel(restaurantId: string, tokenId: string, guestLabel: string | null) {
+    return this.db.session_tokens.updateMany({
+      where: {
+        id: tokenId,
+        revoked_at: null,
+        table_session: { restaurant_id: restaurantId, status: tableStatus.ACTIVE },
+      },
+      data: { guest_label: guestLabel },
+    });
+  }
+
   // Retorna { count } com a quantidade de tokens revogados
   revokeAllBySession(sessionId: string, revokedAt: Date) {
     return this.db.session_tokens.updateMany({

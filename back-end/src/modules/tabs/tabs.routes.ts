@@ -3,7 +3,16 @@ import { container } from "../../shared/container/container.ts";
 import { ensureAuthenticated, ensureCapability } from "../../shared/middlewares/auth.middleware.ts";
 import { validateSchema, validateUuidParams } from "../../shared/middlewares/validator.middleware.ts";
 import { TabsController } from "./tabs.controller.ts";
-import { mergeTabSchema, openTabSchema, transferTabSchema, updateTabSchema } from "./tabs.schemas.ts";
+import {
+  cancelTabSchema,
+  closeTabSchema,
+  mergeTabSchema,
+  openTabSchema,
+  tabAdjustmentSchema,
+  transferTabSchema,
+  updateTabSchema,
+  waiveFeeSchema,
+} from "./tabs.schemas.ts";
 
 export function tabsRoutes() {
   const router = Router();
@@ -24,5 +33,37 @@ export function tabsRoutes() {
     controller.transfer,
   );
   router.post("/tabs/:id/merge", ...manage, id, validateSchema(mergeTabSchema), controller.merge);
+  router.post("/tabs/:id/pre-bill", ...read, id, controller.preBill);
+  router.post(
+    "/tabs/:id/close",
+    ensureAuthenticated,
+    ensureCapability("tabs:close"),
+    id,
+    validateSchema(closeTabSchema),
+    controller.close,
+  );
+  router.post(
+    "/tabs/:id/cancel",
+    ensureAuthenticated,
+    ensureCapability("tabs:cancel"),
+    id,
+    validateSchema(cancelTabSchema),
+    controller.cancel,
+  );
+  router.post(
+    "/tabs/:id/adjustments",
+    ...manage,
+    id,
+    validateSchema(tabAdjustmentSchema),
+    controller.addAdjustment,
+  );
+  router.post(
+    "/tabs/:id/service-fee/waive",
+    ensureAuthenticated,
+    ensureCapability("tabs:service_fee_waive"),
+    id,
+    validateSchema(waiveFeeSchema),
+    controller.waiveFee,
+  );
   return router;
 }

@@ -49,7 +49,15 @@ export class TabsRepository implements ITabsRepository {
       },
       orderBy: [{ opened_at: "desc" }, { id: "desc" }],
       take: filter.limit + 1,
-      include: { _count: { select: { orders: { where: { items: { some: pendingOrderItem } } } } } },
+      include: {
+        payments: { where: { status: { in: ["PENDING", "PROCESSING"] } }, select: { amount_cents: true } },
+        _count: {
+          select: {
+            orders: { where: { items: { some: pendingOrderItem } } },
+            payment_requests: { where: { status: "OPEN" } },
+          },
+        },
+      },
     });
   }
 
@@ -61,7 +69,7 @@ export class TabsRepository implements ITabsRepository {
     return this.db.orders.findMany({
       where: { restaurant_id: restaurantId, tab_id: tabId },
       orderBy: [{ created_at: "asc" }, { id: "asc" }],
-      include: orderInclude,
+      include: { ...orderInclude, submitted_by_token: { select: { guest_label: true } } },
     });
   }
 

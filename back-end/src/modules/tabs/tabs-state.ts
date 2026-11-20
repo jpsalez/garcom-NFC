@@ -3,10 +3,12 @@ import { AppError } from "../../shared/errors/AppError.ts";
 import { ConflictError } from "../../shared/errors/http-errors.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type { RestaurantTransaction } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
-import { hasPendingOrderItems } from "../orders/order-progress.ts";
+import { allocatedByItem, validateExistingAllocations } from "../payments/payment-allocation.ts";
 import { RestaurantRepository } from "../restaurants/restaurants.repository.ts";
 import { TableSessionRepository } from "../sessions/sessions.repository.ts";
 import { TableRepository } from "../tables/tables.repository.ts";
+import { loadTabLedger, summarizeLedger } from "./tab-ledger.ts";
+import { TabAdjustmentsRepository } from "./tab-adjustments.repository.ts";
 import { tabTotals } from "./tabs-pricing.ts";
 import type { ITabsRepository } from "./tabs.repository.interface.ts";
 import { TabsRepository } from "./tabs.repository.ts";
@@ -75,13 +77,38 @@ export async function getOrCreateForTable(
   return { tab, opened: current === null };
 }
 
-export async function recalculateTab(db: DbClient, tab: tabs, { reopen = false } = {}) {
-  const repository = new TabsRepository(db);
-  const orders = await repository.orders(tab.restaurant_id, tab.id);
-  const updated = await repository.update(tab.restaurant_id, tab.id, {
-    ...tabTotals(orders, tab),
-    status: reopen ? "OPEN" : undefined,
+export async function recalculateTab(
+  db: DbClient,
+  tab: tabs,
+  {
+    reopen = false,
+    fee,
+  }: { reopen?: boolean; fee?: Pick<tabs, "service_fee_waived" | "service_fee_waive_reason"> } = {},
+) {
+  const { restaurant_id: restaurantId, id } = tab;
+  const ledger = await loadTabLedger(db, tab);
+  const summary = summarizeLedger(ledger);
+  const paid_cents = ledger.payments.reduce(
+    (sum, payment) => (payment.status === "APPROVED" ? sum + payment.amount_cents : sum),
+    0,
+  );
+  const totals = tabTotals(
+    ledger.orders,
+    { ...tab, ...fee, paid_cents },
+    ledger.adjustments,
+    summary.pendingCents,
+  );
+  validateExistingAllocations(ledger.orders, allocatedByItem(ledger.payments));
+  const adjustments = new TabAdjustmentsRepository(db);
+  for (const { adjustment, cents } of totals.computed)
+    if (cents !== adjustment.computed_cents)
+      await adjustments.updateComputed(restaurantId, id, adjustment.id, cents);
+  const updated = await new TabsRepository(db).update(restaurantId, id, {
+    ...totals.cents,
+    ...fee,
+    paid_cents,
     version: tab.version + 1,
+    status: reopen ? "OPEN" : undefined,
   });
-  return { tab: updated, hasPendingKitchenItems: hasPendingOrderItems(orders) };
+  return { tab: updated, ...summary };
 }

@@ -1,13 +1,21 @@
 import type { tabs } from "../../../generated/prisma/client.ts";
-import { hasPendingOrderItems, orderView } from "../orders/order-progress.ts";
-import type { OrderRecord } from "../orders/orders.repository.interface.ts";
+import { orderView } from "../orders/order-progress.ts";
+import { allocatedByItem, type AllocationTotals } from "../payments/payment-allocation.ts";
+import { paymentView } from "../payments/payment-view.ts";
+import { paymentRequestView } from "./payment-request-view.ts";
+import { summarizeLedger, type TabLedger } from "./tab-ledger.ts";
+import type { TabOrderRecord } from "./tabs.repository.interface.ts";
 import { activeLineCents, serviceFeeCents } from "./tabs-pricing.ts";
 
 export function orderTableLabel(tab: Pick<tabs, "table_label_snapshot" | "label" | "number">) {
   return tab.table_label_snapshot ?? tab.label ?? `Balcão #${tab.number}`;
 }
 
-export function tabSummary(tab: tabs, hasPendingKitchenItems: boolean) {
+export function tabSummary(
+  tab: tabs,
+  hasPendingKitchenItems: boolean,
+  { pendingCents = 0, openRequests = 0 } = {},
+) {
   return {
     id: tab.id,
     number: tab.number,
@@ -22,16 +30,17 @@ export function tabSummary(tab: tabs, hasPendingKitchenItems: boolean) {
     adjustments_cents: tab.adjustments_cents,
     total_cents: tab.total_cents,
     paid_cents: tab.paid_cents,
-    pending_cents: 0,
+    pending_cents: pendingCents,
+    closed_refunded_cents: tab.closed_refunded_cents,
     remaining_cents: tab.total_cents - tab.paid_cents,
     has_pending_kitchen_items: hasPendingKitchenItems,
-    open_payment_requests_count: 0,
+    open_payment_requests_count: openRequests,
     opened_at: tab.opened_at,
     version: tab.version,
   };
 }
 
-function byGuest(tab: tabs, orders: OrderRecord[]) {
+function byGuest(tab: tabs, orders: TabOrderRecord[]) {
   const groups = new Map<
     string,
     { key: string; label: string; subtotal_cents: number; item_ids: string[] }
@@ -40,7 +49,9 @@ function byGuest(tab: tabs, orders: OrderRecord[]) {
     const key = order.submitted_by_token_id ? `token:${order.submitted_by_token_id}` : "staff";
     const group = groups.get(key) ?? {
       key,
-      label: order.submitted_by_token_id ? "Aparelho da mesa" : "Mesa / Equipe",
+      label: order.submitted_by_token_id
+        ? (order.submitted_by_token?.guest_label ?? "Aparelho da mesa")
+        : "Mesa / Equipe",
       subtotal_cents: 0,
       item_ids: [],
     };
@@ -56,34 +67,37 @@ function byGuest(tab: tabs, orders: OrderRecord[]) {
   }));
 }
 
-function tabOrder(order: OrderRecord) {
+function tabOrder(order: TabOrderRecord, totals: AllocationTotals) {
   const view = orderView(order, true);
   return {
     ...view,
     submitted_by_token_id: order.submitted_by_token_id,
-    guest_label: null,
+    guest_label: order.submitted_by_token?.guest_label ?? null,
     items: view.items.map((item, index) => {
       const active = activeLineCents(item);
+      const allocated = totals.get(item.id)?.cents ?? 0;
       return {
         ...item,
         category_id_snapshot: order.items[index]?.category_id_snapshot ?? null,
         category_name_snapshot: order.items[index]?.category_name_snapshot ?? null,
         active_line_cents: active,
-        allocated_cents: 0,
-        unallocated_cents: active,
+        allocated_cents: allocated,
+        unallocated_cents: active - allocated,
       };
     }),
   };
 }
 
-export function tabDetail(tab: tabs, orders: OrderRecord[]) {
+export function tabDetail(tab: tabs, ledger: TabLedger) {
+  const summary = summarizeLedger(ledger);
+  const allocations = allocatedByItem(ledger.payments);
   return {
-    ...tabSummary(tab, hasPendingOrderItems(orders)),
-    orders: orders.map(tabOrder),
-    by_guest: byGuest(tab, orders),
-    adjustments: [],
-    payments: [],
-    payment_requests: [],
+    ...tabSummary(tab, summary.hasPendingKitchenItems, summary),
+    orders: ledger.orders.map((order) => tabOrder(order, allocations)),
+    by_guest: byGuest(tab, ledger.orders),
+    adjustments: ledger.adjustments,
+    payments: ledger.payments.map(paymentView),
+    payment_requests: ledger.requests.map(paymentRequestView),
     fiscal_documents: [],
   };
 }

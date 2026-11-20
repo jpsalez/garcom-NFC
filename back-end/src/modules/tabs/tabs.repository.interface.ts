@@ -25,7 +25,12 @@ export type UpdateTabData = Partial<
     | "status"
     | "version"
     | "subtotal_cents"
+    | "service_fee_waived"
+    | "service_fee_waive_reason"
     | "service_fee_cents"
+    | "adjustments_cents"
+    | "paid_cents"
+    | "closed_refunded_cents"
     | "total_cents"
     | "closed_at"
     | "closed_by_user_id"
@@ -45,7 +50,11 @@ export type TabListFilter = {
   limit: number;
 };
 
-export type TabListRow = tabs & { _count: { orders: number } };
+export type TabListRow = tabs & {
+  _count: { orders: number; payment_requests: number };
+  payments: { amount_cents: number }[];
+};
+export type TabOrderRecord = OrderRecord & { submitted_by_token: { guest_label: string | null } | null };
 
 export interface ITabsRepository {
   create(restaurantId: string, data: CreateTabData): Promise<tabs>;
@@ -53,6 +62,6 @@ export interface ITabsRepository {
   findOpenByTable(restaurantId: string, tableId: string): Promise<tabs | null>;
   list(restaurantId: string, filter: TabListFilter): Promise<TabListRow[]>;
   update(restaurantId: string, id: string, data: UpdateTabData): Promise<tabs>;
-  orders(restaurantId: string, tabId: string): Promise<OrderRecord[]>;
+  orders(restaurantId: string, tabId: string): Promise<TabOrderRecord[]>;
   hasOrders(restaurantId: string, tabId: string): Promise<boolean>;
 }

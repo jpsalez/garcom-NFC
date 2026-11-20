@@ -75,6 +75,19 @@ import { TabsRepository } from "../../modules/tabs/tabs.repository.ts";
 import { TabsService } from "../../modules/tabs/tabs.service.ts";
 import type { ITabsService } from "../../modules/tabs/tabs.interfaces.ts";
 
+import {
+  PaymentRequestsService,
+  type IPaymentRequestsService,
+} from "../../modules/tabs/payment-requests.service.ts";
+import {
+  TabAdjustmentsService,
+  type ITabAdjustmentsService,
+} from "../../modules/tabs/tab-adjustments.service.ts";
+import type { IPaymentsService } from "../../modules/payments/payments.interfaces.ts";
+import { PaymentsService } from "../../modules/payments/payments.service.ts";
+import { ManualPaymentProvider } from "../../modules/payments/providers/manual.provider.ts";
+import { PaymentProviderRegistry } from "../../modules/payments/providers/payment-provider.registry.ts";
+
 export function registerDependencies() {
   // Infra
   container.register<DbClient>("DbClient", { useValue: prisma });
@@ -83,6 +96,11 @@ export function registerDependencies() {
   container.registerSingleton<IMenuService>("MenuService", MenuService);
   container.registerSingleton<ITabsRepository>("TabsRepository", TabsRepository);
   container.registerSingleton<ITabsService>("TabsService", TabsService);
+  container.registerSingleton<ITabAdjustmentsService>("TabAdjustmentsService", TabAdjustmentsService);
+  container.registerSingleton<IPaymentRequestsService>("PaymentRequestsService", PaymentRequestsService);
+  container.registerSingleton<IPaymentsService>("PaymentsService", PaymentsService);
+  container.registerSingleton("ManualPaymentProvider", ManualPaymentProvider);
+  container.registerSingleton("PaymentProviderRegistry", PaymentProviderRegistry);
   container.registerSingleton<IOrdersRepository>("OrdersRepository", OrdersRepository);
   container.registerSingleton<IOrdersService>("OrdersService", OrdersService);
   container.registerSingleton<IOrderSettingsRepository>("OrderSettingsRepository", OrderSettingsRepository);

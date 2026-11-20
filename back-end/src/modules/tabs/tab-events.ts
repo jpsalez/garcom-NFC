@@ -1,16 +1,9 @@
 import type { tabs } from "../../../generated/prisma/client.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
-
-function emitTabEvent(notifier: INotifier, tab: tabs, event: string, payload: object) {
-  try {
-    notifier.toPos(tab.restaurant_id, event, payload);
-  } catch {
-    console.error("Falha ao emitir evento de comanda", { tab_id: tab.id, event });
-  }
-}
+import { notifyPos } from "../../shared/realtime/pos-events.ts";
 
 export function notifyTabOpened(notifier: INotifier, tab: tabs) {
-  emitTabEvent(notifier, tab, "tab:opened", {
+  notifyPos(notifier, tab.restaurant_id, "tab:opened", {
     tab_id: tab.id,
     number: tab.number,
     kind: tab.kind,
@@ -18,19 +11,19 @@ export function notifyTabOpened(notifier: INotifier, tab: tabs) {
   });
 }
 
-export function notifyTabUpdated(notifier: INotifier, tab: tabs) {
-  emitTabEvent(notifier, tab, "tab:updated", {
+export function notifyTabUpdated(notifier: INotifier, tab: tabs, pendingCents = 0) {
+  notifyPos(notifier, tab.restaurant_id, "tab:updated", {
     tab_id: tab.id,
     version: tab.version,
     status: tab.status,
     total_cents: tab.total_cents,
     paid_cents: tab.paid_cents,
-    pending_cents: 0,
+    pending_cents: pendingCents,
   });
 }
 
 export function notifyTabClosed(notifier: INotifier, tab: tabs) {
-  emitTabEvent(notifier, tab, "tab:closed", {
+  notifyPos(notifier, tab.restaurant_id, "tab:closed", {
     tab_id: tab.id,
     number: tab.number,
     table_id: tab.table_id,

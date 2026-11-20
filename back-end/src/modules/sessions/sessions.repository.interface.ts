@@ -64,5 +64,15 @@ export type SessionTokenWithSession = Prisma.session_tokensGetPayload<{
 export interface ISessionTokenRepository {
   create(data: CreateSessionTokenData): Promise<session_tokens>;
   findByHash(tokenHash: string): Promise<SessionTokenWithSession | null>;
+  findActiveForSession(
+    restaurantId: string,
+    sessionId: string,
+    tokenId: string,
+  ): Promise<{ guest_label: string | null } | null>;
+  setGuestLabel(
+    restaurantId: string,
+    tokenId: string,
+    guestLabel: string | null,
+  ): Promise<Prisma.BatchPayload>;
   revokeAllBySession(sessionId: string, revokedAt: Date): Promise<Prisma.BatchPayload>;
 }

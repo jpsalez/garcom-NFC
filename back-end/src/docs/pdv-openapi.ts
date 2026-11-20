@@ -4,13 +4,19 @@ import {
   restaurantSettingsSchema,
 } from "../modules/restaurants/restaurant-settings.schema.ts";
 
+import { createPaymentSchema, refundPaymentSchema } from "../modules/payments/payments.schemas.ts";
+import { guestSchema, paymentRequestSchema } from "../modules/tabs/payment-requests.schemas.ts";
 import { posSubmitSchema } from "../modules/orders/orders.schemas.ts";
 import {
+  cancelTabSchema,
+  closeTabSchema,
   listTabsQuery,
   mergeTabSchema,
   openTabSchema,
+  tabAdjustmentSchema,
   transferTabSchema,
   updateTabSchema,
+  waiveFeeSchema,
 } from "../modules/tabs/tabs.schemas.ts";
 
 const pdvAccess = {
@@ -71,7 +77,102 @@ export const posOrderOperation = {
   },
 };
 
+const deviceAccess = { ...pdvAccess, security: [{ tableToken: [] }] };
+
 export const pdvPaths = {
+  "/tabs/{id}/pre-bill": {
+    post: {
+      ...pdvAccess,
+      summary: "Emite pré-conta e calcula divisão igual em centavos quando solicitada",
+      parameters: [
+        tabId,
+        { name: "split_by", in: "query", schema: { type: "integer", minimum: 2, maximum: 100 } },
+      ],
+      responses: { ...tabErrors, 200: { description: "tab detalhada e equal_split_preview opcional" } },
+    },
+  },
+  "/tabs/{id}/close": {
+    post: tabMutation("Fecha comanda quitada e encerra as sessões vinculadas", closeTabSchema),
+  },
+  "/tabs/{id}/cancel": {
+    post: tabMutation("Cancela comanda sem pagamentos ativos e retira os itens da fila", cancelTabSchema),
+  },
+  "/tabs/{id}/adjustments": {
+    post: {
+      ...tabMutation("Aplica desconto, couvert ou gorjeta com motivo", tabAdjustmentSchema),
+      responses: { ...tabErrors, 201: { description: "Ajuste e comanda atualizada" } },
+    },
+  },
+  "/tabs/{id}/service-fee/waive": {
+    post: tabMutation("Remove ou restaura a taxa de serviço com motivo", waiveFeeSchema),
+  },
+  "/tabs/{id}/payments": {
+    post: {
+      ...tabMutation("Registra pagamento manual e divide por itens ou valor livre", createPaymentSchema),
+      responses: {
+        ...tabErrors,
+        200: { description: "Pagamento já registrado para a chave, com replayed=true" },
+        201: { description: "Pagamento confirmado, tab e indicação de fechamento automático" },
+      },
+    },
+  },
+  "/tabs/{id}/payments/{paymentId}/refund": {
+    post: {
+      ...tabMutation(
+        "Estorna pagamento manual. Comanda fechada exige o mesmo dia operacional",
+        refundPaymentSchema,
+      ),
+      parameters: [tabId, { ...tabId, name: "paymentId" }],
+      responses: { ...tabErrors, 200: { description: "Pagamento estornado e comanda atualizada" } },
+    },
+  },
+  "/public/table-session/guest": {
+    patch: {
+      ...deviceAccess,
+      summary: "Define ou limpa o apelido do aparelho autenticado",
+      requestBody: tabBody(guestSchema),
+      responses: {
+        200: { description: "guest_label atualizado" },
+        400: tabErrors[400],
+        401: tabErrors[401],
+        429: { description: "Limite por aparelho" },
+      },
+    },
+  },
+  "/public/tab": {
+    get: {
+      ...deviceAccess,
+      summary: "Consulta a comanda NFC, os pedidos da mesa e a solicitação do próprio aparelho",
+      responses: {
+        200: { description: "tab com pedidos, ou tab nula quando ainda não há comanda" },
+        401: tabErrors[401],
+      },
+    },
+  },
+  "/public/tab/payment-requests": {
+    post: {
+      ...deviceAccess,
+      summary: "Solicita pagamento por pedido próprio, item ou valor",
+      requestBody: tabBody(paymentRequestSchema),
+      responses: {
+        ...tabErrors,
+        201: { description: "payment_request criada" },
+        429: { description: "Limite por aparelho" },
+      },
+    },
+  },
+  "/public/tab/payment-requests/{id}": {
+    delete: {
+      ...deviceAccess,
+      summary: "Cancela solicitação aberta do próprio aparelho",
+      parameters: [tabId],
+      responses: {
+        ...tabErrors,
+        204: { description: "Solicitação cancelada" },
+        429: { description: "Limite por aparelho" },
+      },
+    },
+  },
   "/tabs": {
     get: {
       ...pdvAccess,

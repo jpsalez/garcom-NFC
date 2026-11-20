@@ -8,14 +8,29 @@ import { notifyOrder } from "../../shared/realtime/order-events.ts";
 import type { IRestaurantUnitOfWork } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
 import { encodeCursor } from "../../shared/utils/cursor.ts";
 import { MenuRepository } from "../menu/menu.repository.ts";
-import { hasPendingOrderItems } from "../orders/order-progress.ts";
+import { cancelOpenOrderItems } from "../orders/cancel-order-items.ts";
+import { PaymentsRepository } from "../payments/payments.repository.ts";
 import { OrdersRepository } from "../orders/orders.repository.ts";
 import { TableSessionRepository } from "../sessions/sessions.repository.ts";
+import { closeTab, closeTabResources, notifyClosedTab, notifyClosedTabResources } from "./close-tab.ts";
+import { notifyPaymentRequestUpdated } from "./payment-request-events.ts";
+import { PaymentRequestsRepository } from "./payment-requests.repository.ts";
+import { TabAdjustmentsRepository } from "./tab-adjustments.repository.ts";
+import { loadTabLedger, summarizeLedger } from "./tab-ledger.ts";
+import { splitEqually } from "./tabs-pricing.ts";
 import { notifyTabOpened, notifyTabUpdated } from "./tab-events.ts";
 import type { ITabsService } from "./tabs.interfaces.ts";
 import type { ITabsRepository } from "./tabs.repository.interface.ts";
 import { TabsRepository } from "./tabs.repository.ts";
-import type { ListTabs, MergeTab, OpenTab, TransferTab, UpdateTab } from "./tabs.schemas.ts";
+import type {
+  CancelTab,
+  CloseTab,
+  ListTabs,
+  MergeTab,
+  OpenTab,
+  TransferTab,
+  UpdateTab,
+} from "./tabs.schemas.ts";
 import {
   createTab,
   ensureOpenTab,
@@ -108,7 +123,12 @@ export class TabsService implements ITabsService {
     const tabs = rows.slice(0, page.limit);
     const last = tabs.at(-1);
     return {
-      tabs: tabs.map((tab) => tabSummary(tab, tab._count.orders > 0)),
+      tabs: tabs.map((tab) =>
+        tabSummary(tab, tab._count.orders > 0, {
+          pendingCents: tab.payments.reduce((sum, payment) => sum + payment.amount_cents, 0),
+          openRequests: tab._count.payment_requests,
+        }),
+      ),
       nextCursor:
         rows.length > page.limit && last ? encodeCursor({ id: last.id, created_at: last.opened_at }) : null,
       serverTime: new Date(),
@@ -122,7 +142,7 @@ export class TabsService implements ITabsService {
       async ({ db }) => {
         const repository = new TabsRepository(db);
         const tab = await getTab(repository, restaurantId, id);
-        return { tab: tabDetail(tab, await repository.orders(restaurantId, id)) };
+        return { tab: tabDetail(tab, await loadTabLedger(db, tab)) };
       },
       { actor, capability: "tabs:read" },
     );
@@ -143,13 +163,13 @@ export class TabsService implements ITabsService {
           version: tab.version + 1,
         });
         await auditTab(db, current ?? actor, "TAB_UPDATED", tab, updated);
-        const orders = await repository.orders(restaurantId, id);
-        return { tab: updated, hasPendingKitchenItems: hasPendingOrderItems(orders) };
+        const ledger = await loadTabLedger(db, updated);
+        return { tab: updated, ...summarizeLedger(ledger) };
       },
       { actor, capability: "tabs:manage" },
     );
-    notifyTabUpdated(this.notifier, result.tab);
-    return { tab: tabSummary(result.tab, result.hasPendingKitchenItems) };
+    notifyTabUpdated(this.notifier, result.tab, result.pendingCents);
+    return { tab: tabSummary(result.tab, result.hasPendingKitchenItems, result) };
   }
 
   async transferTable(actor: ActorContext, id: string, input: TransferTab) {
@@ -174,14 +194,14 @@ export class TabsService implements ITabsService {
         if (tab.table_id) await sessions.moveActiveToTable(restaurantId, id, tab.table_id, table.id);
         await new OrdersRepository(db).relabelForTab(restaurantId, id, table.label);
         await auditTab(db, current ?? actor, "TAB_TRANSFERRED", tab, updated);
-        const orders = await repository.orders(restaurantId, id);
-        return { tab: updated, orders };
+        const ledger = await loadTabLedger(db, updated);
+        return { tab: updated, orders: ledger.orders, ...summarizeLedger(ledger) };
       },
       { actor, capability: "tabs:manage" },
     );
-    notifyTabUpdated(this.notifier, result.tab);
+    notifyTabUpdated(this.notifier, result.tab, result.pendingCents);
     for (const order of result.orders) notifyOrder(this.notifier, order, "order:updated");
-    return { tab: tabSummary(result.tab, hasPendingOrderItems(result.orders)) };
+    return { tab: tabSummary(result.tab, result.hasPendingKitchenItems, result) };
   }
 
   async merge(actor: ActorContext, id: string, input: MergeTab) {
@@ -197,27 +217,128 @@ export class TabsService implements ITabsService {
           throw new ConflictError("Escolha duas comandas diferentes", "TAB_MERGE_SAME_TAB");
         const source = await getTab(repository, restaurantId, input.source_tab_id);
         ensureOpenTab(source);
-        const movedOrders = await repository.orders(restaurantId, source.id);
-        await new OrdersRepository(db).moveToTab(restaurantId, source.id, id, orderTableLabel(target));
-        await new TableSessionRepository(db).moveToTab(restaurantId, source.id, id);
-        const cancelled = await repository.update(restaurantId, source.id, {
-          status: "CANCELLED",
-          cancel_reason: `Unida à comanda #${target.number}`,
-          subtotal_cents: 0,
-          service_fee_cents: 0,
-          total_cents: 0,
-          version: source.version + 1,
-        });
-        const updated = await recalculateTab(db, target);
-        await auditTab(db, current ?? actor, "TAB_MERGED", source, cancelled);
-        await auditTab(db, current ?? actor, "TAB_MERGE_RECEIVED", target, updated.tab);
-        return { ...updated, cancelled, movedOrders };
+        return this.mergeInto(db, source, target, current ?? actor);
       },
       { actor, capability: "tabs:manage" },
     );
     notifyTabUpdated(this.notifier, result.cancelled);
-    notifyTabUpdated(this.notifier, result.tab);
+    notifyTabUpdated(this.notifier, result.tab, result.pendingCents);
     for (const order of result.movedOrders) notifyOrder(this.notifier, order, "order:updated");
-    return { tab: tabSummary(result.tab, result.hasPendingKitchenItems) };
+    for (const request of result.movedRequests)
+      notifyPaymentRequestUpdated(this.notifier, { ...request, tab_id: result.tab.id });
+    return { tab: tabSummary(result.tab, result.hasPendingKitchenItems, result) };
+  }
+
+  private async mergeInto(db: DbClient, source: tabs, target: tabs, actor: ActorContext) {
+    const ledger = await loadTabLedger(db, source);
+    if (summarizeLedger(ledger).pendingCents)
+      throw new ConflictError("A origem tem pagamentos pendentes", "TAB_HAS_PENDING_PAYMENTS");
+
+    const cancelled = await this.moveTabRecords(db, source, target);
+    const updated = await recalculateTab(db, target);
+    await auditTab(db, actor, "TAB_MERGED", source, cancelled);
+    await auditTab(db, actor, "TAB_MERGE_RECEIVED", target, updated.tab);
+    return {
+      ...updated,
+      cancelled,
+      movedOrders: ledger.orders,
+      movedRequests: ledger.requests.filter(({ status }) => status === "OPEN" || status === "ACCEPTED"),
+    };
+  }
+
+  private async moveTabRecords(db: DbClient, source: tabs, target: tabs) {
+    const { restaurant_id: restaurantId } = source;
+    await new PaymentsRepository(db).moveToTab(restaurantId, source.id, target.id);
+    await new TabAdjustmentsRepository(db).moveToTab(restaurantId, source.id, target.id);
+    await new PaymentRequestsRepository(db).moveToTab(restaurantId, source.id, target.id);
+    await new OrdersRepository(db).moveToTab(restaurantId, source.id, target.id, orderTableLabel(target));
+    await new TableSessionRepository(db).moveToTab(restaurantId, source.id, target.id);
+    return new TabsRepository(db).update(restaurantId, source.id, {
+      status: "CANCELLED",
+      cancel_reason: `Unida à comanda #${target.number}`,
+      subtotal_cents: 0,
+      service_fee_cents: 0,
+      total_cents: 0,
+      paid_cents: 0,
+      adjustments_cents: 0,
+      version: source.version + 1,
+    });
+  }
+
+  async preBill(actor: ActorContext, id: string, splitBy?: number) {
+    const restaurantId = tenant(actor);
+    const result = await this.unit.run(
+      restaurantId,
+      async ({ db }) => {
+        const repository = new TabsRepository(db);
+        const tab = await getTab(repository, restaurantId, id);
+        ensureOpenTab(tab);
+        const changed = tab.status === "OPEN";
+        const closing = changed
+          ? await repository.update(restaurantId, id, { status: "CLOSING", version: tab.version + 1 })
+          : tab;
+        return { tab: closing, ledger: await loadTabLedger(db, closing), changed };
+      },
+      { actor, capability: "tabs:read" },
+    );
+    const detail = tabDetail(result.tab, result.ledger);
+    if (result.changed) notifyTabUpdated(this.notifier, result.tab, detail.pending_cents);
+    return {
+      tab: detail,
+      ...(splitBy && { equal_split_preview: splitEqually(detail.remaining_cents, splitBy) }),
+    };
+  }
+
+  async close(actor: ActorContext, id: string, input: CloseTab) {
+    const restaurantId = tenant(actor);
+    const result = await this.unit.run(
+      restaurantId,
+      async (transaction) => {
+        const tab = await getTab(new TabsRepository(transaction.db), restaurantId, id);
+        checkVersion(tab, input.expected_version);
+        const balance = summarizeLedger(await loadTabLedger(transaction.db, tab));
+        return closeTab(transaction, tab, balance, transaction.actor ?? actor);
+      },
+      { actor, capability: "tabs:close" },
+    );
+    notifyClosedTab(this.notifier, result);
+    return { tab: tabSummary(result.tab, false), fiscal_document: null };
+  }
+
+  async cancel(actor: ActorContext, id: string, input: CancelTab) {
+    const restaurantId = tenant(actor);
+    const result = await this.unit.run(
+      restaurantId,
+      async (transaction) => {
+        const { db } = transaction;
+        const repository = new TabsRepository(db);
+        const tab = await getTab(repository, restaurantId, id);
+        checkVersion(tab, input.expected_version);
+        ensureOpenTab(tab);
+        const ledger = await loadTabLedger(db, tab);
+        if (tab.paid_cents || ledger.payments.some(({ status }) => status === "APPROVED"))
+          throw new ConflictError("Estorne os pagamentos antes de cancelar", "TAB_HAS_APPROVED_PAYMENTS");
+        if (summarizeLedger(ledger).pendingCents)
+          throw new ConflictError("A comanda tem pagamentos pendentes", "TAB_HAS_PENDING_PAYMENTS");
+        const live = transaction.actor ?? actor;
+        const affectedOrders = await cancelOpenOrderItems(db, ledger.orders, live, input.reason);
+        const recalculated = await recalculateTab(db, tab);
+        const cancelled = await repository.update(restaurantId, id, {
+          status: "CANCELLED",
+          cancel_reason: input.reason,
+        });
+        const resources = await closeTabResources(transaction, cancelled, live.id);
+        await new MenuRepository(db).audit(live, "TAB_CANCELLED", "TAB", id, auditSnapshot(tab), {
+          ...auditSnapshot(cancelled),
+          reason: input.reason,
+        });
+        return { ...recalculated, ...resources, tab: cancelled, affectedOrders };
+      },
+      { actor, capability: "tabs:cancel" },
+    );
+    notifyClosedTabResources(this.notifier, result);
+    for (const order of result.affectedOrders) notifyOrder(this.notifier, order, "order:updated");
+    notifyTabUpdated(this.notifier, result.tab);
+    return { tab: tabSummary(result.tab, false) };
   }
 }

@@ -5,7 +5,7 @@ import type { DbClient } from "../../shared/providers/prisma.ts";
 import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
 import { tablePublicUrl } from "../../shared/utils/public-url.ts";
 import { generatePublicCode } from "../../shared/utils/token.ts";
-import { closeSessionResources } from "../sessions/close-session.ts";
+import { closeSessionResources, notifySessionClosed } from "../sessions/close-session.ts";
 import { findOpenTableTab } from "../tabs/tabs-state.ts";
 import { TableSessionRepository } from "../sessions/sessions.repository.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
@@ -56,8 +56,7 @@ export class TablesService implements ITablesService {
         : null;
       return { table, closed };
     });
-    if (result.closed)
-      this.notifier.toRestaurant(restaurantId, "session:closed", { id: result.closed.id, reason: "STAFF" });
+    if (result.closed) notifySessionClosed(this.notifier, result.closed);
     return withUrl(result.table);
   }
 

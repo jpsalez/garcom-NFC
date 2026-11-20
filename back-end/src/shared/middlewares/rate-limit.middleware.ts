@@ -89,6 +89,12 @@ export const callLimiter = limiter(
   "Muitos chamados em pouco tempo. Aguarde alguns minutos.",
   byDeviceToken,
 );
+export const tableSessionLimiter = limiter(
+  1,
+  15,
+  "Muitas alterações no atendimento. Aguarde.",
+  byDeviceToken,
+);
 const maxFromEnv = (name: string, fallback: number) => {
   const value = Number(process.env[name]);
   return Number.isInteger(value) && value > 0 ? value : fallback;

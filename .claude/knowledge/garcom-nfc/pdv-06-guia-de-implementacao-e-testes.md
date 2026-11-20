@@ -94,6 +94,13 @@ configurado ao fechar uma comanda vazia junto com a sessão manual.
    - `payments.service.ts` (`create` com `allocations` e `idempotency_key`, `refund`), `payments.controller.ts`, `payments.routes.ts`.
 4. **Eventos Socket.IO:** `tab:opened/updated/closed`, `payment_request:created/updated`, `payment:updated`.
 
+`tab-ledger.ts` carrega os registros financeiros usados no recálculo e nas consultas. `close-tab.ts` reúne
+o fechamento, as sessões vinculadas e as solicitações. `cancel-order-items.ts` encerra unidades ainda
+na fila quando a comanda é cancelada. `payment-allocation.ts` valida saldo dos itens e taxa proporcional,
+e `payment-view.ts` define o DTO de pagamentos da equipe. O fluxo NFC usa `payment-requests.schemas.ts`,
+`payment-requests.routes.ts`, `payment-request-view.ts` e `payment-request-events.ts`.
+As operações no banco usam `payment-requests.repository.ts` e `tab-adjustments.repository.ts`.
+
 ### Testes obrigatórios (`tests/tabs-closing-and-payments.test.ts`)
 - **Permissões (`PDV-D06`):** `WAITER` recebe pagamento e fecha conta, mas toma `403` ao dar desconto, remover 10%, estornar ou cancelar comanda; `CASHIER` remove 10% com motivo mas toma `403` em desconto/estorno/cancelamento; `OWNER`/`MANAGER` fazem tudo.
 - **Divisão completa:** mesa de 3 pessoas com item compartilhado — Pessoa 1 paga via `allocations` (item + 1/3 porção + 10%), Pessoa 2 paga valor livre, Pessoa 3 paga restante em dinheiro com troco → `remaining_cents === 0` → `close` fecha comanda e encerra sessão NFC.

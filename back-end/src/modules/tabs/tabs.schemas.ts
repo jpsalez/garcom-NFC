@@ -47,3 +47,29 @@ export type UpdateTab = z.infer<typeof updateTabSchema>;
 export type TransferTab = z.infer<typeof transferTabSchema>;
 export type MergeTab = z.infer<typeof mergeTabSchema>;
 export type ListTabs = z.infer<typeof listTabsQuery>;
+
+const scopeReason = z.string().trim().min(3).max(500);
+export const preBillQuery = z.strictObject({ split_by: z.coerce.number().int().min(2).max(100).optional() });
+export const closeTabSchema = z.strictObject({
+  expected_version: expectedVersion,
+  customer_document: z
+    .string()
+    .regex(/^(?:[0-9]{11}|[0-9]{14})$/)
+    .optional(),
+});
+export const cancelTabSchema = z.strictObject({ expected_version: expectedVersion, reason: scopeReason });
+
+export const tabAdjustmentSchema = z
+  .strictObject({
+    type: z.enum(["DISCOUNT", "COUVERT", "TIP"]),
+    mode: z.enum(["FIXED_CENTS", "PERCENT_BPS"]),
+    value: z.number().int().min(1).max(2_147_483_647),
+    reason: scopeReason,
+  })
+  .refine((input) => input.mode !== "PERCENT_BPS" || input.value <= 10_000, "Percentual máximo de 100%");
+export const waiveFeeSchema = z.strictObject({ waived: z.boolean(), reason: scopeReason });
+
+export type CloseTab = z.infer<typeof closeTabSchema>;
+export type CancelTab = z.infer<typeof cancelTabSchema>;
+export type TabAdjustment = z.infer<typeof tabAdjustmentSchema>;
+export type WaiveFee = z.infer<typeof waiveFeeSchema>;
