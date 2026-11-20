@@ -12,7 +12,7 @@ import { auth, cookieOf, ownerOf, staffToken } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
 import { passwordHash } from "../src/shared/utils/password.ts";
 import { createTable } from "./helpers/factories.ts";
-import { categoryToken } from "./helpers/menu.ts";
+import { categoryToken, menuFixture } from "./helpers/menu.ts";
 
 let server: Server;
 let url: string;
@@ -56,6 +56,87 @@ const next = (socket: Socket, event: string) =>
   });
 
 describe("sala autorizada de pedidos", () => {
+  it("reconcilia pedidos do QR na cozinha e no atendimento após preparo concorrente e reconexão", async () => {
+    const f = await menuFixture();
+    const kitchen = await categoryToken(f.restaurantId, "KITCHEN");
+    const waiter = await categoryToken(f.restaurantId, "WAITER");
+    const other = await categoryToken(f.restaurantId, "OTHER");
+    const foreign = await ownerOf("fila-externa");
+    const kitchenSocket = await connectAs(kitchen.token);
+    const waiterSocket = await connectAs(waiter.token);
+    const kitchenCreated = next(kitchenSocket, "order:created");
+    const waiterCreated = next(waiterSocket, "order:created");
+
+    const submit = (quantity: number) =>
+      api().post("/api/v1/public/orders").set("X-Table-Token", f.deviceToken).send(f.submission(quantity));
+    const list = (token: string) => api().get("/api/v1/orders?progress=open").set(auth(token));
+    const created = await submit(3);
+    expect(created.status).toBe(201);
+    const { id, items, version } = created.body.order;
+    expect(await kitchenCreated).toEqual({ order_id: id, version });
+    expect(await waiterCreated).toEqual({ order_id: id, version });
+    const [kitchenView, waiterView, denied, foreignView] = await Promise.all([
+      list(kitchen.token),
+      list(waiter.token),
+      list(other.token),
+      list(foreign.token),
+    ]);
+    expect(kitchenView.body.items).toMatchObject([{ id, version }]);
+    expect(waiterView.body.items).toMatchObject([{ id, version }]);
+    expect(denied.status).toBe(403);
+    expect(foreignView.body.items).toEqual([]);
+
+    const move = (
+      token: string,
+      expected_version: number,
+      from_stage: string,
+      to_stage: string,
+      quantity: number,
+    ) =>
+      api()
+        .post(`/api/v1/orders/${id}/transitions`)
+        .set(auth(token))
+        .send({
+          expected_version,
+          operations: [{ item_id: items[0].id, from_stage, to_stage, quantity }],
+        });
+    const updated = next(waiterSocket, "order:updated");
+    const attempts = await Promise.all([
+      move(kitchen.token, version, "PENDING", "PREPARING", 2),
+      move(waiter.token, version, "PENDING", "PREPARING", 2),
+    ]);
+    expect(attempts.map(({ status }) => status).sort()).toEqual([200, 409]);
+    expect(attempts.find(({ status }) => status === 409)?.body.code).toBe("ORDER_VERSION_CONFLICT");
+    expect(await updated).toEqual({ order_id: id, version: version + 1 });
+    const fresh = await list(kitchen.token);
+    expect(fresh.body.items[0]).toMatchObject({
+      version: version + 1,
+      progress: { pending: 1, preparing: 2 },
+    });
+
+    kitchenSocket.disconnect();
+    const missed = await submit(1);
+    expect(missed.status).toBe(201);
+    const readyEvent = next(waiterSocket, "order:updated");
+    const ready = await move(kitchen.token, fresh.body.items[0].version, "PREPARING", "READY", 1);
+    expect(ready.status).toBe(200);
+    expect(await readyEvent).toEqual({ order_id: id, version: ready.body.version });
+    const waiterFresh = await list(waiter.token);
+    const toDeliver = waiterFresh.body.items.find((order: { id: string }) => order.id === id);
+    expect(toDeliver.progress).toMatchObject({ pending: 1, preparing: 1, ready: 1 });
+    const delivered = await move(waiter.token, toDeliver.version, "READY", "DELIVERED", 1);
+    expect(delivered.body.progress).toMatchObject({ pending: 1, preparing: 1, ready: 0, delivered: 1 });
+
+    await connectAs(kitchen.token);
+    const recovered = await list(kitchen.token);
+    expect(recovered.body.items).toHaveLength(2);
+    expect(recovered.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: missed.body.order.id }),
+        expect.objectContaining({ id, version: delivered.body.version }),
+      ]),
+    );
+  });
   it("avisa equipe operacional sem vazar para outros STAFF ou restaurante", async () => {
     const a = await ownerOf("orders-a"),
       b = await ownerOf("orders-b");

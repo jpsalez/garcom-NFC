@@ -22,6 +22,6 @@ Node.js, Express, TypeScript, Prisma e PostgreSQL. Autenticação do staff com J
 
 ## Cardápio e pedidos
 
-O backend contempla catálogo editável, publicações, mídia local, envio de pedidos, andamento parcial, auditoria e permissões por categoria. Novos restaurantes recebem cardápio vazio e pedidos pelo cliente desabilitados na mesma transação do cadastro. Os contratos estão no Swagger e em [docs/menu/API.md](../docs/menu/API.md); as telas ficam para a etapa de frontend.
+O backend contempla catálogo editável, publicações, mídia local, envio de pedidos, andamento parcial, auditoria e permissões por categoria. Novos restaurantes recebem cardápio vazio e pedidos pelo cliente desabilitados na mesma transação do cadastro. Os contratos estão no Swagger e na [documentação técnica](../docs/Documentacao-Tecnica-garcom-NFC.pdf); as telas ficam para a etapa de frontend.
 
-Detalhes, verificação e roteiro em [docs/menu](../docs/menu/README.md). Armazenamento local persistente nesta versão; bucket Amazon S3 como evolução futura, sem dependência obrigatória de AWS no deploy inicial.
+Detalhes de integração e operação estão na documentação técnica. Armazenamento local persistente nesta versão; bucket Amazon S3 como evolução futura, sem dependência obrigatória de AWS no deploy inicial.

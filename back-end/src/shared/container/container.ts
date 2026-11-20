@@ -57,6 +57,10 @@ import {
   OrderSettingsService,
   type IOrderSettingsService,
 } from "../../modules/orders/order-settings.service.ts";
+import type { IPrintingRepository } from "../../modules/printing/printing.repository.interface.ts";
+import { PrintingRepository } from "../../modules/printing/printing.repository.ts";
+import type { IPrintingService } from "../../modules/printing/printing.interfaces.ts";
+import { PrintingService } from "../../modules/printing/printing.service.ts";
 import { MediaRepository } from "../../modules/media/media.repository.ts";
 import { MediaService } from "../../modules/media/media.service.ts";
 import type { IMediaService } from "../../modules/media/media.interfaces.ts";
@@ -73,6 +77,8 @@ export function registerDependencies() {
   container.registerSingleton<IOrdersService>("OrdersService", OrdersService);
   container.registerSingleton<IOrderSettingsRepository>("OrderSettingsRepository", OrderSettingsRepository);
   container.registerSingleton<IOrderSettingsService>("OrderSettingsService", OrderSettingsService);
+  container.registerSingleton<IPrintingRepository>("PrintingRepository", PrintingRepository);
+  container.registerSingleton<IPrintingService>("PrintingService", PrintingService);
   container.registerSingleton("MediaRepository", MediaRepository);
   container.registerSingleton<IMediaService>("MediaService", MediaService);
   container.registerSingleton<IStorageProvider>("StorageProvider", LocalStorageProvider);

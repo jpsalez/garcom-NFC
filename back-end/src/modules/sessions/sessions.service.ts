@@ -13,7 +13,7 @@ import type { ISessionsService } from "./sessions.interfaces.ts";
 import type { ITableSessionRepository } from "./sessions.repository.interface.ts";
 import { SessionTokenRepository, TableSessionRepository } from "./sessions.repository.ts";
 
-const sessionTtlMs = () => (Number(process.env.TABLE_SESSION_TTL) || 14400) * 1000;
+export const sessionTtlMs = () => (Number(process.env.TABLE_SESSION_TTL) || 14400) * 1000;
 @injectable()
 export class SessionsService implements ISessionsService {
   constructor(
@@ -54,11 +54,13 @@ export class SessionsService implements ISessionsService {
     if (result.opened)
       this.notifier.toRestaurant(table.restaurant_id, "session:opened", {
         id: result.session.id,
+        tab_number: result.session.tab_number,
         table: { id: table.id, label: result.table.label },
         expires_at: result.session.expires_at,
       });
     return {
       token: result.token,
+      tab_number: result.session.tab_number,
       expires_at: result.session.expires_at,
       table: { label: result.table.label },
       restaurant: { name: result.table.restaurant.name },
@@ -88,6 +90,7 @@ export class SessionsService implements ISessionsService {
       this.notifier.toRestaurant(restaurantId, "session:closed", { id: result.expiredId, reason: "TIMEOUT" });
     this.notifier.toRestaurant(restaurantId, "session:opened", {
       id: result.session.id,
+      tab_number: result.session.tab_number,
       table: { id: tableId, label: result.table.label },
       expires_at: result.session.expires_at,
     });

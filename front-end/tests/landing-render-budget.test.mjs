@@ -4,12 +4,12 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 
-const module = {};
+const testedExports = {};
 runInNewContext(ts.transpileModule(
   readFileSync(new URL('../components/landing/render-budget.ts', import.meta.url), 'utf8'),
   { compilerOptions: { module: ts.ModuleKind.CommonJS } },
-).outputText, { exports: module });
-const { createRenderBudget } = module;
+).outputText, { exports: testedExports });
+const { createRenderBudget } = testedExports;
 
 test('mantém 60 fps com pequenas variações de tempo, sem perder um frame a cada arredondamento', () => {
   const budget = createRenderBudget(false);

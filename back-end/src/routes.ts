@@ -1,6 +1,7 @@
 import express from "express";
 import { menuRoutes } from "./modules/menu/menu.routes.ts";
 import { ordersRoutes } from "./modules/orders/orders.routes.ts";
+import { printingRoutes } from "./modules/printing/printing.routes.ts";
 import { mediaRoutes } from "./modules/media/media.routes.ts";
 import type { Router, Request, Response } from "express";
 import { container } from "./shared/container/container.ts";
@@ -181,5 +182,6 @@ export function SetupRoutes() {
   router.use(menuRoutes());
   router.use(ordersRoutes());
   router.use(mediaRoutes());
+  router.use(printingRoutes());
   return router;
 }

@@ -36,6 +36,7 @@ FILES = [
     "cap-09-estado-roadmap-limitacoes", "apendice-a-divergencias", "apendice-b-glossario",
     "apendice-c0-introducao", "apendice-c1-modelo-de-dados-v02", "apendice-c2-endpoints-eventos-v02",
     "apendice-c3-fluxos-telas-v02", "apendice-c4-desenho-proposto-modulos", "apendice-c5-propostas-guia",
+    "apendice-d-cardapio-e-pedidos",
 ]
 VERSION = "1.2"  # padrão; --versao muda
 FIG_RE = re.compile(r"^_Figura: \*\*Figura (\d+\.\d+)\*\* – (.*)_\s*$")
@@ -85,7 +86,7 @@ def convert(name):
             res.append("")
         else:
             res.append(ln)
-    html = markdown.markdown("\n".join(res), extensions=["tables", "sane_lists"])
+    html = markdown.markdown("\n".join(res), extensions=["tables", "sane_lists", "fenced_code"])
     # Cada capítulo (H1) começa em página nova; wrapper para o CSS
     return f'<section class="chapter">{html}</section>'
 

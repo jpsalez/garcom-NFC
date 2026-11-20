@@ -53,6 +53,7 @@ export function orderView(order: OrderRecord, staff = false) {
   return {
     id: order.id,
     ...(staff ? { session_id: order.session_id } : {}),
+    tab_number: order.tab_number_snapshot,
     table_label: order.table_label_snapshot,
     source: order.source,
     fulfillment_type: order.fulfillment_type,

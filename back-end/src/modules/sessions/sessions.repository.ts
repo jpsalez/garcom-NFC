@@ -17,8 +17,18 @@ export class TableSessionRepository implements ITableSessionRepository {
     this.db = db;
   }
 
-  create(data: CreateTableSessionData) {
-    return this.db.table_sessions.create({ data });
+  async nextTabNumber(restaurantId: string) {
+    const updated = await this.db.restaurants.update({
+      where: { id: restaurantId },
+      data: { next_tab_number: { increment: 1 } },
+      select: { next_tab_number: true },
+    });
+    return updated.next_tab_number - 1;
+  }
+
+  async create(data: CreateTableSessionData) {
+    const tabNumber = data.tab_number ?? (await this.nextTabNumber(data.restaurant_id));
+    return this.db.table_sessions.create({ data: { ...data, tab_number: tabNumber } });
   }
 
   findById(restaurantId: string, id: string) {

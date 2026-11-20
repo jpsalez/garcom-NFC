@@ -10,10 +10,14 @@ export function register(body: { name: string; email: string; password: string; 
   return api<void>("/auth/register", { method: "POST", body, renew: false });
 }
 
+export function getCurrentUser() {
+  return api<User>("/auth/me", { cache: "no-store" });
+}
+
 // Ao abrir o app: descobre se os cookies ainda valem (renova se o acesso venceu). Qualquer falha vale como sem login.
 export async function restoreSession() {
   try {
-    saveSession({ user: await api<User>("/auth/me") });
+    saveSession({ user: await getCurrentUser() });
   } catch {
     clearSession();
   }

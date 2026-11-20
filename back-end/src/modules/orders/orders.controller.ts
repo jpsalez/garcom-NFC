@@ -15,6 +15,10 @@ export class OrdersController {
     const result = await this.service.submit(deviceOf(req), req.body);
     return res.status(result.replayed ? 200 : 201).json(result);
   };
+  posSubmit = async (req: Request, res: Response) => {
+    const result = await this.service.posSubmit(actorOf(req), req.body);
+    return res.status(result.replayed ? 200 : 201).json(result);
+  };
   list = async (req: Request, res: Response) =>
     res.json(await this.service.list(actorOf(req), ordersQuery.parse(req.query)));
   get = async (req: Request, res: Response) =>

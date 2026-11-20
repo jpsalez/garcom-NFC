@@ -6,6 +6,7 @@ import { clearDevice, readDevice, saveDevice, type Device } from "@/lib/device"
 import type { CallType } from "@/lib/types"
 import { createCall } from "@/services/calls"
 import { scanTable } from "@/services/tables"
+import MenuModal from "@/components/mesaComponents/menuModal"
 
 function openErrorMessage(err: unknown) {
     if (err instanceof ApiError && err.status === 404) return 'Mesa não encontrada ou indisponível. Fale com o garçom.'
@@ -16,6 +17,7 @@ function openErrorMessage(err: unknown) {
 export default function MesaPage({ code }: { code: string }) {
 
     const [modal, setModal] = useState(false)
+    const [menuOpen, setMenuOpen] = useState(false)
     const [device, setDevice] = useState<Device | null>(null)
     const [fatal, setFatal] = useState('')
     const [attempt, setAttempt] = useState(0)
@@ -78,6 +80,8 @@ export default function MesaPage({ code }: { code: string }) {
     
     return(
         <>
+
+        {menuOpen && <MenuModal code={code} token={device.token} onClose={() => setMenuOpen(false)} />}
 
         {/* Modal fechar conta */}
         <div
@@ -142,6 +146,10 @@ export default function MesaPage({ code }: { code: string }) {
             </div>
 
             {notice && <p role="alert" className="px-5 text-center text-red-700">{notice}</p>}
+
+            <div className="w-full px-5">
+                <button onClick={() => setMenuOpen(true)} className="w-full rounded-lg bg-[#8dbf21] p-3 font-semibold text-[#1d2540] shadow-lg">Ver cardápio</button>
+            </div>
 
             <div className="w-full flex-none flex items-center justify-center p-5">
                 <button 

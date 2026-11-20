@@ -26,6 +26,7 @@ export interface IMenuService {
     input: unknown,
   ): Promise<{ publication_id: string; revision_number: number; replayed: boolean }>;
   unpublish(actor: ActorContext, input: unknown): Promise<{ published_revision_id: null }>;
+  published(actor: ActorContext): Promise<PublicMenu>;
   publicMenu(by: "slug" | "table", value: string): Promise<PublicMenu>;
   availability(
     actor: ActorContext,

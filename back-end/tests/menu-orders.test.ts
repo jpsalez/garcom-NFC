@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "./helpers/app.ts";
-import { auth } from "./helpers/auth.ts";
+import { auth, ownerOf } from "./helpers/auth.ts";
 import { prisma, resetDb } from "./helpers/db.ts";
 import { categoryToken, menuFixture } from "./helpers/menu.ts";
 import { container } from "../src/shared/container/container.ts";
@@ -86,6 +86,34 @@ describe("catálogo e permissões", () => {
   });
 });
 describe("envio e andamento dos pedidos", () => {
+  it("a fila aberta da cozinha mantém pedidos de sessões encerradas no restaurante autenticado", async () => {
+    const f = await menuFixture();
+    const kitchen = await categoryToken(f.restaurantId, "KITCHEN");
+    const other = await ownerOf("outro-restaurante");
+    const created = await api()
+      .post("/api/v1/public/orders")
+      .set("X-Table-Token", f.deviceToken)
+      .send(f.submission());
+    expect(created.status).toBe(201);
+    const session = await prisma.table_sessions.findFirstOrThrow({
+      where: { table_id: f.table.id, status: "ACTIVE" },
+    });
+    await prisma.table_sessions.update({
+      where: { id: session.id },
+      data: { expires_at: new Date(Date.now() - 1000) },
+    });
+    expect((await api().post(`/api/v1/public/tables/${f.table.public_code}/scan`)).status).toBe(201);
+    const closed = await prisma.table_sessions.findUniqueOrThrow({ where: { id: session.id } });
+    expect(closed).toMatchObject({ status: "CLOSED", closed_reason: "TIMEOUT" });
+
+    const queue = await api().get("/api/v1/orders?progress=open").set(auth(kitchen.token));
+    expect(queue.status).toBe(200);
+    expect(queue.body.items.map((order: { id: string }) => order.id)).toEqual([created.body.order.id]);
+    const otherQueue = await api().get("/api/v1/orders?progress=open").set(auth(other.token));
+    expect(otherQueue.status).toBe(200);
+    expect(otherQueue.body.items).toEqual([]);
+  });
+
   it("envios simultâneos com mesma chave criam um pedido e não expõem dados internos", async () => {
     const f = await menuFixture(),
       body = f.submission(2);

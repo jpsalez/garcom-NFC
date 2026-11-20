@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { printingPaths } from "./printing-openapi.ts";
 import { menuPaths } from "./menu-openapi.ts";
 import { createRestaurantSchema, setActiveSchema } from "../modules/administration/administration.schema.ts";
 import { forgotPasswordSchema, resetPasswordSchema } from "../modules/auth/password-reset.schema.ts";
@@ -69,10 +70,12 @@ export const openApiSpec = {
     securitySchemes: {
       cookieAuth: { type: "apiKey", in: "cookie", name: "access_token" },
       tableToken: { type: "apiKey", in: "header", name: "X-Table-Token" },
+      printAgentToken: { type: "http", scheme: "bearer" },
     },
   },
   paths: {
     ...menuPaths,
+    ...printingPaths,
     "/health": { get: operation({ tag: "Sistema", summary: "Verifica se a API está no ar", auth: false }) },
     "/auth/register": {
       post: operation({

@@ -224,7 +224,14 @@ describe("GET /sessions", () => {
     for (const [i, label] of ["M1", "M2", "M3"].entries()) {
       const table = await createTable(a.restaurantId, label);
       await prisma.table_sessions.create({
-        data: { restaurant_id: a.restaurantId, table_id: table.id, status: "CLOSED", expires_at: new Date(), created_at: new Date(2026, 0, 1 + i) },
+        data: {
+          restaurant_id: a.restaurantId,
+          table_id: table.id,
+          tab_number: i + 1,
+          status: "CLOSED",
+          expires_at: new Date(),
+          created_at: new Date(2026, 0, 1 + i),
+        },
       });
     }
     const labels = async (query: string) =>

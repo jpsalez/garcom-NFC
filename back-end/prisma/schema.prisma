@@ -20,6 +20,7 @@ model restaurants {
   name             String
   slug             String                        @unique
   active           Boolean                       @default(true)
+  next_tab_number  Int                           @default(1)
   created_at       DateTime                      @default(now())
   users            users[]
   tables           tables[]
@@ -30,6 +31,7 @@ model restaurants {
   media_assets     media_assets[]                @relation("media_assets_restaurant")
   orders           orders[]                      @relation("orders_restaurant")
   operation_events restaurant_operation_events[] @relation("restaurant_operation_events_restaurant")
+  print_destinations print_destinations[]
 }
 
 model users {
@@ -50,6 +52,7 @@ model users {
   created_media               media_assets[]                @relation("media_assets_created_by_user")
   published_menus             menu_publications[]           @relation("menu_publications_published_by_user")
   order_events                order_events[]                @relation("order_events_actor")
+  submitted_orders            orders[]                      @relation("orders_submitted_by_user")
   restaurant_operation_events restaurant_operation_events[] @relation("restaurant_operation_events_actor")
 }
 
@@ -76,6 +79,7 @@ model table_sessions {
   restaurant     restaurants      @relation(fields: [restaurant_id], references: [id])
   table_id       String
   table          tables           @relation(fields: [table_id], references: [id])
+  tab_number     Int
   status         tableStatus      @default(ACTIVE)
   keep_open      Boolean          @default(false)
   expires_at     DateTime
@@ -90,6 +94,7 @@ model table_sessions {
   orders         orders[]         @relation("orders_session")
 
   @@unique([restaurant_id, id])
+  @@unique([restaurant_id, tab_number])
   @@index([restaurant_id, status])
   @@index([table_id])
 }
@@ -451,6 +456,8 @@ model orders {
   session_id            String?
   publication_id        String?
   submitted_by_token_id String?
+  submitted_by_user_id  String?
+  tab_number_snapshot   Int
   table_label_snapshot  String             @db.VarChar(120)
   submission_key        String             @db.VarChar(64)
   request_hash          String             @db.VarChar(64)
@@ -464,8 +471,10 @@ model orders {
   session               table_sessions?    @relation("orders_session", fields: [restaurant_id, session_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
   publication           menu_publications? @relation("orders_publication", fields: [restaurant_id, publication_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
   submitted_by_token    session_tokens?    @relation("orders_submitted_by_token", fields: [submitted_by_token_id, session_id], references: [id, session_id], onDelete: Restrict, onUpdate: Restrict)
+  submitted_by_user     users?             @relation("orders_submitted_by_user", fields: [submitted_by_user_id], references: [id], onDelete: SetNull, onUpdate: Restrict)
   items                 order_items[]      @relation("order_items_order")
   events                order_events[]     @relation("order_events_order")
+  print_jobs            print_jobs[]
 
   @@unique([restaurant_id, id])
   @@unique([restaurant_id, submission_key])
@@ -473,6 +482,7 @@ model orders {
   @@index([restaurant_id, session_id, created_at])
   @@index([restaurant_id, publication_id])
   @@index([submitted_by_token_id, session_id])
+  @@index([submitted_by_user_id])
 }
 
 model order_items {
@@ -593,6 +603,7 @@ enum media_derivative_kind {
 
 enum order_source {
   LOCAL_MENU
+  POS
 }
 
 enum order_fulfillment {
@@ -616,4 +627,70 @@ enum audit_actor_type {
   USER
   TABLE_DEVICE
   SYSTEM
+}
+
+model print_destinations {
+  restaurant_id       String
+  destination         print_destination
+  enabled             Boolean           @default(false)
+  pairing_code_hash   String?           @unique @db.VarChar(64)
+  pairing_expires_at  DateTime?
+  credential_hash     String?           @unique @db.VarChar(64)
+  last_contact_at     DateTime?
+  interrupted_at      DateTime?
+  restaurant          restaurants       @relation(fields: [restaurant_id], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  jobs                print_jobs[]
+
+  @@id([restaurant_id, destination])
+}
+
+model print_jobs {
+  id                          String             @id @default(uuid())
+  restaurant_id               String
+  order_id                    String
+  destination                 print_destination
+  source_event                String             @db.VarChar(64)
+  status                      print_job_status   @default(PENDING)
+  payload_version             Int
+  payload                     Json
+  created_at                  DateTime           @default(now())
+  order_version               Int?
+  attempts                    Int                @default(0)
+  next_attempt_at             DateTime?
+  reservation_id              String?            @unique
+  reservation_expires_at      DateTime?
+  reservation_credential_hash String?            @db.VarChar(64)
+  reported_outcome            print_job_outcome?
+  original_job_id             String?
+  requested_by                String?
+  reason                      String?            @db.VarChar(500)
+  order                       orders             @relation(fields: [restaurant_id, order_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  print_destination           print_destinations @relation(fields: [restaurant_id, destination], references: [restaurant_id, destination], onDelete: Restrict, onUpdate: Restrict)
+  original_job                print_jobs?        @relation("PrintReprints", fields: [restaurant_id, order_id, destination, original_job_id], references: [restaurant_id, order_id, destination, id], onDelete: Restrict, onUpdate: Restrict, map: "print_jobs_original_job_fkey")
+  reprints                    print_jobs[]       @relation("PrintReprints")
+
+  @@unique([restaurant_id, order_id, destination, source_event], map: "print_jobs_source_key")
+  @@unique([restaurant_id, order_id, destination, id], map: "print_jobs_original_reference_key")
+  @@index([restaurant_id, created_at, id])
+  @@index([restaurant_id, destination, status, created_at, id], map: "print_jobs_claim_idx")
+}
+
+enum print_destination {
+  KITCHEN
+}
+
+enum print_job_status {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SUPPRESSED
+  UNCERTAIN
+  REVIEW_REQUIRED
+}
+
+enum print_job_outcome {
+  SENT
+  FAILED_BEFORE_SEND
+  UNCERTAIN
 }

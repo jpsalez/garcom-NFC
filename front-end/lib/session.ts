@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
+import type { StaffCategory } from "@/lib/types";
 
 export type Role = "SUPER_ADMIN" | "OWNER" | "STAFF";
-export type User = { id: string; name: string; email: string; role: Role; restaurant_id: string | null };
+export type User = { id: string; name: string; email: string; role: Role; restaurant_id: string | null; category: StaffCategory | null };
 // Só o usuário: o JWT e o refresh token ficam em cookies httpOnly, que o JavaScript não lê
 export type Session = { user: User };
 

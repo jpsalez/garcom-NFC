@@ -3,24 +3,26 @@ export const selectionSchema = z.strictObject({
   option_id: z.uuid(),
   quantity: z.number().int().min(1).max(50),
 });
+export const submitItemSchema = z.strictObject({
+  product_id: z.uuid(),
+  variant_id: z.uuid(),
+  quantity: z.number().int().min(1).max(20),
+  selections: z
+    .array(selectionSchema)
+    .max(1000)
+    .refine((rows) => new Set(rows.map((row) => row.option_id)).size === rows.length, "Opção repetida"),
+  notes: z.string().trim().max(500).optional(),
+});
 export const submitSchema = z.strictObject({
   submission_key: z.uuid(),
   publication_id: z.uuid(),
-  items: z
-    .array(
-      z.strictObject({
-        product_id: z.uuid(),
-        variant_id: z.uuid(),
-        quantity: z.number().int().min(1).max(20),
-        selections: z
-          .array(selectionSchema)
-          .max(1000)
-          .refine((rows) => new Set(rows.map((row) => row.option_id)).size === rows.length, "Opção repetida"),
-        notes: z.string().trim().max(500).optional(),
-      }),
-    )
-    .min(1)
-    .max(50),
+  items: z.array(submitItemSchema).min(1).max(50),
+});
+export const posSubmitSchema = z.strictObject({
+  table_id: z.uuid(),
+  publication_id: z.uuid(),
+  submission_key: z.uuid(),
+  items: z.array(submitItemSchema).min(1).max(50),
 });
 export const stages = z.enum(["PENDING", "PREPARING", "READY", "DELIVERED", "CANCELLED"]);
 export const transitionsSchema = z.strictObject({
@@ -60,5 +62,6 @@ export const eventsQuery = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 export type Submission = z.infer<typeof submitSchema>;
+export type PosSubmission = z.infer<typeof posSubmitSchema>;
 export type Transition = z.infer<typeof transitionsSchema>["operations"][number];
 export type OrdersQuery = z.infer<typeof ordersQuery>;
