@@ -24,6 +24,14 @@ Como usar: (1) leia só este índice; (2) escolha 1 ou 2 arquivos; (3) para deta
 | cap-09-estado-roadmap-limitacoes.md | 2172 | **9. Estado de implementação, roadmap e limitações** — 9.1 Estado por módulo; 9.2 Estado por requisito (v0.3); 9.3 Roadmap por fase; 9.4 Limitações e riscos; 9.4.1 Limitações do MVP (por decisão); 9.4.2 Riscos técnicos; 9.4.3 Pontos a validar do MVP (v0.3) |
 | revisao-geral-2026-11-14.md | — | **Revisão geral do back-end** — o que foi corrigido, o que ficou de fora e roteiro de leitura manual do código |
 | integracao-front-2026-11-14.md | — | **Integração do front com a API** — como rodar, arquitetura do front, decisões tomadas sem o usuário e estado de cada passo |
+| apendice-d-cardapio-e-pedidos.md | — | **Apêndice D. Cardápio, pedidos e impressão** — catálogo, publicação, envio de pedidos, CloudPRNT e impressão via navegador |
+| pdv-00-levantamento.md | ~1400 | **PDV · Levantamento técnico (20/11/2026)** — módulos atuais, ciclo de vida, tentativa revertida, dinheiro, autorização, infra e lacunas |
+| pdv-01-planejamento.md | ~2000 | **PDV · Planejamento consolidado** — decisões PDV-D01..D12, matriz de capabilities, módulos e roadmap em 7 etapas |
+| pdv-02-modelo-de-dados.md | ~2600 | **PDV · Modelo de dados** — alterações no schema atual, triggers, novas tabelas (`tabs`, `payments`, `cash_shifts`, agregados, fiscal) e índices parciais |
+| pdv-03-fluxos-e-api.md | ~2400 | **PDV · Fluxos, API REST e Socket.IO** — F1..F7, contratos `/api/v1`, eventos em tempo real e códigos de erro |
+| pdv-04-maquininhas-e-fiscal.md | ~1900 | **PDV · Maquininhas e NFC-e** — interface `PaymentProvider` (N0 Manual + N1 Mercado Pago Point), OAuth, webhooks e `FiscalProvider` (Etapa 6) |
+| pdv-05-kpis-e-previsoes.md | ~2800 | **PDV · Histórico, KPIs e Previsões** — dia operacional, UPSERT/rebuild, SQLs de KPIs, algoritmo WMA/alertas e contratos JSON |
+| pdv-06-guia-de-implementacao-e-testes.md | ~2700 | **PDV · Guia de implementação e testes** — checklist de arquivos por etapa (0..6), ordem de migrations, matriz Vitest e DoD |
 
 Arquivo morto (não leia por padrão): `../_arquivo/` guarda anotações antigas, por exemplo `sessao-2026-11-12-onde-paramos.md`.
 

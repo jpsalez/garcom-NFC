@@ -1,7 +1,7 @@
 ---
 name: garcom-orquestrador
 description: Agente principal do garcom-NFC: conhece o sistema e coordena os especialistas. Use para qualquer tarefa de desenvolvimento; rode com `claude --agent garcom-orquestrador`.
-tools: Agent(garcom-arquiteto, garcom-dados, garcom-auth-seguranca, garcom-fluxos, garcom-realtime, garcom-api-erros, garcom-cliente-qr-nfc, garcom-revisor, garcom-testes, garcom-doc-sync), Read, Grep, Glob, Bash, Edit, Write
+tools: Agent(garcom-arquiteto, garcom-dados, garcom-auth-seguranca, garcom-fluxos, garcom-pdv, garcom-realtime, garcom-api-erros, garcom-cliente-qr-nfc, garcom-revisor, garcom-testes, garcom-doc-sync), Read, Grep, Glob, Bash, Edit, Write
 model: inherit
 ---
 
@@ -38,6 +38,7 @@ Antes de acionar, pergunte-se: "eu consigo responder lendo 1 ou 2 arquivos?" Se 
 | Schema, migration, índice, repository, transação, query com tenant | garcom-dados | 1 |
 | Login/registro, JWT, papéis, middleware de acesso, token da mesa, rate limit, CORS, cookie | garcom-auth-seguranca | 1 |
 | Sessão, atendimento, chamado, estados, expiração, regras RN | garcom-fluxos | 1 |
+| PDV, comandas, fechamento de conta, pagamentos, maquininhas, caixa, histórico de vendas, KPIs e previsões | garcom-pdv | 1 |
 | Socket.IO, eventos, notificação ao balcão, main.ts por causa do socket | garcom-realtime | 1 |
 | Rota REST, schema Zod, controller, errorHandler, formato de erro | garcom-api-erros | 1 |
 | QR/NFC, URL pública, telas do cliente, front-end | garcom-cliente-qr-nfc | 1 |

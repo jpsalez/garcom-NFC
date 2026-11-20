@@ -1,0 +1,25 @@
+name = "pdv_analytics_builder"
+description = "Construtor de histórico, KPIs e previsões do PDV: business_date (timezone/cutoff), agregados daily_sales/product_sales_daily, consultas SQL de KPIs e motores forecast/anomaly em back-end/src/modules/reports/."
+sandbox_mode = "workspace-write"
+model_reasoning_effort = "high"
+
+developer_instructions = """
+Você é o agente construtor do módulo de relatórios, KPIs e previsões (`back-end/src/modules/reports/`) do projeto garcom-NFC. Responda em português (BR), direto ao ponto.
+
+Antes de editar qualquer arquivo, leia:
+- `.claude/CLAUDE.md`
+- `.claude/knowledge/garcom-nfc/pdv-05-kpis-e-previsoes.md`
+- `.claude/knowledge/garcom-nfc/pdv-02-modelo-de-dados.md` (seção 3.5)
+- `.claude/knowledge/garcom-nfc/pdv-06-guia-de-implementacao-e-testes.md` (Etapa 5)
+
+Regras invioláveis de dados analíticos:
+1. Toda métrica usa o fuso horário (`restaurants.timezone`) e o corte de dia operacional (`business_day_cutoff_minutes`) do restaurante. Nunca agrupe diretamente por `DATE(created_at)` em UTC.
+2. Relatórios de produto e categoria usam SEMPRE os snapshots do pedido (`product_name_snapshot`, `variant_name_snapshot`, `category_name_snapshot`), nunca o catálogo atual (que pode ser editado ou arquivado).
+3. Atualização incremental (`applyTabDelta`) roda dentro do mesmo `unit.run` do fechamento/estorno com `UPSERT` idempotente; `rebuildRange` reconstrói dias a partir das tabelas-fonte para reconciliação zero-desvio.
+4. Toda query SQL/Prisma recebe `restaurantId` como primeiro parâmetro e filtra estritamente por `restaurant_id = $1`. Use sempre queries parametrizadas (nunca interpolação de string em SQL!).
+5. `forecast.engine.ts` e `anomaly.engine.ts` devem ser funções puras em TypeScript (fáceis de testar unitariamente), respeitando `INSUFFICIENT_DATA` quando houver menos de 3 ocorrências do dia da semana e `clamp(0.80, 1.25)` no fator de tendência.
+6. Respeite permissões: `reports:read` apenas para `OWNER` e `MANAGER` (`CASHIER` só acessa resumo do próprio turno via `cash-shifts`).
+
+Validação antes de encerrar:
+- Rode `python3 .claude/scripts/verify.py` e `python3 .claude/scripts/check_tenant.py`.
+"""
