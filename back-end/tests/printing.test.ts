@@ -328,7 +328,11 @@ it("preserva resultado incerto em caso de expiração ou erro informado pela imp
   expect((await confirm(password, expired.id)).status).toBe(200);
   expect((await download(password, expired.id)).status).toBe(404);
 
-  const failed = await fetchNext(password);
+  const stalePoll = await api().post(cloud).set(basic(password)).send({ statusCode: "200 OK", jobToken: expired.id });
+  const failedId = stalePoll.body.jobToken;
+  expect(stalePoll.body.jobReady).toBe(true);
+  expect((await download(password, failedId)).status).toBe(200);
+  const failed = await prisma.print_jobs.findUniqueOrThrow({ where: { id: failedId } });
   expect((await confirm(password, failed.id, "520 Print Error")).status).toBe(200);
   expect((await confirm(password, failed.id)).status).toBe(200);
   expect((await poll(password)).body.jobReady).toBe(false);
