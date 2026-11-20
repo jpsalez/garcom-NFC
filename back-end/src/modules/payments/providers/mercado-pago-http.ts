@@ -2,7 +2,10 @@ import { type ZodType, z } from "zod";
 import { AppError } from "../../../shared/errors/AppError.ts";
 
 export class PointProviderError extends AppError {
-  constructor(readonly definitiveRejection = false) {
+  constructor(
+    readonly definitiveRejection = false,
+    readonly status?: number,
+  ) {
     super("Mercado Pago indisponível", 502, undefined, "PROVIDER_UNAVAILABLE");
   }
 }
@@ -42,7 +45,7 @@ async function definitiveRejection(response: Response) {
 export async function parsePointResponse<T>(response: Response, schema: ZodType<T>) {
   if (!response.ok) {
     // Uma chave em conflito pode identificar uma cobrança já aceita.
-    throw new PointProviderError(await definitiveRejection(response));
+    throw new PointProviderError(await definitiveRejection(response), response.status);
   }
   const body: unknown = await response.json().catch(() => null);
   const result = schema.safeParse(body);

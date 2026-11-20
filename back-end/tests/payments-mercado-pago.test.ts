@@ -451,6 +451,26 @@ describe("cobrança Point", () => {
     expect((await savedPayment(f, input.idempotency_key)).status).toBe("CANCELLED");
     expect((await readTab(f)).body.tab).toMatchObject({ pending_cents: 0, remaining_cents: price });
   });
+
+  it("mantém a reserva quando a nova tentativa encontra o terminal ocupado", async () => {
+    const f = await terminalFixture();
+    const input = chargeInput(f);
+    fetchMock.mockResolvedValueOnce(respond({ errors: [{ code: "service_unavailable" }] }, 503));
+    expect((await pay(f, input)).status).toBe(202);
+
+    await prisma.payments.updateMany({
+      where: { restaurant_id: f.restaurantId },
+      data: { updated_at: new Date(Date.now() - 60 * 1000) },
+    });
+    // A order ocupando o terminal pode ser a da primeira tentativa.
+    fetchMock.mockResolvedValueOnce(
+      respond({ errors: [{ code: "already_queued_order_for_terminal" }] }, 409),
+    );
+    await reconcilePayments();
+
+    expect((await savedPayment(f, input.idempotency_key)).status).toBe("PENDING");
+    expect((await readTab(f)).body.tab).toMatchObject({ pending_cents: price });
+  });
 });
 
 describe("reconciliação Point", () => {

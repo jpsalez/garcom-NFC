@@ -38,7 +38,11 @@ export class PointPaymentsService {
     try {
       await this.sendCharge(context);
     } catch (error) {
-      if (!(error instanceof PointProviderError) || error.definitiveRejection) throw error;
+      if (!(error instanceof PointProviderError)) throw error;
+      if (error.definitiveRejection) {
+        await updatePointPayment(this.unit, this.notifier, context, { status: "CANCELLED" });
+        throw error;
+      }
       logOperation({ event: "point.charge_undetermined", payment_id: payment.id });
     }
   }
@@ -69,7 +73,7 @@ export class PointPaymentsService {
         if (context.payment.external_payment_id)
           await this.reconcileOrder(context, context.payment.external_payment_id);
         else if (context.payment.created_at.getTime() > Date.now() - pointExpiryMs)
-          await this.sendCharge(context);
+          await this.retryCharge(context);
       } catch {
         // Uma tentativa inconclusiva não pode liberar a reserva nem monopolizar o próximo lote.
         logOperation({ event: "point.reconciliation_undetermined", payment_id: key.id });
@@ -85,13 +89,7 @@ export class PointPaymentsService {
     const access = decryptSecret(account.access_token_encrypted);
     const charge = await this.providers
       .get("MERCADO_PAGO")
-      .createCharge(access, { id, amount_cents, installments, idempotency_key, method, deviceId })
-      .catch(async (error: unknown) => {
-        // Rejeição definitiva garante que a order não existe no provedor: libera a reserva.
-        if (error instanceof PointProviderError && error.definitiveRejection)
-          await updatePointPayment(this.unit, this.notifier, context, { status: "CANCELLED" });
-        throw error;
-      });
+      .createCharge(access, { id, amount_cents, installments, idempotency_key, method, deviceId });
     validatePointCharge(context, charge);
     // Só a consulta autenticada pode consolidar um recebimento.
     await updatePointPayment(this.unit, this.notifier, context, {
@@ -99,6 +97,18 @@ export class PointPaymentsService {
       external_payment_id: charge.id,
       raw_provider_payload: { transaction_id: charge.providerPaymentId },
     });
+  }
+
+  // Na nova tentativa, 409 ou 401 podem vir da order criada pela tentativa ambígua anterior.
+  // Só a recusa do próprio payload prova que nenhuma order existe.
+  private async retryCharge(context: PointPayment) {
+    try {
+      await this.sendCharge(context);
+    } catch (error) {
+      if (error instanceof PointProviderError && (error.status === 400 || error.status === 422))
+        await updatePointPayment(this.unit, this.notifier, context, { status: "CANCELLED" });
+      throw error;
+    }
   }
 
   private async sync(context: PointPayment) {

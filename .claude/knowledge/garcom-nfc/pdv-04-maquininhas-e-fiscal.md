@@ -109,7 +109,7 @@ Depois da assinatura, a integração identifica o vínculo local e consulta `GET
 
 O job `payment-reconciliation.job.ts` consulta em lotes os pagamentos pendentes. Os estados `created`, `at_terminal` e `action_required` mantêm a reserva. A order processada com pagamento creditado vira `APPROVED`. Cancelamento, expiração e falha definitiva confirmados liberam a reserva. Um `202` de cancelamento no terminal mantém `PROCESSING` até confirmação por consulta ou notificação posterior.
 
-Uma criação sem ID é retomada com a mesma chave dentro dos primeiros cinco minutos. Se continuar ambígua depois dessa janela, a reserva permanece e exige conferência operacional. O job aplica `EXPIRED` apenas com confirmação de expiração ou de cancelamento da tentativa vencida. A renovação diária consulta contas com token a vencer em até 30 dias e usa atualização condicional ao gravar novas credenciais.
+Uma criação sem ID é retomada com a mesma chave dentro dos primeiros cinco minutos. Na retomada, só `400`/`422` (payload recusado) cancelam a reserva; `409` de terminal ocupado, `401`/`403` e `404` podem vir da order criada pela tentativa anterior e mantêm o pagamento `PENDING`. Se continuar ambígua depois dessa janela, a reserva permanece e exige conferência operacional. O job aplica `EXPIRED` apenas com confirmação de expiração ou de cancelamento da tentativa vencida. A renovação diária consulta contas com token a vencer em até 30 dias e usa atualização condicional ao gravar novas credenciais.
 
 [Estados de orders Point](https://www.mercadopago.com.br/developers/pt/docs/mp-point/resources/status-order-transaction)
 
