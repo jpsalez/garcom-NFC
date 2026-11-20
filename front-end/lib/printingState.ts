@@ -1,7 +1,7 @@
 import { ApiError } from "@/lib/api";
 import type { PrintJobStatus, PrintReprintInput } from "@/lib/printingTypes";
 
-export const agentOfflineMs = 5 * 60 * 1000;
+export const printerOfflineMs = 5 * 60 * 1000;
 
 export const printJobStatusOptions: { value: "" | PrintJobStatus; label: string }[] = [
   { value: "", label: "Todos os estados" },
@@ -28,9 +28,9 @@ export function isAttentionPrintStatus(status: PrintJobStatus) {
   return status === "FAILED" || status === "UNCERTAIN";
 }
 
-export function isAgentRecentlyOnline(lastContactAt: string | null, nowMs = Date.now()) {
+export function isPrinterRecentlyOnline(lastContactAt: string | null, nowMs = Date.now()) {
   if (!lastContactAt) return false;
-  return nowMs - Date.parse(lastContactAt) < agentOfflineMs;
+  return nowMs - Date.parse(lastContactAt) < printerOfflineMs;
 }
 
 export type ReprintAttempt = {

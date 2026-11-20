@@ -1,15 +1,15 @@
 import { z } from "zod";
 
 export const printingSettingsSchema = z.object({ enabled: z.boolean() }).strict();
-export const pairingCodeSchema = z.string().regex(/^[a-f0-9]{20}$/);
-export const printingPairSchema = z.object({ code: pairingCodeSchema }).strict();
-export const printAgentCredentialSchema = z.string().regex(/^print_[A-Za-z0-9_-]{43}$/);
-
-export const printClaimSchema = z.strictObject({}).default({});
-export const printResultSchema = z.strictObject({
-  reservation_id: z.uuid(),
-  outcome: z.enum(["SENT", "FAILED_BEFORE_SEND", "UNCERTAIN"]),
+export const printerCredentialSchema = z.string().regex(/^cloud_[A-Za-z0-9_-]{43}$/);
+export const cloudPollSchema = z.object({
+  statusCode: z.string().max(120),
+  jobToken: z.string().max(100).nullish(),
+  printingInProgress: z.boolean().nullish(),
 });
+export const cloudGetSchema = z.object({ token: z.uuid(), type: z.string().max(100).optional() });
+export const cloudResultSchema = z.object({ token: z.uuid(), code: z.string().max(120) });
+
 export const printingJobsQuery = z.strictObject({
   status: z
     .enum(["PENDING", "SENDING", "SENT", "FAILED", "SUPPRESSED", "UNCERTAIN", "REVIEW_REQUIRED"])
@@ -35,7 +35,6 @@ export const printingReviewSchema = z.strictObject({
 });
 export const printingPatchSchema = z.union([printingSettingsSchema, printingReviewSchema]);
 
-export type PrintResult = z.infer<typeof printResultSchema>;
 export type PrintingJobsQuery = z.infer<typeof printingJobsQuery>;
 export type PrintReprint = z.infer<typeof reprintSchema>;
 export type PrintReview = z.infer<typeof printingReviewSchema>["review"];

@@ -1,4 +1,5 @@
 'use client'
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { saveSession, useSession } from "@/lib/session";
@@ -61,6 +62,7 @@ export default function ChangePasswordPage() {
 
                     <p role="alert" className={`error ${error ? 'visible' : ''}`}>{error}</p>
                     <p role="status" className={`success ${done ? 'visible' : ''}`}>Senha alterada. Os outros aparelhos precisarão entrar de novo.</p>
+                    <Link href="/admin/configuracoes" className="text-sm underline">Voltar às configurações</Link>
                 </form>
             </div>
         </div>

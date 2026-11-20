@@ -1,6 +1,6 @@
 import { api } from "@/lib/api";
 import type {
-  PairingCode,
+  PrinterSetup,
   PrintingStatus,
   PrintJob,
   PrintJobPage,
@@ -26,12 +26,16 @@ export function updateKitchenPrinting(body: { enabled: boolean } | { review: Pri
   return api<PrintingStatus>("/printing/kitchen", { method: "PATCH", body });
 }
 
-export function issueKitchenPairingCode() {
-  return api<PairingCode>("/printing/kitchen/pairing", { method: "POST" });
+export function provisionKitchenPrinter() {
+  return api<PrinterSetup>("/printing/kitchen/printer", { method: "POST" });
 }
 
-export function revokeKitchenPairing() {
-  return api<void>("/printing/kitchen/pairing", { method: "DELETE" });
+export function revokeKitchenPrinter() {
+  return api<void>("/printing/kitchen/printer", { method: "DELETE" });
+}
+
+export function queueKitchenPrintTest() {
+  return api<PrintingStatus>("/printing/kitchen/test", { method: "POST" });
 }
 
 export function listPrintJobs(query: PrintJobsQuery = {}) {

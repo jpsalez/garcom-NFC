@@ -1,5 +1,7 @@
 # 9. Estado de implementação, roadmap e limitações 
 
+> **Atualização de 20/11/2026:** a impressão da cozinha usa CloudPRNT via HTTPS. Consulte o Apêndice D para o contrato e a configuração. A validação em impressora física está pendente.
+
 > **Atualização de 19/11/2026:** o backend de cardápio, mídia e pedidos foi implementado após o levantamento histórico deste capítulo. Para contratos, modelo, limitações e operação atuais da feature, consulte o Apêndice D. As afirmações históricas de ausência de cardápio abaixo descrevem o estado anterior.
 
 

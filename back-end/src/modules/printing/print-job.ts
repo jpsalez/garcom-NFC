@@ -1,12 +1,11 @@
-import type { print_jobs, print_job_outcome, Prisma } from "../../../generated/prisma/client.ts";
+import type { print_jobs } from "../../../generated/prisma/client.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type { OrderRecord } from "../orders/orders.repository.interface.ts";
 import { PrintingRepository } from "./printing.repository.ts";
 
 export const kitchenDestination = "KITCHEN";
-export const agentOfflineMs = 5 * 60 * 1000;
+export const printerOfflineMs = 5 * 60 * 1000;
 export const reservationTtlMs = 30 * 1000;
-const maxAttempts = 3;
 
 export function printPayload(order: OrderRecord, reprint: boolean) {
   const items = order.items
@@ -55,21 +54,5 @@ export function jobView(job: print_jobs) {
     requested_by: job.requested_by,
     reason: job.reason,
     created_at: job.created_at,
-  };
-}
-
-export function resultUpdate(
-  job: print_jobs,
-  outcome: print_job_outcome,
-  now: Date,
-  canRetry: boolean,
-): Prisma.print_jobsUpdateManyMutationInput {
-  if (outcome !== "FAILED_BEFORE_SEND") return { status: outcome, reported_outcome: outcome };
-  if (job.attempts >= maxAttempts) return { status: "FAILED", reported_outcome: outcome };
-  const delayMs = 5000 * 2 ** (job.attempts - 1);
-  return {
-    status: canRetry ? "PENDING" : "REVIEW_REQUIRED",
-    reported_outcome: outcome,
-    next_attempt_at: new Date(now.getTime() + delayMs),
   };
 }

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "@/lib/session";
-import { canAccessKitchen, canConfigurePrinting, canUsePdv } from "@/lib/kitchenQueue";
+import { canAccessKitchen, canUsePdv } from "@/lib/kitchenQueue";
 
 export default function AdminNav() {
     const session = useSession()
@@ -20,18 +20,22 @@ export default function AdminNav() {
 
     if (canAccessKitchen(session.user)) items.push({ href: '/admin/cozinha', label: 'Cozinha' })
 
-    if (canConfigurePrinting(session.user)) items.push({ href: '/admin/cozinha/configuracoes', label: 'Config. cozinha' })
-
-    items.push({ href: '/admin/senha', label: 'Senha' })
+    items.push({ href: '/admin/configuracoes', label: 'Configurações' })
+    const settings = ['/admin/configuracoes', '/admin/senha', '/admin/cozinha/configuracoes', '/admin/cozinha/impressao']
 
     return(
         <nav aria-label="Painel" className="w-full flex gap-5 overflow-x-auto px-5 pt-4 border-b">
-            {items.map((item) => (
-                <Link key={item.href} href={item.href} prefetch={false}
-                className={`pb-2 ${pathname === item.href ? 'border-b-2 border-foreground font-bold' : 'text-gray-400'}`}>
-                    {item.label}
-                </Link>
-            ))}
+            {items.map((item) => {
+                const active = item.href === '/admin/configuracoes'
+                    ? settings.includes(pathname) || pathname.startsWith('/admin/configuracoes/')
+                    : pathname === item.href
+                return (
+                    <Link key={item.href} href={item.href} prefetch={false} aria-current={pathname === item.href ? 'page' : undefined}
+                    className={`pb-2 ${active ? 'border-b-2 border-foreground font-bold' : 'text-gray-400'}`}>
+                        {item.label}
+                    </Link>
+                )
+            })}
         </nav>
     )
 }

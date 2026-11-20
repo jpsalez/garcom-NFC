@@ -1,18 +1,15 @@
 import { z } from "zod";
 import {
-  pairingCodeSchema,
-  printingPairSchema,
+  cloudPollSchema,
   printingPatchSchema,
-  printClaimSchema,
-  printResultSchema,
   printingJobsQuery,
   reprintSchema,
-  printAgentCredentialSchema,
+  printerCredentialSchema,
 } from "../modules/printing/printing.schemas.ts";
 
 const tag = ["Impressão"];
 const cookie = [{ cookieAuth: [] }];
-const agent = [{ printAgentToken: [] }];
+const printer = [{ cloudPrinterAuth: [] }];
 const kitchen = { type: "string", enum: ["KITCHEN"] };
 const string = { type: "string" };
 const integer = { type: "integer" };
@@ -28,12 +25,13 @@ const object = <T extends object>(properties: T) => ({
 const dateTime = { type: "string", format: "date-time" };
 const status = {
   type: "object",
-  required: ["destination", "enabled", "paired", "last_contact_at"],
+  required: ["destination", "enabled", "paired", "last_contact_at", "test_status"],
   properties: {
     destination: kitchen,
     enabled: { type: "boolean" },
     paired: { type: "boolean" },
     last_contact_at: { ...dateTime, nullable: true },
+    test_status: { type: "string", nullable: true },
   },
 };
 const json = <T extends object>(schema: T) => ({ "application/json": { schema } });
@@ -67,37 +65,6 @@ const job = object({
   reason: nullable(string),
   created_at: dateTime,
 });
-const payload = object({
-  order_id: uuid,
-  created_at: dateTime,
-  table_label: string,
-  tab_number: integer,
-  items: array(
-    object({
-      item_id: uuid,
-      product_name: string,
-      variant_name: string,
-      quantity: integer,
-      notes: nullable(string),
-      selections: array(object({ group_name: string, option_name: string, quantity: integer })),
-    }),
-  ),
-});
-const claimedJob = object({
-  id: uuid,
-  destination: kitchen,
-  reservation_id: uuid,
-  expires_at: dateTime,
-  payload_version: integer,
-  order_version: integer,
-  payload: {
-    ...payload,
-    properties: {
-      ...payload.properties,
-      reprint: object({ label: { type: "string", enum: ["SEGUNDA VIA"] } }),
-    },
-  },
-});
 const queryParameter = (name: string, schema: z.ZodType) => ({
   name,
   in: "query",
@@ -118,115 +85,86 @@ export const printingPaths = {
       tags: tag,
       summary: "Ativa, pausa ou revisa comandas retidas para a cozinha",
       description:
-        "Use { enabled } para ativar ou pausar. A pausa retém pendências para revisão. Use { review: { job_ids, decision } } para liberar (RELEASE) ou descartar (DISCARD) comandas REVIEW_REQUIRED. Liberar exige contato do agente nos últimos 5 minutos.",
+        "Use { enabled } para ativar ou pausar. A pausa retém pendências para revisão. Use { review: { job_ids, decision } } para liberar (RELEASE) ou descartar (DISCARD) comandas REVIEW_REQUIRED. Liberar exige contato da impressora nos últimos 5 minutos.",
       security: cookie,
       requestBody: body(printingPatchSchema),
       responses: {
         200: stateResponse,
         ...errors,
-        409: { description: "PRINT_AGENT_NOT_PAIRED, PRINT_AGENT_OFFLINE ou PRINT_REVIEW_CONFLICT" },
+        409: { description: "PRINT_TEST_REQUIRED, PRINT_PRINTER_OFFLINE ou PRINT_REVIEW_CONFLICT" },
       },
     },
   },
-  "/printing/kitchen/pairing": {
+  "/printing/kitchen/printer": {
     post: {
       tags: tag,
-      summary: "Emite código de uso único válido por 10 minutos",
-      description: "Substitui o código anterior. O código em texto é devolvido apenas nesta resposta.",
+      summary: "Gera ou troca as credenciais da impressora CloudPRNT",
       security: cookie,
       responses: {
         201: {
-          description: "Código de pareamento",
-          content: json({
-            type: "object",
-            required: ["code", "expires_at"],
-            properties: { code: schemaFor(pairingCodeSchema), expires_at: dateTime },
-          }),
+          description: "Configuração; a senha só é devolvida nesta resposta",
+          content: json(object({ url: string, username: string, password: schemaFor(printerCredentialSchema) })),
         },
         ...errors,
       },
     },
     delete: {
       tags: tag,
-      summary: "Revoga credencial e código pendente e pausa a impressão",
+      summary: "Desconecta a impressora e pausa a impressão",
       security: cookie,
-      responses: {
-        204: { description: "Pareamento removido e último contato limpo" },
-        ...errors,
-      },
+      responses: { 204: { description: "Credencial revogada" }, ...errors },
     },
   },
-  "/print-agent/pair": {
+  "/printing/kitchen/test": {
     post: {
       tags: tag,
-      summary: "Troca o código de uso único pela credencial do agente",
-      description: "A troca revoga a credencial anterior, registra contato e deixa a impressão pausada.",
-      security: [],
-      requestBody: body(printingPairSchema),
-      responses: {
-        201: {
-          description: "Credencial do agente, devolvida apenas nesta resposta",
-          content: json({
-            type: "object",
-            required: ["destination", "credential"],
-            properties: { destination: kitchen, credential: schemaFor(printAgentCredentialSchema) },
-          }),
-        },
-        400: errors[400],
-        401: { description: "Código expirado, desconhecido ou já usado" },
-        429: { description: "Limite de tentativas por IP" },
-        503: errors[503],
-      },
+      summary: "Coloca uma via de teste na fila, inclusive durante a pausa",
+      security: cookie,
+      responses: { 200: stateResponse, ...errors, 409: { description: "PRINT_PRINTER_OFFLINE" } },
     },
   },
-  "/print-agent/contact": {
+  "/printing/cloudprnt": {
     post: {
       tags: tag,
-      summary: "Atualiza o último contato do agente, inclusive durante a pausa",
-      security: agent,
+      summary: "A impressora consulta a fila CloudPRNT por HTTPS",
+      security: printer,
+      requestBody: body(cloudPollSchema),
       responses: {
-        204: { description: "Contato registrado" },
+        200: { description: "Disponibilidade, token e tipo da comanda", content: json({
+          type: "object", required: ["jobReady"], properties: {
+            jobReady: { type: "boolean" }, jobToken: uuid, mediaTypes: array(string), deleteMethod: string,
+          },
+        }) },
         401: errors[401],
-        503: errors[503],
       },
     },
-  },
-  "/print-jobs/claim": {
-    post: {
+    get: {
       tags: tag,
-      summary: "Reserva uma comanda por destino por 30 segundos",
-      description:
-        "A comanda usa a versão vigente do pedido e exclui unidades canceladas. Verifique expires_at antes do envio. Comandas retidas para revisão ficam fora da reserva.",
-      security: agent,
-      requestBody: { ...body(printClaimSchema), required: false },
+      summary: "Retorna a configuração HTTP ou baixa a comanda indicada pelo token",
+      security: printer,
+      parameters: [
+        { name: "token", in: "query", schema: uuid },
+        { name: "type", in: "query", schema: { type: "string", enum: ["image/png"] } },
+      ],
       responses: {
-        200: { description: "Comanda reservada", content: json(claimedJob) },
-        204: { description: "Fila sem trabalho elegível, pausada ou destino ocupado" },
-        400: errors[400],
+        200: { description: "Configuração CloudPRNT ou comanda PNG", content: {
+          "application/json": { schema: { type: "object" } },
+          "image/png": { schema: { type: "string", format: "binary" } },
+        } },
         401: errors[401],
-        503: errors[503],
+        404: { description: "Comanda indisponível" },
+        415: { description: "Formato incompatível" },
       },
     },
-  },
-  "/print-jobs/{id}/result": {
-    post: {
+    delete: {
       tags: tag,
-      summary: "Registra o resultado da reserva",
-      description:
-        "SENT indica aceite pelo transporte. FAILED_BEFORE_SEND permite até três tentativas no total, com esperas de 5 e 10 segundos. Use UNCERTAIN quando o envio pode ter ocorrido. Repetir o mesmo resultado da reserva vigente retorna 204.",
-      parameters: [idPath],
-      security: agent,
-      requestBody: body(printResultSchema),
-      responses: {
-        204: { description: "Resultado registrado ou repetido" },
-        400: errors[400],
-        401: errors[401],
-        404: { description: "Comanda ausente no restaurante e destino do agente" },
-        409: {
-          description: "PRINT_RESERVATION_CONFLICT: reserva expirada ou substituída, ou resultado divergente",
-        },
-        503: errors[503],
-      },
+      summary: "Registra o resultado informado pela impressora",
+      security: printer,
+      parameters: [
+        { name: "token", in: "query", required: true, schema: uuid },
+        { name: "code", in: "query", required: true, schema: string },
+      ],
+      responses: { 200: { description: "Resultado recebido" }, 401: errors[401] },
     },
   },
   "/print-jobs": {

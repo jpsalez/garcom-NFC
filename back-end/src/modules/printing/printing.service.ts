@@ -19,32 +19,42 @@ import type {
 import { encodeCursor } from "../../shared/utils/cursor.ts";
 import { OrdersRepository } from "../orders/orders.repository.ts";
 import {
-  agentOfflineMs,
+  printerOfflineMs,
   jobView,
   kitchenDestination as destination,
   printPayload,
   reservationTtlMs,
-  resultUpdate,
 } from "./print-job.ts";
-import type { PrintReprint, PrintResult, PrintReview, PrintingJobsQuery } from "./printing.schemas.ts";
+import type { PrintReprint, PrintReview, PrintingJobsQuery } from "./printing.schemas.ts";
 import { hashToken } from "../../shared/utils/token.ts";
-import type { IPrintingService, PrintingStatus } from "./printing.interfaces.ts";
-import type { AgentProof, IPrintingRepository } from "./printing.repository.interface.ts";
+import type { IPrintingService, PrintPayload, PrintingStatus } from "./printing.interfaces.ts";
+import type { IPrintingRepository } from "./printing.repository.interface.ts";
 import { PrintingRepository } from "./printing.repository.ts";
 
-const pairingTtlMs = 10 * 60 * 1000;
-const clearCode = { pairing_code_hash: null, pairing_expires_at: null };
+const testTtlMs = 5 * 60 * 1000;
+const clearTest = { test_token: null, test_status: null, test_expires_at: null };
 
-function offlineSince(now: Date) {
-  return new Date(now.getTime() - agentOfflineMs);
+function activeTest(row: print_destinations, now: Date) {
+  return row.test_token && row.test_expires_at && row.test_expires_at > now &&
+    (row.test_status === "PENDING" || row.test_status === "SENDING");
 }
 
-function status(row: print_destinations | null): PrintingStatus {
+function offlineSince(now: Date) {
+  return new Date(now.getTime() - printerOfflineMs);
+}
+
+function status(row: print_destinations | null, now = new Date()): PrintingStatus {
+  let testStatus = row?.test_status ?? null;
+  if (row && !activeTest(row, now)) {
+    if (testStatus === "PENDING") testStatus = "FAILED";
+    if (testStatus === "SENDING") testStatus = "UNCERTAIN";
+  }
   return {
     destination,
     enabled: row?.enabled ?? false,
     paired: Boolean(row?.credential_hash),
     last_contact_at: row?.last_contact_at ?? null,
+    test_status: testStatus,
   };
 }
 
@@ -72,9 +82,15 @@ export class PrintingService implements IPrintingService {
       async ({ db, now }) => {
         const repository = new PrintingRepository(db);
         const row = await repository.get(restaurantId, destination);
-        if (enabled && !row?.credential_hash)
-          throw new ConflictError("Pareie o agente antes de ativar a impressão", "PRINT_AGENT_NOT_PAIRED");
-        if (!row || row.enabled === enabled) return status(row);
+        if (enabled && !row?.enabled) {
+          if (!row?.credential_hash || row.test_status !== "SENT") {
+            throw new ConflictError("Conclua a impressão de teste antes de ativar", "PRINT_TEST_REQUIRED");
+          }
+          if (!row.last_contact_at || row.last_contact_at <= offlineSince(now)) {
+            throw new ConflictError("Conecte a impressora antes de ativar", "PRINT_PRINTER_OFFLINE");
+          }
+        }
+        if (!row || row.enabled === enabled) return status(row, now);
         await repository.hold(restaurantId, destination, enabled ? offlineSince(now) : undefined);
         return status(
           await repository.update(restaurantId, destination, {
@@ -87,20 +103,21 @@ export class PrintingService implements IPrintingService {
     );
   }
 
-  async issueCode(actor: ActorContext) {
+  async provision(actor: ActorContext) {
     const restaurantId = this.tenant(actor);
+    const serverUrl = new URL("/api/v1/printing/cloudprnt", process.env.PUBLIC_APP_URL);
+    if (process.env.NODE_ENV === "production" && serverUrl.protocol !== "https:") {
+      throw new ConflictError("O endereço público da API precisa usar HTTPS", "PRINT_HTTPS_REQUIRED");
+    }
     return this.unit.run(
       restaurantId,
       async ({ db, now }) => {
-        const code = randomBytes(10).toString("hex");
-        const expiresAt = new Date(now.getTime() + pairingTtlMs);
-        await new PrintingRepository(db).savePairingCode(
-          restaurantId,
-          destination,
-          hashToken(code),
-          expiresAt,
-        );
-        return { code, expires_at: expiresAt };
+        const repository = new PrintingRepository(db);
+        const password = `cloud_${randomBytes(32).toString("base64url")}`;
+        await repository.hold(restaurantId, destination);
+        await repository.interruptSending(restaurantId, destination);
+        await repository.saveCredential(restaurantId, destination, hashToken(password), now);
+        return { username: "psiu", password, url: serverUrl.href };
       },
       { actor, capability: "printing:configure" },
     );
@@ -114,8 +131,9 @@ export class PrintingService implements IPrintingService {
         const repository = new PrintingRepository(db);
         if (!(await repository.get(restaurantId, destination))) return;
         await repository.hold(restaurantId, destination);
+        await repository.interruptSending(restaurantId, destination);
         await repository.update(restaurantId, destination, {
-          ...clearCode,
+          ...clearTest,
           enabled: false,
           interrupted_at: now,
           credential_hash: null,
@@ -126,48 +144,36 @@ export class PrintingService implements IPrintingService {
     );
   }
 
-  private async scope(proof: AgentProof) {
-    const scope = await this.repository.findByHash(proof);
-    if (!scope) throw new UnauthorizedError("Pareamento de impressão inválido");
-    return { restaurantId: scope.restaurant_id, destination: scope.destination };
-  }
-
-  async pair(code: string) {
-    const hash = hashToken(code);
-    const { restaurantId, destination } = await this.scope({ pairing_code_hash: hash });
+  queueTest(actor: ActorContext) {
+    const restaurantId = this.tenant(actor);
     return this.unit.run(
       restaurantId,
-      async ({ db, now, restaurant }) => {
+      async ({ db, now }) => {
         const repository = new PrintingRepository(db);
         const row = await repository.get(restaurantId, destination);
-        if (
-          !restaurant.active ||
-          row?.pairing_code_hash !== hash ||
-          !row.pairing_expires_at ||
-          row.pairing_expires_at <= now
-        )
-          throw new UnauthorizedError("Pareamento de impressão inválido");
-        const credential = `print_${randomBytes(32).toString("base64url")}`;
-        await repository.hold(restaurantId, destination);
-        await repository.update(restaurantId, destination, {
-          ...clearCode,
-          enabled: false,
-          interrupted_at: now,
-          credential_hash: hashToken(credential),
-          last_contact_at: now,
+        if (!row?.last_contact_at || row.last_contact_at <= offlineSince(now)) {
+          throw new ConflictError("Conecte a impressora antes de testar", "PRINT_PRINTER_OFFLINE");
+        }
+        if (activeTest(row, now)) return status(row, now);
+        const updated = await repository.update(restaurantId, destination, {
+          test_token: randomUUID(),
+          test_status: "PENDING",
+          test_expires_at: new Date(now.getTime() + testTtlMs),
         });
-        return { destination, credential };
+        return status(updated, now);
       },
-      { allowInactive: true },
+      { actor, capability: "printing:configure" },
     );
   }
 
-  private async withAgent<T>(
+  private async withPrinter<T>(
     credential: string,
     work: (context: RestaurantTransaction, row: print_destinations, hash: string) => Promise<T>,
   ) {
     const hash = hashToken(credential);
-    const { restaurantId, destination } = await this.scope({ credential_hash: hash });
+    const scope = await this.repository.findByHash(hash);
+    if (!scope) throw new UnauthorizedError("Credencial de impressão inválida");
+    const { restaurant_id: restaurantId, destination } = scope;
     return this.unit.run(
       restaurantId,
       async (context) => {
@@ -175,7 +181,7 @@ export class PrintingService implements IPrintingService {
         const repository = new PrintingRepository(db);
         const row = await repository.get(restaurantId, destination);
         if (!restaurant.active || row?.credential_hash !== hash)
-          throw new UnauthorizedError("Pareamento de impressão inválido");
+          throw new UnauthorizedError("Credencial de impressão inválida");
         await repository.expire(restaurantId, destination, now);
         await repository.hold(restaurantId, destination, offlineSince(now));
         await repository.update(restaurantId, destination, { last_contact_at: now });
@@ -185,76 +191,90 @@ export class PrintingService implements IPrintingService {
     );
   }
 
-  async contact(credential: string) {
-    await this.withAgent(credential, async () => {});
-  }
-
-  claim(credential: string) {
-    return this.withAgent(
-      credential,
-      async ({ db, now }, { restaurant_id: restaurantId, destination, enabled }, hash) => {
-        const repository = new PrintingRepository(db);
-        if (!enabled || (await repository.sending(restaurantId, destination))) return null;
-        await repository.suppressCancelled(restaurantId, destination, now);
-        const job = await repository.next(restaurantId, destination, now);
-        if (!job) return null;
-
-        const order = await new OrdersRepository(db).get(restaurantId, job.order_id);
-        const payload = printPayload(order, job.original_job_id !== null);
-        const reservationId = randomUUID();
-        const expiresAt = new Date(now.getTime() + reservationTtlMs);
-        await repository.updateJob(restaurantId, destination, job.id, {
-          status: "SENDING",
-          order_version: order.version,
-          payload,
-          attempts: { increment: 1 },
-          next_attempt_at: null,
-          reservation_id: reservationId,
-          reservation_expires_at: expiresAt,
-          reservation_credential_hash: hash,
-          reported_outcome: null,
-        });
-        return {
-          id: job.id,
-          destination,
-          reservation_id: reservationId,
-          expires_at: expiresAt,
-          payload_version: job.payload_version,
-          order_version: order.version,
-          payload,
-        };
-      },
-    );
-  }
-
-  async result(credential: string, id: string, input: PrintResult) {
-    const accepted = await this.withAgent(credential, async ({ db, now }, row, hash) => {
-      const { restaurant_id: restaurantId, destination } = row;
+  poll(credential: string, ready: boolean) {
+    return this.withPrinter(credential, async ({ db, now }, row) => {
+      if (!ready) return null;
       const repository = new PrintingRepository(db);
-      const job = await repository.job(restaurantId, destination, id);
-      if (!job) return "missing";
-      if (job.reservation_id !== input.reservation_id || job.reservation_credential_hash !== hash)
-        return "conflict";
-      if (job.reported_outcome === input.outcome) return "accepted";
-      if (job.status !== "SENDING" || !job.reservation_expires_at) return "conflict";
-
-      const reservedAt = job.reservation_expires_at.getTime() - reservationTtlMs;
-      const canRetry = row.enabled && (!row.interrupted_at || row.interrupted_at.getTime() < reservedAt);
-      await repository.updateJob(
-        restaurantId,
-        destination,
-        id,
-        resultUpdate(job, input.outcome, now, canRetry),
-      );
-      return "accepted";
+      const { restaurant_id: restaurantId, destination } = row;
+      if (await repository.sending(restaurantId, destination)) return null;
+      if (activeTest(row, now)) return row.test_status === "PENDING" ? row.test_token : null;
+      if (!row.enabled) return null;
+      await repository.suppressCancelled(restaurantId, destination, now);
+      return (await repository.next(restaurantId, destination, now))?.id ?? null;
     });
-    // A expiração e o contato precisam persistir mesmo se o resultado recebido for rejeitado.
-    if (accepted === "missing") throw new NotFoundError("Comanda não encontrada");
-    if (accepted === "conflict")
-      throw new ConflictError(
-        "Reserva vencida, substituída ou com resultado divergente",
-        "PRINT_RESERVATION_CONFLICT",
-      );
+  }
+
+  async download(credential: string, token: string) {
+    const payload = await this.withPrinter(credential, async ({ db, now }, row, hash) => {
+      const repository = new PrintingRepository(db);
+      const { restaurant_id: restaurantId, destination } = row;
+      if (token !== row.test_token) return this.downloadOrder({ db, now }, row, hash, token);
+      if (!activeTest(row, now) || await repository.sending(restaurantId, destination)) return null;
+      if (row.test_status === "PENDING") {
+        await repository.update(restaurantId, destination, {
+          test_status: "SENDING",
+          test_expires_at: new Date(now.getTime() + reservationTtlMs),
+        });
+      }
+      return "TEST" as const;
+    });
+    if (!payload) throw new NotFoundError("Comanda indisponível");
+    return payload;
+  }
+
+  private async downloadOrder(
+    { db, now }: Pick<RestaurantTransaction, "db" | "now">,
+    row: print_destinations,
+    hash: string,
+    token: string,
+  ) {
+    const repository = new PrintingRepository(db);
+    if (!row.enabled || (activeTest(row, now) && row.test_status === "SENDING")) return null;
+    const { restaurant_id: restaurantId, destination } = row;
+    const job = await repository.job(restaurantId, destination, token);
+    if (job?.status === "SENDING" && job.reservation_credential_hash === hash) {
+      return job.payload as PrintPayload;
+    }
+    if (job?.status !== "PENDING" || (job.next_attempt_at && job.next_attempt_at > now)) return null;
+    if (await repository.sending(restaurantId, destination)) return null;
+    const order = await new OrdersRepository(db).get(restaurantId, job.order_id);
+    const payload = printPayload(order, job.original_job_id !== null);
+    if (!payload.items.length) {
+      await repository.updateJob(restaurantId, destination, job.id, {
+        status: "SUPPRESSED", order_version: order.version, next_attempt_at: null,
+      });
+      return null;
+    }
+    await repository.updateJob(restaurantId, destination, job.id, {
+      status: "SENDING",
+      order_version: order.version,
+      payload,
+      attempts: { increment: 1 },
+      next_attempt_at: null,
+      reservation_id: randomUUID(),
+      reservation_expires_at: new Date(now.getTime() + reservationTtlMs),
+      reservation_credential_hash: hash,
+      reported_outcome: null,
+    });
+    return payload;
+  }
+
+  async confirm(credential: string, token: string, success: boolean) {
+    await this.withPrinter(credential, async ({ db, now }, row, hash) => {
+      const repository = new PrintingRepository(db);
+      const { restaurant_id: restaurantId, destination } = row;
+      const result = success ? "SENT" : "UNCERTAIN";
+      if (token === row.test_token) {
+        if (row.test_status === "SENDING" && activeTest(row, now)) {
+          await repository.update(restaurantId, destination, { test_status: result });
+        }
+        return;
+      }
+      const job = await repository.job(restaurantId, destination, token);
+      if (job?.status === "SENDING" && job.reservation_credential_hash === hash) {
+        await repository.updateJob(restaurantId, destination, token, { status: result, reported_outcome: result });
+      }
+    });
   }
 
   list(actor: ActorContext, query: PrintingJobsQuery) {
@@ -290,8 +310,8 @@ export class PrintingService implements IPrintingService {
           (!row?.last_contact_at || row.last_contact_at <= offlineSince(now))
         )
           throw new ConflictError(
-            "O agente precisa voltar a se conectar antes da liberação",
-            "PRINT_AGENT_OFFLINE",
+            "A impressora precisa voltar a se conectar antes da liberação",
+            "PRINT_PRINTER_OFFLINE",
           );
         const next = input.decision === "RELEASE" ? "PENDING" : "SUPPRESSED";
         const { count } = await repository.review(restaurantId, destination, input.job_ids, next);
