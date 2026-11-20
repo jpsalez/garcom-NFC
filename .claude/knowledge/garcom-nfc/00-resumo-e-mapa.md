@@ -15,6 +15,8 @@ Node + TypeScript executado com tsx (imports com extensão `.ts`), Express 5, Pr
 
 ## Estado real (confirme no código)
 
+[Implementado, impressão] OWNER e MANAGER gerenciam o pareamento revogável e a ativação da impressão da Cozinha. A API grava uma comanda original na transação de pedidos novos quando o destino está ativo. Consulte o apêndice de cardápio e pedidos para contratos e cobertura no PostgreSQL.
+
 [Implementado, KDS] Cozinha e Pedidos reconciliam a fila aberta por REST. A cozinha inicia preparo e marca pronto por item e quantidade, com confirmação sobre os dados atuais em caso de conflito. Pedidos mantém entrega e cancelamento. Consulte `apendice-d-cardapio-e-pedidos.md` para acesso, sincronização e aceite de integração.
 
 [Implementado, atualização do cardápio] O frontend integra editor administrativo, visualização pela mesa e envio/acompanhamento de pedidos. Consulte `apendice-d-cardapio-e-pedidos.md` para o contrato e os limites. As seções históricas abaixo podem estar desatualizadas.

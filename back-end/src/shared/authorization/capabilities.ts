@@ -5,6 +5,7 @@ export type Capability =
   | "menu:manage"
   | "menu:publish"
   | "ordering:configure"
+  | "printing:configure"
   | "availability:write"
   | "orders:read"
   | "orders:prepare"

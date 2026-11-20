@@ -123,7 +123,11 @@ export const menuPaths: Record<string, PathItem> = {
     ),
   },
   "/public/orders": {
-    post: operation("Envia pedido idempotente com token de mesa", "table", submitSchema, 201),
+    post: {
+      ...operation("Envia pedido idempotente com token de mesa", "table", submitSchema, 201),
+      description:
+        "Para pedidos novos, a comanda original é gravada junto com o pedido quando a impressão da cozinha está ativa. O replay não enfileira outra comanda.",
+    },
     get: operation(
       "Somente pedidos enviados pelo token atual",
       "table",

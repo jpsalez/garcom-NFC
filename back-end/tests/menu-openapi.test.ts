@@ -23,3 +23,17 @@ describe("contrato OpenAPI de cardápio e pedidos", () => {
     ]);
   });
 });
+
+it("documenta a gestão e o pareamento com credenciais distintas no OpenAPI", () => {
+  const { paths, components } = openApiSpec;
+  expect(paths["/printing/kitchen"].get.security).toEqual([{ cookieAuth: [] }]);
+  expect(paths["/printing/kitchen"].patch.responses[409].description).toBe("PRINT_AGENT_NOT_PAIRED");
+  expect(paths["/printing/kitchen/pairing"].delete.responses[204]).toBeDefined();
+  expect(paths["/print-agent/pair"].post.security).toEqual([]);
+  expect(paths["/print-agent/pair"].post.responses[201].content["application/json"].schema.required).toEqual([
+    "destination",
+    "credential",
+  ]);
+  expect(paths["/print-agent/contact"].post.security).toEqual([{ printAgentToken: [] }]);
+  expect(components.securitySchemes.printAgentToken).toEqual({ type: "http", scheme: "bearer" });
+});

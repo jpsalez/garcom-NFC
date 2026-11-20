@@ -5,6 +5,7 @@ import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts
 import type { IRestaurantUnitOfWork } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
 import { encodeCursor } from "../../shared/utils/cursor.ts";
+import { enqueueOriginal } from "../printing/print-job.ts";
 import { MenuRepository } from "../menu/menu.repository.ts";
 import type { IOrdersService } from "./orders.interfaces.ts";
 import { OrdersRepository } from "./orders.repository.ts";
@@ -61,17 +62,16 @@ export class OrdersService implements IOrdersService {
         await menu.availability(context.restaurantId),
         parsed,
       );
-      return {
-        record: await repo.create(
-          { ...context, tableLabel: session.table.label },
-          parsed.submission_key,
-          hash,
-          publication.id,
-          total,
-          lines,
-        ),
-        replayed: false,
-      };
+      const record = await repo.create(
+        { ...context, tableLabel: session.table.label },
+        parsed.submission_key,
+        hash,
+        publication.id,
+        total,
+        lines,
+      );
+      await enqueueOriginal(db, record);
+      return { record, replayed: false };
     });
     if (!result.replayed) this.notify(result.record, "order:created");
     return { order: orderView(result.record), replayed: result.replayed };

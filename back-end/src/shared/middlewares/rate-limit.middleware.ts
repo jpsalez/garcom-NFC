@@ -123,3 +123,10 @@ export const mediaUploadLimiter = limiter(
   "Muitos uploads. Aguarde.",
   (req) => req.user?.id ?? byIp(req),
 );
+
+export const printPairingLimiter = limiter(
+  10,
+  20,
+  "Muitas tentativas de pareamento. Aguarde alguns minutos.",
+  byIp,
+);

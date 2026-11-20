@@ -30,6 +30,7 @@ model restaurants {
   media_assets     media_assets[]                @relation("media_assets_restaurant")
   orders           orders[]                      @relation("orders_restaurant")
   operation_events restaurant_operation_events[] @relation("restaurant_operation_events_restaurant")
+  print_destinations print_destinations[]
 }
 
 model users {
@@ -466,6 +467,7 @@ model orders {
   submitted_by_token    session_tokens?    @relation("orders_submitted_by_token", fields: [submitted_by_token_id, session_id], references: [id, session_id], onDelete: Restrict, onUpdate: Restrict)
   items                 order_items[]      @relation("order_items_order")
   events                order_events[]     @relation("order_events_order")
+  print_jobs            print_jobs[]
 
   @@unique([restaurant_id, id])
   @@unique([restaurant_id, submission_key])
@@ -616,4 +618,42 @@ enum audit_actor_type {
   USER
   TABLE_DEVICE
   SYSTEM
+}
+
+model print_destinations {
+  restaurant_id       String
+  destination         print_destination
+  enabled             Boolean           @default(false)
+  pairing_code_hash   String?           @unique @db.VarChar(64)
+  pairing_expires_at  DateTime?
+  credential_hash     String?           @unique @db.VarChar(64)
+  last_contact_at     DateTime?
+  restaurant          restaurants       @relation(fields: [restaurant_id], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  jobs                print_jobs[]
+
+  @@id([restaurant_id, destination])
+}
+
+model print_jobs {
+  id                String             @id @default(uuid())
+  restaurant_id     String
+  order_id          String
+  destination       print_destination
+  source_event      String             @db.VarChar(64)
+  status            print_job_status   @default(PENDING)
+  payload_version   Int
+  payload           Json
+  created_at        DateTime           @default(now())
+  order             orders             @relation(fields: [restaurant_id, order_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  print_destination print_destinations @relation(fields: [restaurant_id, destination], references: [restaurant_id, destination], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([restaurant_id, order_id, destination, source_event], map: "print_jobs_source_key")
+}
+
+enum print_destination {
+  KITCHEN
+}
+
+enum print_job_status {
+  PENDING
 }

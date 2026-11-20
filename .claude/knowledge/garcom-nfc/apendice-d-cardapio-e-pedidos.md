@@ -185,6 +185,29 @@ A tela sinaliza desconexão do Socket.IO ou falha da leitura REST. Em indisponib
 - O acesso direto de WAITER à Cozinha redirecionou para Chamados e o perfil manteve o atalho de Pedidos. Alterar uma sessão de KITCHEN para WAITER retirou a fila e as ações da Cozinha aberta e exibiu a mensagem de permissão. `back-end/tests/realtime.test.ts` cobre evento real de pedido criado pelo fluxo de scan, atualizações, corrida 200/409, entrega parcial, eventos perdidos e fila recuperada por REST após reconectar. Também cobre a recusa de OTHER e a fila vazia para um segundo restaurante. `back-end/tests/menu-orders.test.ts` valida a permanência de pedidos abertos de sessões vencidas.
 - `front-end/tests/kitchen.test.mjs` cobre toda a paginação, acesso direto, confirmação com as quantidades vigentes, consolidação de eventos, descarte de leituras antigas, foco, polling, reconexão e bloqueio após perda de acesso. O aceite usou a base descartável do navegador e a suíte de integração usou PostgreSQL de teste separado.
 
+### Configuração de impressão e comanda original [Implementado]
+
+A migration `20261119110000_kitchen_printing` cria `print_destinations` e `print_jobs`, com os enums `print_destination` e `print_job_status`. Cada restaurante começa com a impressão de `KITCHEN` pausada. A primeira emissão de código persiste a configuração. A pausa conserva o agente pareado e as tarefas existentes.
+
+| Operação sob `/api/v1` | Contrato |
+| --- | --- |
+| GET `/printing/kitchen` | OWNER/MANAGER. Retorna `{ destination, enabled, paired, last_contact_at }`. O último contato é um horário UTC ou `null`. |
+| PATCH `/printing/kitchen` | OWNER/MANAGER. Recebe `{ enabled }` e devolve o estado. Ativar exige pareamento, com `409 PRINT_AGENT_NOT_PAIRED` se faltar. |
+| POST `/printing/kitchen/pairing` | OWNER/MANAGER. Retorna `201` com `{ code, expires_at }`. O código hexadecimal de 20 caracteres vale 10 minutos e substitui o código pendente anterior. |
+| DELETE `/printing/kitchen/pairing` | OWNER/MANAGER. Retorna `204`, revoga a credencial e o código pendente, limpa o último contato e pausa. |
+| POST `/print-agent/pair` | Recebe apenas `{ code }`. Retorna `201` com `{ destination, credential }`. Consome o código no mesmo commit que grava a credencial, registra contato, substitui o pareamento anterior e deixa a impressão pausada. Código vencido, usado ou desconhecido retorna `401`. Limite de 20 tentativas por IP a cada 10 minutos. |
+| POST `/print-agent/contact` | Recebe `Authorization: Bearer <credential>`. Registra contato mesmo durante a pausa e retorna `204`. Credencial inválida ou revogada retorna `401`. |
+
+O servidor deriva restaurante e destino a partir do hash exclusivo do código ou da credencial. O banco guarda apenas os hashes e a API devolve os segredos somente na emissão, com `Cache-Control: no-store`. Configuração, troca de credencial, contato e envio de pedido usam o mesmo lock transacional por restaurante.
+
+Um pedido novo criado com a impressão ativa grava uma tarefa `PENDING` de origem `ORDER_CREATED` na mesma transação do pedido, dos itens e do evento de auditoria. Replay de envio retorna antes da gravação da comanda. A chave única usa restaurante, pedido, destino e evento de origem. Chaves estrangeiras compostas ligam tarefa, pedido e destino ao mesmo restaurante.
+
+O payload versão 1 reúne `order_id`, `created_at` em UTC, `table_label` e `items`. Cada item contém `item_id`, `product_name`, `variant_name`, `quantity`, `notes` e `selections` com `group_name`, `option_name` e `quantity` por unidade. A comanda usa snapshots persistidos na confirmação do pedido. A ativação vale para novos envios.
+
+Cobertura em `back-end/tests/printing.test.ts`: isolamento, expiração, troca concorrente, revogação, contato, ausência de comanda para pedidos anteriores, concorrência no envio, vínculos do banco e rollback provocado por uma restrição no PostgreSQL. As reservas e os resultados entram na entrega #8. O agente local e a interface de configuração entram na #9.
+
+O módulo `back-end/src/modules/printing/` usa `printing.routes.ts`, `printing.controller.ts`, `printing.schemas.ts`, `printing.interfaces.ts`, `printing.service.ts`, `printing.repository.interface.ts`, `printing.repository.ts` e `print-job.ts`. Os contratos HTTP estão em `back-end/src/docs/printing-openapi.ts`.
+
 ### Limites e erros
 
 50 linhas por pedido, 1–20 unidades por linha, seleção máxima de 50 unidades por grupo, até 20 grupos/produto, 50 opções/grupo, 20 variantes/produto e 8 imagens/produto. Rascunho: até 100 categorias e 1000 produtos ativos. Nome até 120 caracteres; descrição 3000; observação 500. Payload JSON das rotas novas até 256 KiB; publicação validada com margem de representação para o CHECK de 2 MiB no PostgreSQL.
