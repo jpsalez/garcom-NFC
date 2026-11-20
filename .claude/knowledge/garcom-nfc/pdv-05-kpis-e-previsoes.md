@@ -272,6 +272,7 @@ Código em `back-end/src/modules/reports/`; migration `20261121090000_sales_aggr
   - `applyTabSalesChange` roda dentro do `unit.run` do fechamento (`close-tab.ts`, que cobre o fechamento manual, o automático e o da sessão) e do estorno de comanda já fechada (`payments.service.ts`). No estorno ele aplica `contribuição depois − contribuição antes`.
   - `rebuildRange` apaga e recria o intervalo a partir das comandas.
 - O incremental atualiza com `updateMany` + `create`. O lock do restaurante serializa as escritas.
+- Apesar do nome, `daily_sales.rebuilt_at` registra a última escrita da linha, seja incremental ou rebuild. Renomear exigiria outra migration.
 - `daily_sales` não tem CHECK de não-negativo de propósito: um agregado defasado não pode bloquear um estorno, e o rebuild corrige. `product_sales_daily` mantém o CHECK, porque estornos não alteram produtos.
 - O rebuild usa uma transação por dia, para não segurar o lock do restaurante pelo período inteiro.
 - Ficam fora: comandas `legacy_closed`, abertas e canceladas. `tabs_cancelled_count` não foi criado, porque a comanda cancelada não tem `business_date`.
@@ -308,8 +309,15 @@ Períodos: `from ≤ to` e no máximo 366 dias (`reports.schemas.ts`; datas em `
 - `REVENUE_DROP` exige pelo menos 3 ocorrências do mesmo dia da semana.
 - `DISCOUNT_SPIKE` exige média de descontos maior que zero.
 - Dias sem venda não geram alerta de dia.
+- `CASH_DIFF_RECURRENT` considera os turnos fechados nos 7 dias que terminam na data avaliada, com limites em UTC, e não os 7 dias até hoje.
 
 ### Reconciliação
 `back-end/src/shared/jobs/reports-reconciliation.job.ts` roda no boot e depois a cada 24 h. Reconstrói os últimos 7 dias operacionais de cada restaurante ativo (`ReportsService.reconcile`). A falha de um restaurante é registrada com o `restaurant_id` e não interrompe os demais.
+
+As queries de `/reports/*` são validadas uma única vez, no controller (`schema.parse`). O `ZodError` vira `400 VALIDATION_ERROR` no `errorHandler`. O rebuild por quem não é OWNER responde `403 REBUILD_OWNER_ONLY`.
+
+### Limitações conhecidas
+- `basketTabs` carrega em memória os itens de todas as comandas fechadas do período (até 366 dias). Em restaurantes grandes, vale migrar para SQL agregado.
+- A tendência da previsão usa os 28 dias anteriores ao `target_date`. Para uma data muito à frente, essa janela cai no futuro, sem vendas, e o fator vira 1.
 
 Testes em `back-end/tests/reports-and-forecasts.test.ts`.

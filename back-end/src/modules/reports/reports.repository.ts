@@ -163,9 +163,9 @@ export class ReportsRepository {
     });
   }
 
-  closedCashShifts(restaurantId: string, since: Date) {
+  closedCashShifts(restaurantId: string, since: Date, before: Date) {
     return this.db.cash_shifts.findMany({
-      where: { restaurant_id: restaurantId, status: "CLOSED", closed_at: { gte: since } },
+      where: { restaurant_id: restaurantId, status: "CLOSED", closed_at: { gte: since, lt: before } },
       select: { difference_cents: true },
     });
   }

@@ -1,5 +1,6 @@
 import { inject, injectable } from "tsyringe";
 import type { ActorContext } from "../../shared/authorization/capabilities.ts";
+import { AppError } from "../../shared/errors/AppError.ts";
 import { ForbiddenError } from "../../shared/errors/http-errors.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type { IRestaurantUnitOfWork } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
@@ -100,16 +101,16 @@ export class ReportsService implements IReportsService {
 
   async alerts(actor: ActorContext, query: AlertsQuery) {
     const restaurantId = restaurantOf(actor);
-    const now = new Date();
     const repository = this.repository();
     const clock = await repository.businessClock(restaurantId);
     // Sem data, avalia o último dia operacional completo.
-    const date = query.date ? parseDay(query.date) : addDays(businessDate(now, clock), -1);
-    return salesAlerts(repository, restaurantId, date, now);
+    const date = query.date ? parseDay(query.date) : addDays(businessDate(new Date(), clock), -1);
+    return salesAlerts(repository, restaurantId, date);
   }
 
   async rebuild(actor: ActorContext, input: RebuildInput) {
-    if (actor.role !== "OWNER") throw new ForbiddenError("Somente o dono reconstrói os relatórios");
+    if (actor.role !== "OWNER")
+      throw new AppError("Somente o dono reconstrói os relatórios", 403, undefined, "REBUILD_OWNER_ONLY");
     const { from, to } = toRange(input);
     const days = await this.rebuildDays(restaurantOf(actor), from, to, actor);
     return { from: input.from, to: input.to, days_with_sales: days };
@@ -122,8 +123,13 @@ export class ReportsService implements IReportsService {
       try {
         const today = businessDate(new Date(), await this.repository().businessClock(id));
         await this.rebuildDays(id, addDays(today, -6), today);
-      } catch {
-        logOperation({ event: "reports.reconciliation_failed", restaurant_id: id });
+      } catch (error) {
+        logOperation({
+          event: "reports.reconciliation_failed",
+          restaurant_id: id,
+          // Só a mensagem, truncada: nada de payload ou parâmetros da consulta.
+          error: error instanceof Error ? error.message.slice(0, 300) : "erro desconhecido",
+        });
       }
     }
   }

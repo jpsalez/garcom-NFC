@@ -17,6 +17,7 @@ afterAll(() => prisma.$disconnect());
 type Fixture = Awaited<ReturnType<typeof menuFixture>>;
 type Stage = "PENDING" | "READY" | "DELIVERED" | "CANCELLED";
 type Sale = {
+  close?: "auto" | "manual" | "none";
   quantity?: number;
   cancel?: number;
   discount?: number;
@@ -49,7 +50,7 @@ async function move(f: Fixture, orderId: string, from: Stage, to: Stage, quantit
 }
 
 async function sellAtCounter(f: Fixture, sale: Sale = {}) {
-  const { quantity = 1, cancel = 0, discount = 0, method = "PIX", ready = false } = sale;
+  const { quantity = 1, cancel = 0, discount = 0, method = "PIX", ready = false, close = "auto" } = sale;
   const opened = await api()
     .post("/api/v1/tabs")
     .set(auth(f.token))
@@ -75,16 +76,28 @@ async function sellAtCounter(f: Fixture, sale: Sale = {}) {
     expect(adjusted.status).toBe(201);
   }
   const tab = (await api().get(`/api/v1/tabs/${tabId}`).set(auth(f.token))).body.tab;
-  const paid = await api().post(`/api/v1/tabs/${tabId}/payments`).set(auth(f.token)).send({
-    idempotency_key: randomUUID(),
-    provider: "MANUAL",
-    method,
-    amount_cents: tab.remaining_cents,
-    auto_close: true,
-  });
-  expect(paid.body).toMatchObject({ auto_closed: true });
+  const paid = await api()
+    .post(`/api/v1/tabs/${tabId}/payments`)
+    .set(auth(f.token))
+    .send({
+      idempotency_key: randomUUID(),
+      provider: "MANUAL",
+      method,
+      amount_cents: tab.remaining_cents,
+      auto_close: close === "auto",
+    });
+  expect(paid.body).toMatchObject({ auto_closed: close === "auto" });
+  if (close === "manual") expect((await closeTab(f, tabId)).status).toBe(200);
   return { tabId, payment: paid.body.payment, total: tab.remaining_cents as number };
 }
+
+async function closeTab(f: Fixture, tabId: string) {
+  const { version } = await prisma.tabs.findUniqueOrThrow({ where: { id: tabId } });
+  return api().post(`/api/v1/tabs/${tabId}/close`).set(auth(f.token)).send({ expected_version: version });
+}
+
+const rebuildDay = (f: Fixture, date: string) =>
+  api().post("/api/v1/reports/rebuild").set(auth(f.token)).send({ from: date, to: date });
 
 async function aggregates(restaurantId: string) {
   const daily = await prisma.daily_sales.findMany({
@@ -245,6 +258,36 @@ describe("agregados de vendas", () => {
     expect(history.body.items).toHaveLength(1);
   });
 
+  it("mantém o agregado igual ao rebuild no fechamento manual, pela sessão e concorrente", async () => {
+    const f = await menuFixture();
+    const manual = await sellAtCounter(f, { close: "manual" });
+    // Comanda vazia da mesa: encerrar o atendimento a fecha por close-tab.
+    const table = await api()
+      .post("/api/v1/tabs")
+      .set(auth(f.token))
+      .send({ kind: "TABLE", table_id: f.table.id });
+    expect(table.status).toBe(201);
+    const session = await prisma.table_sessions.findFirstOrThrow({
+      where: { table_id: f.table.id, status: "ACTIVE" },
+    });
+    const ended = await api().post(`/api/v1/sessions/${session.id}/close`).set(auth(f.token));
+    expect(ended.status).toBeLessThan(300);
+    expect(await prisma.tabs.count({ where: { table_id: f.table.id, status: "CLOSED" } })).toBe(1);
+
+    const pending = await sellAtCounter(f, { close: "none" });
+    const { business_date } = await prisma.tabs.findUniqueOrThrow({ where: { id: manual.tabId } });
+    const date = business_date?.toISOString().slice(0, 10) ?? "";
+    const [closed, rebuilt] = await Promise.all([closeTab(f, pending.tabId), rebuildDay(f, date)]);
+    expect([closed.status, rebuilt.status]).toEqual([200, 200]);
+
+    const incremental = await aggregates(f.restaurantId);
+    expect(incremental.daily).toMatchObject([
+      { tabs_closed_count: 3, table_tabs_count: 1, counter_tabs_count: 2, net_sales_cents: 6600 },
+    ]);
+    expect((await rebuildDay(f, date)).status).toBe(200);
+    expect(await aggregates(f.restaurantId)).toEqual(incremental);
+  });
+
   it("não mistura restaurantes e ignora comandas legadas", async () => {
     const f = await menuFixture();
     const other = await ownerOf("relatorio-outro");
@@ -380,6 +423,8 @@ describe("previsões", () => {
     });
     const alerts = await report(f.token, "forecasts/alerts", { date: "2026-11-20" });
     expect(alerts.status).toBe(200);
+    const old = await report(f.token, "forecasts/alerts", { date: "2026-10-01" });
+    expect(old.body.alerts.map(({ code }: { code: string }) => code)).not.toContain("CASH_DIFF_RECURRENT");
     expect(alerts.body.alerts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: "REVENUE_DROP", severity: "CRITICAL" }),
@@ -402,7 +447,7 @@ describe("permissões", () => {
     expect((await report(manager.token, "sales/summary", range)).status).toBe(200);
     expect((await report(manager.token, "forecasts/demand", { target_date: "2026-11-27" })).status).toBe(200);
     const rebuild = await api().post("/api/v1/reports/rebuild").set(auth(manager.token)).send(range);
-    expect(rebuild.status).toBe(403);
+    expect([rebuild.status, rebuild.body.code]).toEqual([403, "REBUILD_OWNER_ONLY"]);
     expect((await report(f.token, "sales/summary", { from: "2026-11-20", to: "2026-11-01" })).status).toBe(
       400,
     );
