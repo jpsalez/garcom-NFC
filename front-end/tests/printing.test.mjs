@@ -73,15 +73,27 @@ test('Configurações oferece acesso à impressão apenas a OWNER e MANAGER, inc
     assert.equal(mounted, Number(allowed), JSON.stringify(user));
     assert.deepEqual(redirects, redirect ? [redirect] : [], JSON.stringify(user));
 
-    const { default: AdminNav } = load('../components/adminComponents/adminNav.tsx', {
-      'next/link': { default: ({ href, children }) => React.createElement('a', { href }, children) },
-      'next/navigation': { usePathname: () => '/admin/cozinha/configuracoes' },
-      '@/lib/session': { useSession: () => session },
+    const link = { default: ({ href, children, 'aria-label': label }) => React.createElement('a', { href, 'aria-label': label }, children) };
+    const adminNav = load('../components/adminComponents/adminNav.tsx', {
+      'next/link': link,
       '@/lib/kitchenQueue': kitchen,
     });
-    const nav = renderToStaticMarkup(React.createElement(AdminNav));
-    assert.equal(nav.includes('href="/admin/cozinha/configuracoes"'), false, JSON.stringify(user));
-    assert.equal(nav.includes('href="/admin/configuracoes"'), Boolean(session), JSON.stringify(user));
+    const { default: Header } = load('../components/header.tsx', {
+      react: React,
+      'lucide-react': { LogOut: () => null, Menu: () => null, Settings: () => null, UserRound: () => null, X: () => null },
+      'next/image': { default: () => null },
+      'next/link': link,
+      'next/navigation': { usePathname: () => '/admin/cozinha/configuracoes', useRouter: () => ({}) },
+      '@/components/adminComponents/adminNav': adminNav,
+      '@/lib/session': { useSession: () => session },
+      '@/services/auth': { logout: () => {} },
+    });
+    const header = renderToStaticMarkup(React.createElement(Header));
+    assert.equal(header.includes('href="/admin/cozinha/configuracoes"'), false, JSON.stringify(user));
+    assert.equal(header.includes('href="/admin/configuracoes"'), Boolean(session), JSON.stringify(user));
+    assert.equal(header.includes('href="/admin/configuracoes/perfil"'), Boolean(session), JSON.stringify(user));
+    assert.equal(header.includes('aria-label="Menu da conta"'), Boolean(session), JSON.stringify(user));
+    assert.equal(header.includes('aria-label="Sair"'), Boolean(session), JSON.stringify(user));
 
     const { default: SettingsPage } = load('../components/adminComponents/settingsPage.tsx', {
       'lucide-react': { ArrowRight: () => null, KeyRound: () => null, List: () => null, Printer: () => null, UserRound: () => null },

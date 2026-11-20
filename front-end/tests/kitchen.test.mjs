@@ -59,14 +59,14 @@ test('acesso direto a /admin/cozinha monta a consulta apenas para dono, gerente 
     assert.equal(mounted, Number(allowed), JSON.stringify(user));
     assert.deepEqual(redirects, redirect ? [redirect] : [], JSON.stringify(user));
 
-    const { default: AdminNav } = load('../components/adminComponents/adminNav.tsx', {
-      'next/link': { default: ({ href, children }) => React.createElement('a', { href }, children) },
-      'next/navigation': { usePathname: () => '/admin/cozinha' },
-      '@/lib/session': { useSession: () => session },
-      '@/lib/kitchenQueue': kitchen,
-    });
-    const nav = renderToStaticMarkup(React.createElement(AdminNav));
-    assert.equal(nav.includes('href="/admin/cozinha"'), allowed, JSON.stringify(user));
+    if (user) {
+      const { default: AdminNav } = load('../components/adminComponents/adminNav.tsx', {
+        'next/link': { default: ({ href, children }) => React.createElement('a', { href }, children) },
+        '@/lib/kitchenQueue': kitchen,
+      });
+      const nav = renderToStaticMarkup(React.createElement(AdminNav, { user, pathname: '/admin/cozinha', onNavigate: () => {} }));
+      assert.equal(nav.includes('href="/admin/cozinha"'), allowed, JSON.stringify(user));
+    }
   }
 });
 
