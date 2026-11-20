@@ -256,6 +256,111 @@ describe("envio e andamento dos pedidos", () => {
     });
     expect(events.map((event) => event.actor_category_snapshot)).toEqual([null, "KITCHEN", "WAITER"]);
   });
+  it("expõe o horário do lote pronto mais antigo ainda não entregue somente para a equipe", async () => {
+    const f = await menuFixture();
+    const created = await api()
+      .post("/api/v1/public/orders")
+      .set("X-Table-Token", f.deviceToken)
+      .send(f.submission(3));
+    expect(created.status).toBe(201);
+    const { id, items } = created.body.order;
+    const staff = auth(f.token);
+    let version = 1;
+
+    async function advance(from_stage: string, to_stage: string, quantity = 1) {
+      const response = await api()
+        .post(`/api/v1/orders/${id}/transitions`)
+        .set(staff)
+        .send({
+          expected_version: version,
+          operations: [{ item_id: items[0].id, from_stage, to_stage, quantity }],
+        });
+      expect(response.status).toBe(200);
+      version = response.body.version;
+      return response.body;
+    }
+
+    expect((await advance("PENDING", "PREPARING")).ready_since).toBeNull();
+    await advance("PREPARING", "READY");
+    await advance("PENDING", "PREPARING", 2);
+    const allReady = await advance("PREPARING", "READY", 2);
+    const audit = await api().get(`/api/v1/orders/${id}/events`).set(staff);
+    const [first, second] = audit.body.items.filter(
+      (event: { to_stage: string }) => event.to_stage === "READY",
+    );
+    expect(allReady.ready_since).toBe(first.created_at);
+    expect(allReady.ready_sequence).toBe(second.sequence);
+
+    const partial = await advance("READY", "DELIVERED");
+    expect(partial.ready_since).toBe(second.created_at);
+    const queue = await api().get("/api/v1/orders").set(staff);
+    expect(queue.body.items).toMatchObject([
+      { id, ready_since: second.created_at, ready_sequence: second.sequence },
+    ]);
+    const detail = await api().get(`/api/v1/orders/${id}`).set(staff);
+    expect(detail.body.ready_since).toBe(second.created_at);
+    const device = await api().get(`/api/v1/public/orders/${id}`).set("X-Table-Token", f.deviceToken);
+    expect(device.body).not.toHaveProperty("ready_since");
+    expect(device.body).not.toHaveProperty("ready_sequence");
+
+    const delivered = await advance("READY", "DELIVERED", 2);
+    expect(delivered).toMatchObject({ ready_since: null, ready_sequence: null });
+  });
+
+  it("lista encerrados pelo horário do encerramento, com paginação e isolamento por restaurante", async () => {
+    const f = await menuFixture();
+    const waiter = await categoryToken(f.restaurantId, "WAITER");
+    const other = await ownerOf("historico-outro-restaurante");
+    const submit = () =>
+      api().post("/api/v1/public/orders").set("X-Table-Token", f.deviceToken).send(f.submission());
+    const [older, newer, open] = [
+      (await submit()).body.order,
+      (await submit()).body.order,
+      (await submit()).body.order,
+    ];
+
+    async function close(order: typeof older, to_stage: "DELIVERED" | "CANCELLED") {
+      const response = await api()
+        .post(`/api/v1/orders/${order.id}/transitions`)
+        .set(auth(waiter.token))
+        .send({
+          expected_version: 1,
+          operations: [
+            {
+              item_id: order.items[0].id,
+              from_stage: "PENDING",
+              to_stage,
+              quantity: 1,
+              ...(to_stage === "CANCELLED" ? { reason: "Cliente desistiu" } : {}),
+            },
+          ],
+        });
+      expect(response.status).toBe(200);
+    }
+
+    expect(Date.parse(older.created_at)).toBeLessThan(Date.parse(newer.created_at));
+    await close(newer, "CANCELLED");
+    await close(older, "DELIVERED");
+
+    const list = (token: string, cursor?: string) =>
+      api().get("/api/v1/orders").set(auth(token)).query({ progress: "closed", limit: 1, cursor });
+    const first = await list(waiter.token);
+    expect(first.status).toBe(200);
+    expect(first.body.items).toMatchObject([{ id: older.id, progress: { is_completed: true } }]);
+    expect(first.body.next_cursor).toEqual(expect.any(String));
+    const second = await list(waiter.token, first.body.next_cursor);
+    expect(second.status).toBe(200);
+    expect(second.body.items).toMatchObject([{ id: newer.id, progress: { is_cancelled: true } }]);
+    expect(second.body.next_cursor).toBeNull();
+    expect((await list(other.token)).body.items).toEqual([]);
+    expect((await api().get("/api/v1/orders").set(auth(waiter.token))).body.items).toMatchObject([
+      { id: open.id },
+    ]);
+    expect(
+      (await api().get("/api/v1/public/orders?progress=closed").set("X-Table-Token", f.deviceToken)).status,
+    ).toBe(400);
+  });
+
   it("dois garçons não movimentam duas vezes a mesma quantidade", async () => {
     const f = await menuFixture(),
       created = await api()

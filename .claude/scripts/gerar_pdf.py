@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gera o PDF da documentação técnica a partir dos capítulos em .claude/knowledge/garcom-nfc.
 
-Uso: python3 .claude/scripts/gerar_pdf.py [--versao 1.2] [--saida docs/Documentacao-Tecnica-garcom-NFC.pdf]
+Uso: python3 .claude/scripts/gerar_pdf.py [--versao 1.4] [--saida docs/Documentacao-Tecnica-garcom-NFC.pdf]
 Precisa do pacote Python `markdown`, do Chromium (`chromium`) e do `pdftotext` (poppler).
 Sem o pacote no Python do sistema, use um ambiente temporário:
     python3 -m venv /tmp/pdfenv && /tmp/pdfenv/bin/pip install markdown
@@ -36,9 +36,9 @@ FILES = [
     "cap-09-estado-roadmap-limitacoes", "apendice-a-divergencias", "apendice-b-glossario",
     "apendice-c0-introducao", "apendice-c1-modelo-de-dados-v02", "apendice-c2-endpoints-eventos-v02",
     "apendice-c3-fluxos-telas-v02", "apendice-c4-desenho-proposto-modulos", "apendice-c5-propostas-guia",
-    "apendice-d-cardapio-e-pedidos",
+    "apendice-d-cardapio-e-pedidos", "fluxo-pedidos",
 ]
-VERSION = "1.2"  # padrão; --versao muda
+VERSION = "1.4"  # padrão; --versao muda
 FIG_RE = re.compile(r"^_Figura: \*\*Figura (\d+\.\d+)\*\* – (.*)_\s*$")
 
 
@@ -164,7 +164,7 @@ def render(out: Path, version: str, pages: dict) -> Path:
     cover = (
         '<section class="cover"><div class="in"><h1>garcom-NFC</h1>'
         '<div class="sub">Documentação Técnica Consolidada do Sistema</div>'
-        "<p>Plataforma SaaS multi-restaurante para chamado de garçom e pedido de conta por QR Code / NFC</p>"
+        "<p>Plataforma SaaS multi-restaurante para atendimento e pedidos por QR Code / NFC, com painel de cozinha</p>"
         f"<p>Versão consolidada {version} — baseada nas documentações v0.2, v0.3, módulos e guia de estudos, "
         "atualizada com o código-fonte do back-end e do front-end</p>"
         f"<p>Data: {date.today():%d/%m/%Y}</p></div></section>"

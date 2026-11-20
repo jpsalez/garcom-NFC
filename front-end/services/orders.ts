@@ -52,6 +52,11 @@ export async function listOpenOrders(): Promise<Pick<OrderPage, "items" | "serve
   return { items, server_time: page.server_time };
 }
 
+export async function listRecentClosedOrders() {
+  const { items } = await listOrders({ progress: "closed", limit: 10 });
+  return items;
+}
+
 export function getOrder(id: string) {
   return api<Order>(`/orders/${encodeURIComponent(id)}`);
 }

@@ -76,22 +76,33 @@ export class OrdersService implements IOrdersService {
     if (!result.replayed) this.notify(result.record, "order:created");
     return { order: orderView(result.record), replayed: result.replayed };
   }
-  private page(records: OrderRecord[], limit: number, staff: boolean) {
+  private page(
+    records: OrderRecord[],
+    limit: number,
+    staff: boolean,
+    sortField: "created_at" | "updated_at" = "created_at",
+  ) {
     const rows = records.slice(0, limit),
       last = rows.at(-1);
     return {
       items: rows.map((row) => orderView(row, staff)),
-      next_cursor: records.length > limit && last ? encodeCursor(last) : null,
+      next_cursor:
+        records.length > limit && last ? encodeCursor({ id: last.id, created_at: last[sortField] }) : null,
       server_time: new Date(),
     };
   }
   async list(actor: ActorContext, query: OrdersQuery) {
     requireCapability(actor, "orders:read");
-    return this.page(await this.repository.list(this.tenant(actor), query), query.limit, true);
+    return this.page(
+      await this.repository.list(this.tenant(actor), query),
+      query.limit,
+      true,
+      query.progress === "closed" ? "updated_at" : "created_at",
+    );
   }
   async get(actor: ActorContext, id: string) {
     requireCapability(actor, "orders:read");
-    return orderView(await this.repository.get(this.tenant(actor), id), true);
+    return orderView(await this.repository.get(this.tenant(actor), id, { includeReadyHistory: true }), true);
   }
   async deviceList(context: TableContext, query: OrdersQuery) {
     return this.unit.run(context.restaurantId, async ({ db, now }) => {
@@ -153,7 +164,7 @@ export class OrdersService implements IOrdersService {
             live,
           );
         }
-        return repo.get(this.tenant(actor), id);
+        return repo.get(this.tenant(actor), id, { includeReadyHistory: true });
       },
       { actor, capability: "orders:read" },
     );

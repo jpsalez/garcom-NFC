@@ -14,8 +14,6 @@ export default function AdminNav() {
 
     if (session.user.role === 'OWNER' || (session.user.role === 'STAFF' && session.user.category === 'MANAGER')) items.push({ href: '/admin/cardapio', label: 'Cardápio' })
 
-    if (session.user.role === 'OWNER' || (session.user.role === 'STAFF' && ['MANAGER', 'WAITER', 'KITCHEN'].includes(session.user.category ?? ''))) items.push({ href: '/admin/pedidos', label: 'Pedidos' })
-
     if (canAccessKitchen(session.user)) items.push({ href: '/admin/cozinha', label: 'Cozinha' })
 
     items.push({ href: '/admin/senha', label: 'Senha' })

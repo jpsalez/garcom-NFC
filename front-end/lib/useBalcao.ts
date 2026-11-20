@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { API_URL, refreshSession } from "@/lib/api";
 import { clearSession } from "@/lib/session";
-import { playAlert } from "@/lib/sound";
+import { playAlert, unlockAlert } from "@/lib/sound";
 import type { ActiveSession, Call } from "@/lib/types";
 import { listCalls } from "@/services/calls";
 import { listSessions } from "@/services/sessions";
@@ -24,6 +24,15 @@ export function useBalcao(soundOn: boolean) {
   const events = useRef(0) // conta eventos recebidos: uma carga em voo que os atravessou pode estar velha
 
   useEffect(() => { sound.current = soundOn }, [soundOn])
+  useEffect(() => {
+    if (!soundOn) return;
+    window.addEventListener("pointerdown", unlockAlert, { once: true });
+    window.addEventListener("keydown", unlockAlert, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlockAlert);
+      window.removeEventListener("keydown", unlockAlert);
+    };
+  }, [soundOn])
 
   // Nunca lança: em falha marca os dados como velhos e o efeito abaixo tenta de novo
   const load = useCallback(async () => {

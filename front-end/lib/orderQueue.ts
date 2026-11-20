@@ -1,6 +1,6 @@
-import type { OrderPage } from "@/lib/orderTypes";
+import type { Order, OrderPage } from "@/lib/orderTypes";
 
-type Snapshot = Pick<OrderPage, "items" | "server_time"> & { loadedAt: number };
+type Snapshot = Pick<OrderPage, "items" | "server_time"> & { loadedAt: number; closed?: Order[] };
 export type OrderQueueState = {
   snapshot: Snapshot | null;
   degraded: boolean;

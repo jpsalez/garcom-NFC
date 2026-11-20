@@ -1,11 +1,27 @@
 import type { Prisma, order_events } from "../../../generated/prisma/client.ts";
 import type { OrdersQuery } from "./orders.schemas.ts";
 const orderInclude = { items: { orderBy: { position: "asc" as const }, include: { selections: true } } };
-export { orderInclude };
-export type OrderRecord = Prisma.ordersGetPayload<{ include: typeof orderInclude }>;
+const staffOrderInclude = {
+  ...orderInclude,
+  events: {
+    where: { action: "TRANSITIONED", to_stage: "READY" },
+    orderBy: { sequence: "desc" },
+    select: {
+      order_item_id: true,
+      quantity: true,
+      created_at: true,
+      sequence: true,
+      resulting_order_version: true,
+    },
+  },
+} satisfies Prisma.ordersInclude;
+export { orderInclude, staffOrderInclude };
+export type OrderRecord = Prisma.ordersGetPayload<{ include: typeof orderInclude }> &
+  Partial<Pick<Prisma.ordersGetPayload<{ include: typeof staffOrderInclude }>, "events">>;
+export type OrderReadOptions = { includeReadyHistory?: boolean };
 export type TableContext = { restaurantId: string; sessionId: string; tokenId: string; tableLabel: string };
 export interface IOrdersRepository {
-  get(restaurantId: string, id: string): Promise<OrderRecord>;
+  get(restaurantId: string, id: string, options?: OrderReadOptions): Promise<OrderRecord>;
   findSubmission(restaurantId: string, key: string): Promise<OrderRecord | null>;
   list(restaurantId: string, query: OrdersQuery, tokenId?: string): Promise<OrderRecord[]>;
   hasPendingForSession(restaurantId: string, sessionId: string): Promise<boolean>;

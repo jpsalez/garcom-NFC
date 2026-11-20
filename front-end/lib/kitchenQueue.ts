@@ -14,12 +14,13 @@ export function groupKitchenOrders(orders: Order[]) {
   const sorted = [...orders].sort((a, b) =>
     Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id),
   );
-  const production: Order[] = [];
+  const incoming: Order[] = [];
+  const preparing: Order[] = [];
   const pickup: Order[] = [];
   for (const order of sorted) {
-    const { pending, preparing, ready } = order.progress;
-    if (pending > 0 || preparing > 0) production.push(order);
-    else if (ready > 0) pickup.push(order);
+    if (order.progress.pending > 0) incoming.push(order);
+    if (order.progress.preparing > 0) preparing.push(order);
+    if (order.progress.ready > 0) pickup.push(order);
   }
-  return { production, pickup };
+  return { incoming, preparing, pickup };
 }

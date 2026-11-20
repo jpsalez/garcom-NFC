@@ -15,6 +15,8 @@ export type OrderSubmission = {
 export type Order = {
   id: string;
   session_id?: string | null;
+  ready_since?: string | null;
+  ready_sequence?: number | null;
   table_label: string;
   source: "LOCAL_MENU";
   fulfillment_type: "DINE_IN";
@@ -59,7 +61,7 @@ export type OrderQuery = {
   session_id?: string;
   from?: string;
   to?: string;
-  progress?: "open" | "ready" | "completed" | "cancelled";
+  progress?: "open" | "ready" | "completed" | "cancelled" | "closed";
   limit?: number;
   cursor?: string;
 };

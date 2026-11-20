@@ -35,6 +35,28 @@ export function move(item: Counters, op: Transition): Counters {
   result[keys[op.to_stage]] += op.quantity;
   return result;
 }
+function readyTiming(order: OrderRecord) {
+  const remaining = new Map(
+    order.items.filter((item) => item.ready_quantity > 0).map((item) => [item.id, item.ready_quantity]),
+  );
+  let readySince: Date | null = null;
+  let readySequence: number | null = null;
+
+  // Saídas de READY consomem as unidades mais antigas de cada item.
+  for (const event of order.events ?? []) {
+    if (!remaining.size) break;
+    if (!event.order_item_id || !event.quantity || event.resulting_order_version > order.version) continue;
+    const quantity = remaining.get(event.order_item_id);
+    if (!quantity) continue;
+    readySequence ??= event.sequence;
+    readySince = event.created_at;
+    if (event.quantity >= quantity) remaining.delete(event.order_item_id);
+    else remaining.set(event.order_item_id, quantity - event.quantity);
+  }
+
+  return { ready_since: readySince, ready_sequence: readySequence };
+}
+
 export function orderView(order: OrderRecord, staff = false) {
   const quantities = order.items.reduce(
     (sum, item) => ({
@@ -52,7 +74,7 @@ export function orderView(order: OrderRecord, staff = false) {
   );
   return {
     id: order.id,
-    ...(staff ? { session_id: order.session_id } : {}),
+    ...(staff ? { session_id: order.session_id, ...readyTiming(order) } : {}),
     table_label: order.table_label_snapshot,
     source: order.source,
     fulfillment_type: order.fulfillment_type,

@@ -26,3 +26,5 @@ Como usar: (1) leia só este índice; (2) escolha 1 ou 2 arquivos; (3) para deta
 | integracao-front-2026-11-14.md | — | **Integração do front com a API** — como rodar, arquitetura do front, decisões tomadas sem o usuário e estado de cada passo |
 
 Arquivo morto (não leia por padrão): `../_arquivo/` guarda anotações antigas, por exemplo `sessao-2026-11-12-onde-paramos.md`.
+
+- [Fluxo de pedidos à mesa](fluxo-pedidos.md) — etapas, responsabilidades, avisos e sincronização.

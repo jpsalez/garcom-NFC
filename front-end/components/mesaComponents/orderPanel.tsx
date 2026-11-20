@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { clearDevice } from "@/lib/device";
 import type { PublicMenu } from "@/lib/menuTypes";
-import type { Order, OrderSubmission } from "@/lib/orderTypes";
-import { listDeviceOrders, submitOrder } from "@/services/orders";
+import type { OrderSubmission } from "@/lib/orderTypes";
+import { submitOrder } from "@/services/orders";
+import type { DeviceOrderFeed } from "@/hooks/useDeviceOrders";
+import { DeviceOrderHistory, DeviceOrderSummary } from "./deviceOrderStatus";
 
 type Product = PublicMenu["content"]["categories"][number]["products"][number];
 type Line = OrderSubmission["items"][number] & { name: string; variant: string; total: number; choices: string[] };
@@ -44,10 +46,9 @@ function ProductChoice({ product, menu, onAdd, onClose }: { product: Product; me
   </div>;
 }
 
-export default function OrderPanel({ code, token, menu, selected, onSelected }: { code: string; token: string; menu: PublicMenu; selected: string | null; onSelected: (id: string | null) => void }) {
+export default function OrderPanel({ code, token, menu, selected, onSelected, feed }: { code: string; token: string; menu: PublicMenu; selected: string | null; onSelected: (id: string | null) => void; feed: DeviceOrderFeed }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [view, setView] = useState<"menu" | "review" | "history">("menu");
-  const [orders, setOrders] = useState<Order[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<OrderSubmission | null>(null);
@@ -58,33 +59,12 @@ export default function OrderPanel({ code, token, menu, selected, onSelected }: 
   useEffect(() => {
     Promise.resolve().then(() => { try { const saved = JSON.parse(sessionStorage.getItem(key) ?? "null"); if (saved?.body) { if (saved.token === token) setPending(saved.body); else setPreviousSession(true); } } catch { sessionStorage.removeItem(key); } });
   }, [key, token]);
-  useEffect(() => {
-    if (view !== "history") return;
-    let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const load = async () => {
-      if (!active || document.hidden) return;
-      try {
-        const result = await listDeviceOrders(token);
-        if (!active) return;
-        setOrders(result.items); setError("");
-        if (result.items.some((order) => !order.progress.is_completed && !order.progress.is_cancelled)) timer = setTimeout(load, 10000);
-      } catch (err) {
-        if (!active) return;
-        if (err instanceof ApiError && err.status === 401) setSessionExpired(true);
-        setError(err instanceof ApiError && err.status === 401 ? "A sessão da mesa encerrou. Reinicie o atendimento para continuar." : "Não foi possível atualizar seus pedidos. Feche e abra novamente para tentar.");
-      }
-    };
-    const onVisibility = () => { if (timer) clearTimeout(timer); if (!document.hidden) void load(); };
-    void load(); document.addEventListener("visibilitychange", onVisibility);
-    return () => { active = false; if (timer) clearTimeout(timer); document.removeEventListener("visibilitychange", onVisibility); };
-  }, [view, token]);
   async function send() {
     if (busy || previousSession || (!pending && !lines.length)) return;
     const body = pending ?? { submission_key: crypto.randomUUID(), publication_id: menu.publication_id, items: lines.map(({ product_id, variant_id, quantity, selections, notes }) => ({ product_id, variant_id, quantity, selections, notes })) };
     try { sessionStorage.setItem(key, JSON.stringify({ token, body })); } catch { setError("Não foi possível guardar a confirmação do pedido neste navegador. Verifique as configurações de armazenamento antes de enviar."); return; }
     setPending(body); setBusy(true); setError("");
-    try { await submitOrder(token, body); sessionStorage.removeItem(key); setPending(null); setLines([]); setView("history"); }
+    try { await submitOrder(token, body); sessionStorage.removeItem(key); setPending(null); setLines([]); feed.refresh(); setView("history"); }
     catch (err) {
       if (err instanceof ApiError && err.status === 401) { setSessionExpired(true); setError("A sessão da mesa encerrou. Reinicie o atendimento e consulte a equipe sobre o envio anterior antes de fazer outro pedido."); }
       else if (err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 429) { sessionStorage.removeItem(key); setPending(null); setError("Não foi possível enviar: o cardápio ou a disponibilidade pode ter mudado. Atualize a página e confira os itens."); }
@@ -92,13 +72,27 @@ export default function OrderPanel({ code, token, menu, selected, onSelected }: 
     } finally { setBusy(false); }
   }
   return <>
-    <div className="flex shrink-0 gap-2 border-t bg-white p-3 text-slate-900"><button type="button" onClick={() => { setView("history"); setError(""); }} className="flex-1 rounded-xl border p-3 text-sm font-semibold">Meus pedidos</button>{(menu.customer_ordering_enabled || lines.length > 0 || pending) && <button type="button" onClick={() => { setView("review"); setError(""); }} className={`${button} flex-1`}>Revisar pedido {lines.length > 0 && `(${lines.length})`}</button>}</div>
+    <div className="shrink-0 space-y-2 border-t bg-white p-3 text-slate-900">
+      {view === "menu" && !product && <DeviceOrderSummary feed={feed} code={code} />}
+      <div className="flex gap-2">
+        <button type="button" onClick={() => { setView("history"); setError(""); feed.refresh(); }}
+          className="flex-1 rounded-lg border p-3 text-sm font-semibold">Meus pedidos</button>
+        {(menu.customer_ordering_enabled || lines.length > 0 || pending) &&
+          <button type="button" onClick={() => { setView("review"); setError(""); }} className={`${button} flex-1`}>
+            Revisar pedido {lines.length > 0 && `(${lines.length})`}
+          </button>}
+      </div>
+    </div>
     {product && <ProductChoice key={product.id} product={product} menu={menu} onClose={() => onSelected(null)} onAdd={(line) => { if (previousSession) { setError("Um envio anterior não foi confirmado e a sessão mudou. Consulte a equipe antes de fazer um novo pedido."); setView("review"); } else if (pending) { setError("Confirme o envio anterior antes de adicionar mais itens."); setView("review"); } else if (lines.length < 50) setLines([...lines, line]); else { setError("O pedido pode conter até 50 itens."); setView("review"); } onSelected(null); }} />}
     {view !== "menu" && <div className="fixed inset-0 z-10 flex items-end justify-center bg-black/60 sm:items-center" role="dialog" aria-modal="true" aria-label={view === "review" ? "Revisar pedido" : "Meus pedidos"}><div className="max-h-[90dvh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-white p-6 text-slate-900 sm:rounded-3xl"><div className="flex items-center justify-between"><h3 className="text-xl font-bold">{view === "review" ? "Revisar pedido" : "Meus pedidos"}</h3><button type="button" onClick={() => setView("menu")} aria-label="Voltar ao cardápio">✕</button></div>
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
-      {sessionExpired && <button type="button" className="mt-3 rounded-xl border px-4 py-3 text-sm font-semibold" onClick={() => { clearDevice(code); window.location.reload(); }}>Reiniciar atendimento</button>}
-      {view === "review" && <><p className="mt-3 text-sm text-slate-600">Confira os itens antes de enviar para o restaurante.</p>{previousSession && <div role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm"><p>Um envio anterior não foi confirmado e a sessão mudou. Consulte a equipe antes de fazer outro pedido.</p><button type="button" className="mt-3 font-semibold underline" onClick={() => { if (!window.confirm("Você confirmou com a equipe a situação do pedido anterior? Esta ação libera um novo pedido e não reenvia o anterior.")) return; try { sessionStorage.removeItem(key); setPreviousSession(false); setError(""); } catch { setError("Não foi possível liberar a pendência neste navegador. Peça ajuda à equipe."); } }}>Já confirmei com a equipe</button></div>}{pending && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm">Há um envio aguardando confirmação. Repita o envio para verificar o resultado com segurança.</p>}{lines.map((line, index) => <div key={index} className="mt-3 rounded-xl border p-4"><div className="flex justify-between gap-4"><strong>{line.quantity}× {line.name}</strong><span>{money(line.total)}</span></div><p className="mt-1 text-sm text-slate-600">{line.variant}{line.choices.length > 0 && ` · ${line.choices.join(", ")}`}</p>{line.notes && <p className="text-sm">Obs.: {line.notes}</p>}<button type="button" disabled={!!pending} onClick={() => setLines(lines.filter((_, i) => i !== index))} className="mt-2 text-sm underline disabled:opacity-40">Remover</button></div>)}{!lines.length && !pending && <p className="mt-5 text-sm">Escolha produtos no cardápio para montar seu pedido.</p>}{lines.length > 0 && <p className="mt-4 text-right font-bold">Total estimado: {money(lines.reduce((sum, line) => sum + line.total, 0))}</p>}<button type="button" onClick={send} disabled={busy || sessionExpired || previousSession || (!lines.length && !pending)} className={`${button} mt-5 w-full`}>{busy ? "Enviando..." : pending ? "Confirmar envio novamente" : "Enviar pedido"}</button></>}
-      {view === "history" && <>{orders.length === 0 && !error && <p className="mt-5 text-sm">Nenhum pedido encontrado neste aparelho.</p>}{orders.map((order) => <div key={order.id} className="mt-4 rounded-xl border p-4"><p className="font-bold">Pedido de {new Date(order.created_at).toLocaleString("pt-BR")}</p>{order.items.map((item) => <div key={item.id} className="mt-3 text-sm"><p className="font-semibold">{item.quantity}× {item.name} · {item.variant_name}</p><p className="text-slate-600">{[[item.pending_quantity, "Aguardando"], [item.preparing_quantity, "Em preparo"], [item.ready_quantity, "Pronto"], [item.delivered_quantity, "Entregue"], [item.cancelled_quantity, "Cancelado"]].filter(([count]) => Number(count) > 0).map(([count, label]) => `${count} ${label}`).join(" · ")}</p></div>)}<p className="mt-3 font-bold">Total ativo: {money(order.active_total_cents)}</p></div>)}<p className="mt-4 text-xs text-slate-500">Pedidos em andamento são atualizados a cada 10 segundos enquanto esta tela estiver visível.</p></>}
+      {view === "review" && sessionExpired && !feed.expired && <button type="button" className="mt-3 rounded-xl border px-4 py-3 text-sm font-semibold" onClick={() => { clearDevice(code); window.location.reload(); }}>Reiniciar atendimento</button>}
+      {view === "review" && <><p className="mt-3 text-sm text-slate-600">Confira os itens antes de enviar para o restaurante.</p>{previousSession && <div role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm"><p>Um envio anterior não foi confirmado e a sessão mudou. Consulte a equipe antes de fazer outro pedido.</p><button type="button" className="mt-3 font-semibold underline" onClick={() => { if (!window.confirm("Você confirmou com a equipe a situação do pedido anterior? Esta ação libera um novo pedido e não reenvia o anterior.")) return; try { sessionStorage.removeItem(key); setPreviousSession(false); setError(""); } catch { setError("Não foi possível liberar a pendência neste navegador. Peça ajuda à equipe."); } }}>Já confirmei com a equipe</button></div>}{pending && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm">Há um envio aguardando confirmação. Repita o envio para verificar o resultado com segurança.</p>}{lines.map((line, index) => <div key={index} className="mt-3 rounded-xl border p-4"><div className="flex justify-between gap-4"><strong>{line.quantity}× {line.name}</strong><span>{money(line.total)}</span></div><p className="mt-1 text-sm text-slate-600">{line.variant}{line.choices.length > 0 && ` · ${line.choices.join(", ")}`}</p>{line.notes && <p className="text-sm">Obs.: {line.notes}</p>}<button type="button" disabled={!!pending} onClick={() => setLines(lines.filter((_, i) => i !== index))} className="mt-2 text-sm underline disabled:opacity-40">Remover</button></div>)}{!lines.length && !pending && <p className="mt-5 text-sm">Escolha produtos no cardápio para montar seu pedido.</p>}{lines.length > 0 && <p className="mt-4 text-right font-bold">Total estimado: {money(lines.reduce((sum, line) => sum + line.total, 0))}</p>}<button type="button" onClick={send} disabled={busy || sessionExpired || feed.expired || previousSession || (!lines.length && !pending)} className={`${button} mt-5 w-full`}>{busy ? "Enviando..." : pending ? "Confirmar envio novamente" : "Enviar pedido"}</button></>}
+      {view === "history" && <div className="mt-3">
+        <DeviceOrderSummary feed={feed} code={code} />
+        <DeviceOrderHistory feed={feed} />
+      </div>}
+      {view === "review" && feed.expired && <DeviceOrderSummary feed={feed} code={code} />}
     </div></div>}
   </>;
 }

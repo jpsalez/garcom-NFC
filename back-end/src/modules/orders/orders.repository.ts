@@ -5,17 +5,23 @@ import type { DbClient } from "../../shared/providers/prisma.ts";
 import { ConflictError, NotFoundError, UnauthorizedError } from "../../shared/errors/http-errors.ts";
 import { decodeCursor } from "../../shared/utils/cursor.ts";
 import type { ActorContext } from "../../shared/authorization/capabilities.ts";
-import { orderInclude, type IOrdersRepository, type TableContext } from "./orders.repository.interface.ts";
+import {
+  orderInclude,
+  staffOrderInclude,
+  type IOrdersRepository,
+  type OrderReadOptions,
+  type TableContext,
+} from "./orders.repository.interface.ts";
 import type { PricedLine } from "./order-pricing.ts";
 import type { OrdersQuery, Transition } from "./orders.schemas.ts";
 
 @injectable()
 export class OrdersRepository implements IOrdersRepository {
   constructor(@inject("DbClient") private db: DbClient) {}
-  async get(restaurantId: string, id: string) {
+  async get(restaurantId: string, id: string, options?: OrderReadOptions) {
     const order = await this.db.orders.findFirst({
       where: { restaurant_id: restaurantId, id },
-      include: orderInclude,
+      include: options?.includeReadyHistory ? staffOrderInclude : orderInclude,
     });
     if (!order) throw new NotFoundError("Pedido não encontrado");
     return order;
@@ -53,6 +59,7 @@ export class OrdersRepository implements IOrdersRepository {
       OR: [{ pending_quantity: { gt: 0 } }, { preparing_quantity: { gt: 0 } }, { ready_quantity: { gt: 0 } }],
     };
     const progress = query.progress ?? (tokenId ? undefined : "open");
+    const sortField = progress === "closed" ? "updated_at" : "created_at";
     const where: Prisma.ordersWhereInput = {
       restaurant_id: restaurantId,
       session_id: query.session_id,
@@ -67,6 +74,7 @@ export class OrdersRepository implements IOrdersRepository {
     };
     if (progress === "open") where.items = { some: open };
     if (progress === "ready") where.items = { some: { ready_quantity: { gt: 0 } } };
+    if (progress === "closed") where.items = { none: open };
     if (progress === "completed") {
       where.AND = [{ items: { none: open } }, { items: { some: { delivered_quantity: { gt: 0 } } } }];
     }
@@ -81,15 +89,18 @@ export class OrdersRepository implements IOrdersRepository {
         ...(Array.isArray(where.AND) ? where.AND : []),
         {
           OR: [
-            { created_at: { lt: cursor.created_at } },
-            { created_at: cursor.created_at, id: { lt: cursor.id } },
+            { [sortField]: { lt: cursor.created_at } },
+            { [sortField]: cursor.created_at, id: { lt: cursor.id } },
           ],
         },
       ];
     return this.db.orders.findMany({
       where,
-      include: orderInclude,
-      orderBy: [{ created_at: "desc" }, { id: "desc" }],
+      include:
+        tokenId || progress === "closed" || progress === "completed" || progress === "cancelled"
+          ? orderInclude
+          : staffOrderInclude,
+      orderBy: [{ [sortField]: "desc" }, { id: "desc" }],
       take: query.limit + 1,
     });
   }

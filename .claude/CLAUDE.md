@@ -1,7 +1,7 @@
 # garcom-NFC
 
 SaaS multi-restaurante: o cliente escaneia QR/NFC e chama o garçom ou pede a conta; o balcão recebe o card em tempo real.
-Back-end em `back-end/` (Node + TypeScript com tsx, Express 5, Prisma + PostgreSQL, Zod, tsyringe). Front em `front-end/` (Next.js). Socket.IO e testes ainda não existem.
+Back-end em `back-end/` (Node + TypeScript com tsx, Express 5, Prisma + PostgreSQL, Zod, tsyringe). Front em `front-end/` (Next.js). Socket.IO atende o painel da equipe e o back-end tem testes de integração com PostgreSQL.
 Resumo e mapa da documentação: `.claude/knowledge/garcom-nfc/00-resumo-e-mapa.md` (índice em `INDEX.md`). O código sempre manda sobre a documentação.
 
 ## Como trabalhar comigo

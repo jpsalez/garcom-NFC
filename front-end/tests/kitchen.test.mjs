@@ -70,7 +70,7 @@ test('acesso direto a /admin/cozinha monta a consulta apenas para dono, gerente 
   }
 });
 
-test('consulta percorre todos os cursores da fila aberta e ordena as duas seções da mais antiga para a mais recente', async () => {
+test('consulta percorre todos os cursores da fila aberta e ordena as etapas da mais antiga para a mais recente', async () => {
   const makeOrder = (id, minute, progress) => ({
     id,
     created_at: `2026-11-19T18:${minute}:00.000Z`,
@@ -106,9 +106,10 @@ test('consulta percorre todos os cursores da fila aberta e ordena as duas seçõ
     '/orders?progress=open&limit=100&cursor=next%2F2',
   ]);
   assert.equal(server_time, '2026-11-19T18:05:15.000Z');
-  const { production, pickup } = groupKitchenOrders(items);
-  assert.deepEqual(Array.from(production, (order) => order.id), ['prep-old', 'prep-a', 'prep-b', 'new']);
-  assert.deepEqual(Array.from(pickup, (order) => order.id), ['ready-old', 'ready-new']);
+  const { incoming, preparing, pickup } = groupKitchenOrders(items);
+  assert.deepEqual(Array.from(incoming, (order) => order.id), ['prep-a', 'new']);
+  assert.deepEqual(Array.from(preparing, (order) => order.id), ['prep-old', 'prep-b']);
+  assert.deepEqual(Array.from(pickup, (order) => order.id), ['ready-old', 'prep-b', 'ready-new', 'new']);
   assert.equal(items[0].id, 'new');
 });
 
@@ -117,6 +118,7 @@ test('painel KDS exibe mesa, código curto, espera com alerta, itens limpos e bo
     id: '1587c93d-4d34-424d-ac44-30e20ab13012',
     table_label: 'Mesa 12',
     created_at: '2026-11-19T18:00:00Z',
+    ready_since: '2026-11-19T18:56:00Z',
     progress: { pending: 2, preparing: 3, ready: 1 },
     items: [{
       id: 'mixed', name: 'Hambúrguer', variant_name: 'Grande', notes: 'Sem cebola',
@@ -142,6 +144,7 @@ test('painel KDS exibe mesa, código curto, espera com alerta, itens limpos e bo
     id: '99887766-0000-0000-0000-000000000000',
     table_label: 'Mesa 2',
     created_at: '2026-11-19T18:59:00Z',
+    ready_since: '2026-11-19T19:00:00Z',
     progress: { pending: 0, preparing: 0, ready: 2 },
     items: [{
       id: 'ready-item', name: 'Batata Frita', variant_name: 'Pequena', notes: null,
@@ -168,13 +171,14 @@ test('painel KDS exibe mesa, código curto, espera com alerta, itens limpos e bo
       disabled: false,
     }) },
     '@/lib/format': load('../lib/format.ts'),
+    '@/lib/orderAlerts': load('../lib/orderAlerts.ts'),
     '@/lib/kitchenQueue': load('../lib/kitchenQueue.ts'),
   });
   const card = renderToStaticMarkup(React.createElement(CozinhaPage));
   for (const label of [
     'Cozinha', 'Ao vivo', 'Mesa 12', '#1587C9', `title="${order.id}"`,
-    'Espera 1:02:09', 'Em preparo', '6×', 'Hambúrguer', 'Grande', '+ 2× Queijo',
-    'Obs: Sem cebola', '2 novos · 3 em preparo · 1 pronto',
+    'Espera 1:02:09', 'Em preparo', '3×', 'Hambúrguer', 'Grande', '+ 2× Queijo',
+    'Obs: Sem cebola', '2×', 'Aguardando garçom', 'Pronto há 6:09', 'Pronto há 2:09',
     'Mesa 5', '#ABCDEF', 'Novo', '1×', 'Suco de Laranja',
     'Mesa 2', '#998877', 'Batata Frita', 'Pronto',
   ]) {
@@ -183,7 +187,7 @@ test('painel KDS exibe mesa, código curto, espera com alerta, itens limpos e bo
   assert.match(card, /data-wait-level="critical"/);
   assert.match(card, /data-wait-level="warning"/);
   assert.match(card, /data-wait-level="normal"/);
-  assert.match(card, /sm:grid-cols-2 xl:grid-cols-3/);
+  assert.match(card, /md:grid-cols-3/);
   assert.match(card, />Iniciar preparo<\/button>/);
   assert.match(card, />Pronto<\/button>/);
   assert.doesNotMatch(card, /<input\b/i);
@@ -206,7 +210,6 @@ test('painel KDS exibe mesa, código curto, espera com alerta, itens limpos e bo
     ],
   })), [
     { item_id: 'a', from_stage: 'PREPARING', to_stage: 'READY', quantity: 1 },
-    { item_id: 'b', from_stage: 'PENDING', to_stage: 'READY', quantity: 3 },
   ]);
 });
 
@@ -335,11 +338,12 @@ test('o painel reconcilia no foco, polling e reconexão e bloqueia após mudanç
       createOrderQueue: (read, publish, isDenied) => createOrderQueue(read, publish, isDenied, 0),
     },
     '@/lib/session': { useSession: () => ({ user }) },
+    '@/lib/orderAlerts': load('../lib/orderAlerts.ts'),
     '@/services/auth': { getCurrentUser: async () => ({ ...current }) },
     '@/services/orders': {
       listOpenOrders: async () => {
         reads++;
-        return { items: [{ id: 'order', version }], server_time: new Date().toISOString() };
+        return { items: [{ id: 'order', version, progress: { ready: 0 } }], server_time: new Date().toISOString() };
       },
       transitionOrder: async (id, body) => {
         writes.push({ id, ...body });
@@ -445,6 +449,156 @@ test('a confirmação apresenta as quantidades da nova versão ou permite descar
     ],
   };
   const batchReview = render({ conflict: batchConflict, snapshot: { items: [order] } });
-  assert.match(batchReview, /Mesa 1 · 1 item disponível/);
+  assert.match(batchReview, /<p>Mesa 1<\/p><ul><li>1× Lanche<\/li>/);
   assert.match(batchReview, /Confirmar: Marcar pronto/);
+});
+
+test('garçom vê e entrega somente as unidades prontas de pedidos mistos', () => {
+  const { buildDeliveryOperations, default: ReadyOrders } = load('../components/garcomComponents/readyOrders.tsx', {
+    '@/lib/format': load('../lib/format.ts'),
+    '@/lib/orderAlerts': load('../lib/orderAlerts.ts'),
+  });
+  const order = {
+    id: '12345678',
+    table_label: 'Mesa 1',
+    created_at: '2026-11-20T18:00:00Z',
+    ready_since: '2026-11-20T18:03:00Z',
+    progress: { pending: 1, ready: 2, delivered: 1 },
+    items: [
+      { id: 'dish', name: 'Prato', variant_name: 'Grande', selections: [], ready_quantity: 2, delivered_quantity: 1 },
+      { id: 'drink', name: 'Suco', selections: [], pending_quantity: 1, ready_quantity: 0 },
+    ],
+  };
+  const html = renderToStaticMarkup(React.createElement(ReadyOrders, {
+    queue: { snapshot: { items: [order] }, disabled: false },
+    orders: [order], now: Date.parse('2026-11-20T18:09:00Z'),
+  }));
+
+  assert.match(html, /Para servir/);
+  assert.match(html, /role="status"[^>]*>1 pedido com itens prontos para servir/);
+  assert.match(html, /Mesa 1/);
+  assert.match(html, /2× Prato/);
+  assert.match(html, /Ainda há itens em preparo/);
+  assert.match(html, /Entrega atrasada · Pronto há 6:00/);
+  assert.match(html, /border-red-500 bg-red-50/);
+  assert.match(html, />Entregue<\/button>/);
+  assert.doesNotMatch(html, /Suco|<input/);
+  assert.deepEqual(structuredClone(buildDeliveryOperations(order)), [
+    { item_id: 'dish', from_stage: 'READY', to_stage: 'DELIVERED', quantity: 2 },
+  ]);
+});
+
+test('a página da mesa atualiza o status sem depender da abertura do histórico', async () => {
+  const document = new EventTarget();
+  document.hidden = false;
+  let nextPoll;
+  let cleanup;
+  let stored;
+  let calls = 0;
+  const counts = [
+    { pending: 0, preparing: 1, ready: 0, delivered: 0, cancelled: 0 },
+    { pending: 0, preparing: 0, ready: 1, delivered: 0, cancelled: 0 },
+    { pending: 0, preparing: 0, ready: 0, delivered: 1, cancelled: 0, is_completed: true },
+  ];
+  const react = {
+    useEffect: (effect) => { if (!cleanup) cleanup = effect(); },
+    useState: (initial) => initial === 0 ? [initial, () => {}] : [stored, (next) => { stored = next; }],
+  };
+  const { useDeviceOrders } = load('../hooks/useDeviceOrders.ts', {
+    react,
+    '@/lib/api': { ApiError: Error },
+    '@/services/orders': {
+      listDeviceOrders: async (token) => {
+        assert.equal(token, 'device-token');
+        return { items: [{ progress: counts[calls++] }] };
+      },
+    },
+  }, {
+    document,
+    setTimeout: (callback, delay) => { assert.equal(delay, 10000); nextPoll = callback; },
+    clearTimeout: () => { nextPoll = undefined; },
+  });
+  const { DeviceOrderSummary } = load('../components/mesaComponents/deviceOrderStatus.tsx', {
+    react,
+    '@/lib/device': {},
+  });
+  function MesaStatus() {
+    const feed = useDeviceOrders('device-token');
+    return React.createElement(DeviceOrderSummary, { feed, code: 'table-code' });
+  }
+  const renderSummary = () => renderToStaticMarkup(React.createElement(MesaStatus));
+
+  try {
+    renderSummary();
+    await tick();
+    assert.match(renderSummary(), /1 em preparo/);
+    await nextPoll();
+    assert.match(renderSummary(), /1 item pronto\. O garçom vai levá-lo à mesa/);
+    await nextPoll();
+    assert.match(renderSummary(), /1 item entregue/);
+    assert.equal(nextPoll, undefined);
+    assert.equal(calls, 3);
+  } finally {
+    cleanup();
+  }
+});
+
+test('compara pedidos entre reconciliações e avisa de novos lotes sem repetir após a entrega parcial', () => {
+  const { detectOrderAlerts } = load('../lib/orderAlerts.ts');
+  const prepare = { id: 'a', table_label: 'Mesa 2', progress: { ready: 0 } };
+  const ready = { ...prepare, progress: { ready: 2 }, ready_sequence: 3 };
+  const newOrder = { ...prepare, id: 'b', table_label: 'Mesa 3' };
+  const toPlain = structuredClone;
+
+  assert.deepEqual(toPlain(detectOrderAlerts(undefined, [ready])), []);
+  assert.deepEqual(toPlain(detectOrderAlerts([], [newOrder])), [
+    { kind: 'order-new', orderId: 'b', table: 'Mesa 3' },
+  ]);
+  assert.deepEqual(toPlain(detectOrderAlerts([prepare], [ready])), [
+    { kind: 'order-ready', orderId: 'a', table: 'Mesa 2' },
+  ]);
+  assert.deepEqual(toPlain(detectOrderAlerts([ready], [{ ...ready, progress: { ready: 1 } }])), []);
+  assert.deepEqual(toPlain(detectOrderAlerts([ready], [{ ...ready, ready_sequence: 7 }])), [
+    { kind: 'order-ready', orderId: 'a', table: 'Mesa 2' },
+  ]);
+});
+
+test('avisa do atraso aos cinco minutos, repete após dois e respeita o botão de som', () => {
+  const sounds = [];
+  const refs = [];
+  let index = 0;
+  // Cada render visita os refs na mesma ordem que o React.
+  const { useOrderSounds } = load('../hooks/useOrderSounds.ts', {
+    react: {
+      useEffect: (effect) => effect(),
+      useRef: () => {
+        const slot = index++;
+        return refs[slot] ??= { current: undefined };
+      },
+    },
+    '@/lib/orderAlerts': load('../lib/orderAlerts.ts'),
+    '@/lib/sound': { playAlert: (...kinds) => sounds.push(...kinds) },
+  });
+  const start = Date.parse('2026-11-20T18:03:00Z');
+  const order = { id: 'a', progress: { ready: 1 }, ready_since: new Date(start).toISOString() };
+  const queue = { snapshot: { items: [order] } };
+
+  function renderClock(minutes, soundOn, state = queue) {
+    function Clock() {
+      useOrderSounds(state, start + minutes * 60_000, soundOn);
+      return null;
+    }
+    index = 0;
+    renderToStaticMarkup(React.createElement(Clock));
+  }
+
+  renderClock(4, true);
+  renderClock(5, true);
+  renderClock(6, true);
+  renderClock(7, true);
+  renderClock(9, false);
+  renderClock(10, true);
+  renderClock(11, true);
+  renderClock(13, true, { snapshot: { items: [] } });
+  assert.deepEqual(sounds, ['order-overdue', 'order-overdue', 'order-overdue']);
 });

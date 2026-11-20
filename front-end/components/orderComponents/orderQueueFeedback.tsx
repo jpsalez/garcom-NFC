@@ -1,14 +1,10 @@
 import type { OrderQueue } from "@/hooks/useOrderQueue";
 import type { Order } from "@/lib/orderTypes";
 
-export const preparationStages = [
+export const orderStages = [
   { id: "PENDING", label: "Aguardando", key: "pending_quantity", next: "PREPARING", action: "Iniciar preparo" },
   { id: "PREPARING", label: "Em preparo", key: "preparing_quantity", next: "READY", action: "Marcar pronto" },
-] as const;
-
-export const orderStages = [
-  ...preparationStages,
-  { id: "READY", label: "Pronto", key: "ready_quantity", next: "DELIVERED", action: "Marcar entregue" },
+  { id: "READY", label: "Pronto", key: "ready_quantity", next: "DELIVERED", action: "Entregue" },
 ] as const;
 
 type Conflict = NonNullable<OrderQueue["conflict"]>;
@@ -82,18 +78,21 @@ function BatchConflictForm({
     return <p>A etapa já não tem unidades disponíveis para esta ação.</p>;
   }
 
-  const targetLabel = nextOperations.every((op) => op.to_stage === "PREPARING")
-    ? "Iniciar preparo"
-    : nextOperations.every((op) => op.to_stage === "READY")
-      ? "Marcar pronto"
-      : "Confirmar alteração";
+  const targetLabel = orderStages.find(({ next }) => next === nextOperations[0].to_stage)?.action
+    ?? "Confirmar alteração";
 
   return (
     <div className="flex flex-wrap items-center gap-3">
       <p>
-        {order.table_label} · {nextOperations.length}{" "}
-        {nextOperations.length === 1 ? "item disponível" : "itens disponíveis"}
+        {order.table_label}
       </p>
+      <ul>
+        {nextOperations.map((operation) => (
+          <li key={operation.item_id}>
+            {operation.quantity}× {order.items.find(({ id }) => id === operation.item_id)?.name}
+          </li>
+        ))}
+      </ul>
       <button
         type="button"
         disabled={disabled}

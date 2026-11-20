@@ -260,6 +260,7 @@ test('falha na fila de impressão fica isolada no PrintJobsPanel e KDS segue lim
       }),
     },
     '@/lib/format': load('../lib/format.ts'),
+    '@/lib/orderAlerts': load('../lib/orderAlerts.ts'),
     '@/lib/kitchenQueue': kitchen,
   });
 
@@ -267,7 +268,7 @@ test('falha na fila de impressão fica isolada no PrintJobsPanel e KDS segue lim
   assert.match(kdsHtml, /Mesa 4/);
   assert.match(kdsHtml, /Pizza Margherita/);
   assert.match(kdsHtml, /<button[^>]*>Iniciar preparo<\/button>/);
-  assert.match(kdsHtml, /<button[^>]*>Pronto<\/button>/);
+  assert.doesNotMatch(kdsHtml, /<button[^>]*>Pronto<\/button>/);
   assert.doesNotMatch(kdsHtml, /<button[^>]*\sdisabled(?:=|\s|>)[^>]*>Iniciar preparo<\/button>/);
   assert.doesNotMatch(kdsHtml, /Serviço de impressão indisponível|Configurações de impressão/);
 

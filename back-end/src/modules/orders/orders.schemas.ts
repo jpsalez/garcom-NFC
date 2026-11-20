@@ -47,7 +47,7 @@ export const ordersQuery = z.strictObject({
   session_id: z.uuid().optional(),
   from: z.iso.datetime({ offset: true }).optional(),
   to: z.iso.datetime({ offset: true }).optional(),
-  progress: z.enum(["open", "ready", "completed", "cancelled"]).optional(),
+  progress: z.enum(["open", "ready", "completed", "cancelled", "closed"]).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.string().max(512).optional(),
 });

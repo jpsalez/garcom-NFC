@@ -1,16 +1,16 @@
 import { MdEmojiPeople } from "react-icons/md"
 import { NumberTicker } from "../ui/number-ticker"
 
-type Kpis = { pending: number, activeTables: number, bills: number, doneToday: number }
+type Kpis = { pending: number, activeTables: number, bills: number, doneToday: number, ready?: number }
 
-export default function KpiWaiter({ pending, activeTables, bills, doneToday }: Kpis) {
+export default function KpiWaiter({ pending, activeTables, bills, doneToday, ready }: Kpis) {
 
     return(
         <>
             <div
             className={`w-full grid
             gap-5 md:gap-10 grid-cols-2
-            md:grid-cols-4
+            ${ready === undefined ? "md:grid-cols-4" : "md:grid-cols-5"}
 
 
             [&>div]:grid [&>div]:grid-rows-2 [&>div]:items-center [&>div]:justify-items-center [&>div]:text-center [&>div]:cursor-pointer
@@ -58,6 +58,13 @@ export default function KpiWaiter({ pending, activeTables, bills, doneToday }: K
                     <NumberTicker value={doneToday} delay={0}/>
                     <p>Atendimentos Concluídos</p>
                 </div>
+
+                {ready !== undefined && (
+                    <div className={`kpi-card ${ready > 0 ? "border-emerald-600 bg-emerald-100 font-bold" : ""}`}>
+                        <NumberTicker value={ready} delay={0}/>
+                        <p>Para servir</p>
+                    </div>
+                )}
             </div>
         </>
     )

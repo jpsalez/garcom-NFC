@@ -1,6 +1,5 @@
-import RequireAuth from "@/components/requireAuth";
-import PedidosPage from "@/components/garcomComponents/pedidosPage";
+import { redirect } from "next/navigation";
 
 export default function Pedidos() {
-  return <RequireAuth roles={['OWNER', 'STAFF']}><PedidosPage /></RequireAuth>;
+  redirect("/admin/waiter");
 }

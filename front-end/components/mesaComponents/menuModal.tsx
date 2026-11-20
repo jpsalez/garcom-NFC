@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { BookOpen, X } from "lucide-react";
 import { API_URL, ApiError } from "@/lib/api";
 import type { PublicMenu } from "@/lib/menuTypes";
+import type { DeviceOrderFeed } from "@/hooks/useDeviceOrders";
 import OrderPanel from "./orderPanel";
 import { getTableMenu } from "@/services/menu";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-export default function MenuModal({ code, token, onClose }: { code: string; token: string; onClose: () => void }) {
+export default function MenuModal({ code, token, onClose, feed }: { code: string; token: string; onClose: () => void; feed: DeviceOrderFeed }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [menu, setMenu] = useState<PublicMenu | null>(null);
   const [error, setError] = useState("");
@@ -78,7 +79,7 @@ export default function MenuModal({ code, token, onClose }: { code: string; toke
             </div>
           </>}
         </div>
-        {menu && <OrderPanel code={code} token={token} menu={menu} selected={selected} onSelected={setSelected} />}
+        {menu && <OrderPanel feed={feed} code={code} token={token} menu={menu} selected={selected} onSelected={setSelected} />}
       </div>
     </dialog>
   );

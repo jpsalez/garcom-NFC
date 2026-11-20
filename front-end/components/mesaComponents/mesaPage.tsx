@@ -7,6 +7,8 @@ import type { CallType } from "@/lib/types"
 import { createCall } from "@/services/calls"
 import { scanTable } from "@/services/tables"
 import MenuModal from "@/components/mesaComponents/menuModal"
+import { DeviceOrderDialog, DeviceOrderSummary } from "@/components/mesaComponents/deviceOrderStatus"
+import { useDeviceOrders } from "@/hooks/useDeviceOrders"
 
 function openErrorMessage(err: unknown) {
     if (err instanceof ApiError && err.status === 404) return 'Mesa não encontrada ou indisponível. Fale com o garçom.'
@@ -18,7 +20,9 @@ export default function MesaPage({ code }: { code: string }) {
 
     const [modal, setModal] = useState(false)
     const [menuOpen, setMenuOpen] = useState(false)
+    const [ordersOpen, setOrdersOpen] = useState(false)
     const [device, setDevice] = useState<Device | null>(null)
+    const orderFeed = useDeviceOrders(device?.token)
     const [fatal, setFatal] = useState('')
     const [attempt, setAttempt] = useState(0)
     const timers = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -81,7 +85,8 @@ export default function MesaPage({ code }: { code: string }) {
     return(
         <>
 
-        {menuOpen && <MenuModal code={code} token={device.token} onClose={() => setMenuOpen(false)} />}
+        {menuOpen && <MenuModal code={code} token={device.token} feed={orderFeed} onClose={() => setMenuOpen(false)} />}
+        {ordersOpen && <DeviceOrderDialog code={code} feed={orderFeed} onClose={() => setOrdersOpen(false)} />}
 
         {/* Modal fechar conta */}
         <div
@@ -147,8 +152,15 @@ export default function MesaPage({ code }: { code: string }) {
 
             {notice && <p role="alert" className="px-5 text-center text-red-700">{notice}</p>}
 
-            <div className="w-full px-5">
+            <div className="w-full space-y-3 px-5">
                 <button onClick={() => setMenuOpen(true)} className="w-full rounded-lg bg-[#8dbf21] p-3 font-semibold text-[#1d2540] shadow-lg">Ver cardápio</button>
+                <div className="kpi-card rounded-lg border p-3 text-foreground shadow-lg">
+                    <button type="button" className="w-full rounded-lg border p-2 font-semibold"
+                        onClick={() => { orderFeed.refresh(); setOrdersOpen(true) }}>
+                        Meus pedidos
+                    </button>
+                    <DeviceOrderSummary feed={orderFeed} code={code} />
+                </div>
             </div>
 
             <div className="w-full flex-none flex items-center justify-center p-5">
