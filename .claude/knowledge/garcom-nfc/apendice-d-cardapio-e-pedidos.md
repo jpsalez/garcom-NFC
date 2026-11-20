@@ -220,7 +220,11 @@ O agente deve conferir `expires_at` antes de enviar. O enum `print_job_outcome` 
 
 A reserva revalida cancelamentos sob o mesmo lock usado pelas transições de pedido. Uma comanda totalmente cancelada vira `SUPPRESSED`; cancelamentos parciais fixam a versão e as quantidades restantes na reserva. Depois da reserva, comunicar cancelamentos à cozinha. A segunda via exige uma original existente e fora de `PENDING`, `REVIEW_REQUIRED` ou `SENDING` com prazo vigente, e um pedido com unidades não canceladas. Reaproveitar a chave com motivo ou autor diferente retorna `409 PRINT_REPRINT_KEY_CONFLICT`.
 
-A suíte PostgreSQL em `back-end/tests/printing.test.ts` cobre pareamento, rollback, concorrência, isolamento, expiração, replay, segunda via, revisão, cancelamentos e prazos. O agente local e a interface de configuração entram na #9.
+A suíte PostgreSQL em `back-end/tests/printing.test.ts` cobre pareamento, rollback, concorrência, isolamento, expiração, replay, segunda via, revisão, cancelamentos e prazos.
+
+O serviço local fica em `print-agent/` (Node + TypeScript com tsx). Ele pareia com o código temporário, guarda a credencial em arquivo local com permissão 600, reserva, confere `expires_at`, renderiza a comanda ESC/POS e registra o resultado. A comanda traz mesa, `order_id` igual ao do cartão do KDS, horário, itens, variante, adicionais, observações e `SEGUNDA VIA` quando for o caso. O emulador grava a saída em arquivo e simula falta de papel e perda de confirmação. O teste `npm run test:e2e` usa a API e um PostgreSQL reais (`garcom_kds_agent_test`). Instruções em `print-agent/README.md`.
+
+No front, `admin/cozinha/configuracoes` permite que OWNER/MANAGER façam pareamento, vejam o último contato, ativem após o teste, pausem, revoguem e revisem pendências. A tela da cozinha mostra as pendências de `GET /print-jobs` (com destaque para `FAILED` e `UNCERTAIN`) e a segunda via com motivo e chave preservada no reenvio. Uma falha da impressão fica isolada nesse painel, e o KDS continua operando. Limitações: a listagem não traz a mesa, o filtro aceita um estado por vez e a fila de impressão não tem evento Socket.IO (a tela atualiza por consulta).
 
 O módulo `back-end/src/modules/printing/` usa `printing.routes.ts`, `printing.controller.ts`, `printing.schemas.ts`, `printing.interfaces.ts`, `printing.service.ts`, `printing.repository.interface.ts`, `printing.repository.ts` e `print-job.ts`. Os contratos HTTP estão em `back-end/src/docs/printing-openapi.ts`.
 

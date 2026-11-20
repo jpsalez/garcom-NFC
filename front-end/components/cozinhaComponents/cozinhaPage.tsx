@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from "react";
+import PrintJobsPanel from "@/components/cozinhaComponents/printJobsPanel";
 import OrderQueueFeedback, { preparationStages } from "@/components/orderComponents/orderQueueFeedback";
 import { type OrderQueue, useOrderQueue } from "@/hooks/useOrderQueue";
 import { formatDuration } from "@/lib/format";
@@ -106,6 +107,7 @@ export default function CozinhaPage() {
               </div>
             </section>
           ))}
+      <PrintJobsPanel enabled={!queue.denied} orders={snapshot?.items} />
     </main>
   );
 }

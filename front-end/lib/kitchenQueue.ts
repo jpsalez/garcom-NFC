@@ -6,6 +6,10 @@ export function canAccessKitchen(user: User) {
     (user.role === "STAFF" && (user.category === "MANAGER" || user.category === "KITCHEN"));
 }
 
+export function canConfigurePrinting(user: User) {
+  return user.role === "OWNER" || (user.role === "STAFF" && user.category === "MANAGER");
+}
+
 export function groupKitchenOrders(orders: Order[]) {
   const sorted = [...orders].sort((a, b) =>
     Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id),

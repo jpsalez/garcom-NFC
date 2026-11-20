@@ -130,6 +130,7 @@ test('cartão mostra a espera e os três estágios da mesma linha com variante, 
   const feedback = load('../components/orderComponents/orderQueueFeedback.tsx');
   const { default: CozinhaPage } = load('../components/cozinhaComponents/cozinhaPage.tsx', {
     react: { useEffect: () => {}, useState: () => [0] },
+    '@/components/cozinhaComponents/printJobsPanel': { default: () => null },
     '@/components/orderComponents/orderQueueFeedback': feedback,
     '@/hooks/useOrderQueue': { useOrderQueue: () => ({
       snapshot: { items: [order], server_time: '2026-11-19T19:02:09Z', loadedAt: 0 },
