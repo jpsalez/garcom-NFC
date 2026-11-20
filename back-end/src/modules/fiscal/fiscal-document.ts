@@ -1,4 +1,6 @@
 import type { fiscal_documents, tabs } from "../../../generated/prisma/client.ts";
+import { ConflictError } from "../../shared/errors/http-errors.ts";
+import type { DbClient } from "../../shared/providers/prisma.ts";
 import type { RestaurantTransaction } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
 import type { TabLedger } from "../tabs/tab-ledger.ts";
 import { FiscalRepository } from "./fiscal.repository.ts";
@@ -71,3 +73,18 @@ export function fiscalDocumentView(document: fiscal_documents) {
 }
 
 export type FiscalDocumentView = ReturnType<typeof fiscalDocumentView>;
+
+// DEC-22: com NFC-e ativa, o estorno espera o cancelamento da nota (devolução por NF-e está fora do escopo).
+export async function ensureNoActiveNfce(db: DbClient, tab: Pick<tabs, "restaurant_id" | "id">) {
+  const document = await new FiscalRepository(db).documentByTab(tab.restaurant_id, tab.id);
+  if (document?.status === "AUTHORIZED")
+    throw new ConflictError(
+      "Cancele a NFC-e da comanda antes de estornar o pagamento",
+      "FISCAL_DOCUMENT_AUTHORIZED",
+    );
+  if (document?.status === "PENDING" || document?.status === "PROCESSING")
+    throw new ConflictError(
+      "A NFC-e da comanda está em emissão; conclua e cancele a nota antes de estornar",
+      "FISCAL_DOCUMENT_IN_PROGRESS",
+    );
+}

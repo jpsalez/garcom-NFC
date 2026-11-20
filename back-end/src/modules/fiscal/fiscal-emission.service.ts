@@ -67,24 +67,42 @@ export class FiscalEmissionService {
   }
 
   private async send(key: DocumentKey) {
-    const claimed = await this.claim(key);
+    const current = await new FiscalRepository(this.db).document(key.restaurant_id, key.id);
+    if (current?.status !== "PENDING" || current.dispatched_at) return;
+    // Sem credencial válida a nota espera a configuração, sem HTTP e sem ser rejeitada.
+    const account = await this.account(current).catch((error: unknown) =>
+      this.waitConfiguration(current, error),
+    );
+    if (!account) return;
+    const claimed = await this.claim(key).catch((error: unknown) => ({
+      document: current,
+      problem: `Falha ao montar a nota (${errorFields(error).error})`,
+    }));
     if (!claimed) return;
-    const { document } = claimed;
-    if ("problem" in claimed)
-      return this.apply(document, ["PENDING"], {
-        status: "REJECTED",
-        externalId: `${document.id}-${document.attempt}`,
-        sefazStatus: "LOCAL",
-        sefazMessage: claimed.problem,
-      });
+    if ("problem" in claimed) return this.rejectLocally(claimed.document, claimed.problem);
     try {
-      const account = await this.account(document);
-      const result = await this.providers.get(document.provider).emit(account, claimed.input);
-      await this.apply(document, ["PENDING"], result);
+      const result = await this.providers.get(current.provider).emit(account, claimed.input);
+      await this.apply(claimed.document, ["PENDING"], result);
     } catch (error) {
       if (!(error instanceof FiscalProviderError)) throw error;
-      logOperation({ event: "fiscal.emission_undetermined", document_id: document.id });
+      logOperation({ event: "fiscal.emission_undetermined", document_id: current.id });
     }
+  }
+
+  private rejectLocally(document: fiscal_documents, problem: string) {
+    return this.apply(document, ["PENDING"], {
+      status: "REJECTED",
+      externalId: `${document.id}-${document.attempt}`,
+      sefazStatus: "LOCAL",
+      sefazMessage: problem,
+    });
+  }
+
+  private async waitConfiguration(document: fiscal_documents, error: unknown) {
+    if (!(error instanceof ConflictError)) throw error;
+    logOperation({ event: "fiscal.waiting_configuration", document_id: document.id, code: error.code });
+    await this.touch(document);
+    return null;
   }
 
   // Marca o envio e monta a nota na mesma transação; a referência idempotente fica gravada antes do HTTP.
@@ -124,17 +142,18 @@ export class FiscalEmissionService {
     const fallback = settings.default_tax_profile_id
       ? await repository.profile(document.restaurant_id, settings.default_tax_profile_id)
       : null;
-    const built = buildNfceInput(document, settings, ledger, profiles, fallback);
-    return built;
+    return buildNfceInput(document, settings, ledger, profiles, fallback);
   }
 
-  // A credencial só vale para o provedor que a cadastrou; documento de outro provedor não a recebe.
-  private async account(document: fiscal_documents) {
+  // A credencial só vale para o provedor e o ambiente em que a nota foi emitida.
+  async account(document: fiscal_documents) {
     const settings = await new FiscalRepository(this.db).settings(document.restaurant_id);
-    if (settings?.provider !== document.provider)
-      throw new ConflictError("O provedor fiscal mudou durante a emissão", "FISCAL_PROVIDER_CHANGED");
+    if (settings?.provider !== document.provider || settings.environment !== document.environment)
+      throw new ConflictError("O provedor ou o ambiente fiscal mudou", "FISCAL_PROVIDER_CHANGED");
     const encrypted = settings.provider_credential_encrypted;
-    return { token: encrypted ? decryptSecret(encrypted) : "", environment: document.environment };
+    if (document.provider === "MOCK") return { token: "", environment: document.environment };
+    if (!encrypted) throw new ConflictError("Credencial fiscal ausente", "FISCAL_CREDENTIAL_REQUIRED");
+    return { token: decryptSecret(encrypted), environment: document.environment };
   }
 
   private async apply(
@@ -179,27 +198,32 @@ export class FiscalEmissionService {
           externalId: document.external_id,
           ...sefaz,
         });
-      if (result.state === "FAILED") {
-        await this.update(
-          document,
-          { status: ["AUTHORIZED"] },
-          {
-            cancel_requested_at: null,
-            cancel_reason: null,
-            sefaz_status: sefaz.sefazStatus,
-            sefaz_message: sefaz.sefazMessage,
-          },
-        );
-        throw new ConflictError(
-          `Cancelamento recusado: ${sefaz.sefazMessage ?? "sem motivo informado"}`,
-          "FISCAL_CANCEL_REJECTED",
-        );
-      }
+      if (result.state === "FAILED") await this.cancelRefused(document, sefaz);
       // REQUESTED: o job confirma pelo status.
     } catch (error) {
       if (!(error instanceof FiscalProviderError)) throw error;
       logOperation({ event: "fiscal.cancel_undetermined", document_id: document.id });
     }
+  }
+
+  private async cancelRefused(
+    document: fiscal_documents,
+    sefaz: { sefazStatus?: string; sefazMessage?: string },
+  ) {
+    await this.update(
+      document,
+      { status: ["AUTHORIZED"], cancelRequested: true },
+      {
+        cancel_requested_at: null,
+        cancel_reason: null,
+        sefaz_status: sefaz.sefazStatus,
+        sefaz_message: sefaz.sefazMessage,
+      },
+    );
+    throw new ConflictError(
+      `Cancelamento recusado: ${sefaz.sefazMessage ?? "sem motivo informado"}`,
+      "FISCAL_CANCEL_REJECTED",
+    );
   }
 
   // Job: emite o que ficou sem envio e consulta o que está em andamento.
@@ -229,6 +253,9 @@ export class FiscalEmissionService {
       await this.release(document);
       return this.send(key);
     }
+    // ID sem nota no provedor (ex.: vínculo manual errado): volta para conferência humana.
+    if (!provider.idempotentReference)
+      return this.update(document, { status: ["PROCESSING"] }, { status: "PENDING", external_id: null });
     await this.touch(key);
   }
 
@@ -242,7 +269,7 @@ export class FiscalEmissionService {
     if (requestedAt < Date.now() - 10 * 60 * 1000)
       return this.update(
         document,
-        { status: ["AUTHORIZED"] },
+        { status: ["AUTHORIZED"], cancelRequested: true },
         { cancel_requested_at: null, cancel_reason: null },
       );
     await this.touch(document);

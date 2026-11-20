@@ -16,6 +16,7 @@ import type {
 } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
 import { applyPaymentToCashShift } from "../cash-shifts/cash-shift-balance.ts";
 import { CashShiftsRepository } from "../cash-shifts/cash-shifts.repository.ts";
+import { ensureNoActiveNfce } from "../fiscal/fiscal-document.ts";
 import type { FiscalEmissionService } from "../fiscal/fiscal-emission.service.ts";
 import { MenuRepository } from "../menu/menu.repository.ts";
 import { applyTabSalesChange, tabSales } from "../reports/sales-aggregator.ts";
@@ -379,6 +380,7 @@ export class PaymentsService implements IPaymentsService {
       return { tab, state, payment, replayed: true };
     if (payment.status !== "APPROVED")
       throw new ConflictError("Somente pagamentos aprovados podem ser estornados", "PAYMENT_NOT_APPROVED");
+    await ensureNoActiveNfce(db, tab);
     if (tab.status === "CLOSED" && tab.business_date?.getTime() !== businessDate(now, restaurant).getTime())
       throw new ConflictError("O dia operacional do estorno terminou", "REFUND_WINDOW_EXPIRED");
 

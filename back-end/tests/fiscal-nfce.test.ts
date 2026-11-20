@@ -95,7 +95,12 @@ async function closedSale(f: Fixture, { quantity = 1, method = "PIX" as payment_
     .set(auth(f.token))
     .send({ expected_version: version, customer_document: "12345678909" });
   expect(closed.status).toBe(200);
-  return { tabId, closed: closed.body, paidCents: tab.remaining_cents as number };
+  return {
+    tabId,
+    closed: closed.body,
+    paidCents: tab.remaining_cents as number,
+    paymentId: paid.body.payment.id as string,
+  };
 }
 
 const document = (tabId: string) => prisma.fiscal_documents.findFirstOrThrow({ where: { tab_id: tabId } });
@@ -333,6 +338,102 @@ describe("Notaas", () => {
       .send({ invoice_id: "inv-9" });
     expect(linked.body.fiscal_document).toMatchObject({ status: "AUTHORIZED", access_key: "5".repeat(44) });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("estorno com NFC-e (DEC-22)", () => {
+  const refund = (f: Fixture, tabId: string, paymentId: string) =>
+    api()
+      .post(`/api/v1/tabs/${tabId}/payments/${paymentId}/refund`)
+      .set(auth(f.token))
+      .send({ reason: "Pagamento em duplicidade" });
+
+  it("bloqueia o estorno com a nota autorizada e libera depois de cancelá-la", async () => {
+    const f = await menuFixture();
+    await configure(f);
+    const { tabId, paymentId } = await closedSale(f);
+    const blocked = await refund(f, tabId, paymentId);
+    expect([blocked.status, blocked.body.code]).toEqual([409, "FISCAL_DOCUMENT_AUTHORIZED"]);
+    expect(blocked.body.message).toContain("Cancele a NFC-e");
+
+    const cancelled = await api()
+      .post(`/api/v1/tabs/${tabId}/nfce/cancel`)
+      .set(auth(f.token))
+      .send({ reason: "Cliente desistiu da compra inteira" });
+    expect(cancelled.body.fiscal_document.status).toBe("CANCELLED");
+    expect((await refund(f, tabId, paymentId)).status).toBe(200);
+  });
+
+  it("bloqueia com a nota em emissão e recusa reenviar nota sem pagamento aprovado", async () => {
+    const f = await menuFixture();
+    await configure(f, { provider: "NOTAAS", credential: "ntaas_fixture_key" });
+    fetchMock.mockResolvedValueOnce(respond({ invoiceId: "inv-2" }, 202));
+    const inFlight = await closedSale(f);
+    expect((await refund(f, inFlight.tabId, inFlight.paymentId)).body.code).toBe(
+      "FISCAL_DOCUMENT_IN_PROGRESS",
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      respond({ error: { code: "PAYLOAD_INVALID", message: "NCM inválido" } }, 400),
+    );
+    const rejected = await closedSale(f);
+    expect(rejected.closed.fiscal_document).toMatchObject({
+      status: "REJECTED",
+      sefaz_status: "PAYLOAD_INVALID",
+    });
+    expect((await refund(f, rejected.tabId, rejected.paymentId)).status).toBe(200);
+    const retried = await api().post(`/api/v1/tabs/${rejected.tabId}/nfce/retry`).set(auth(f.token)).send({});
+    expect(retried.body.fiscal_document).toMatchObject({
+      status: "REJECTED",
+      attempt: 2,
+      sefaz_status: "LOCAL",
+      sefaz_message: "Sem pagamento aprovado",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("provedor e ambiente em andamento", () => {
+  it("não consulta nota pendente com credencial de outro ambiente", async () => {
+    const f = await menuFixture();
+    await configure(f, { provider: "FOCUS_NFE", credential: "focus-token-fixture" });
+    fetchMock.mockRejectedValueOnce(new DOMException("Tempo da simulação excedido", "TimeoutError"));
+    const { tabId } = await closedSale(f);
+    await prisma.fiscal_settings.update({
+      where: { restaurant_id: f.restaurantId },
+      data: { environment: "PRODUCAO" },
+    });
+    await prisma.fiscal_documents.updateMany({ where: { tab_id: tabId }, data: { updated_at: new Date(0) } });
+    await reconcile();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await document(tabId)).toMatchObject({ status: "PENDING", environment: "HOMOLOGACAO" });
+  });
+
+  it("devolve à conferência humana o ID da Notaas que não existe e reconhece cancelamento já feito", async () => {
+    const f = await menuFixture();
+    await configure(f, { provider: "NOTAAS", credential: "ntaas_fixture_key" });
+    fetchMock.mockResolvedValueOnce(respond({ invoiceId: "inv-3" }, 202));
+    const { tabId } = await closedSale(f);
+    await prisma.fiscal_documents.updateMany({ where: { tab_id: tabId }, data: { updated_at: new Date(0) } });
+    fetchMock.mockResolvedValueOnce(respond({ error: { code: "NOT_FOUND" } }, 404));
+    await reconcile();
+    expect(await document(tabId)).toMatchObject({ status: "PENDING", external_id: null });
+
+    fetchMock.mockResolvedValueOnce(respond({ invoiceId: "inv-4" }, 202));
+    const second = await closedSale(f);
+    const doc = await document(second.tabId);
+    await prisma.fiscal_documents.update({
+      where: { id: doc.id },
+      data: { status: "AUTHORIZED", access_key: "7".repeat(44) },
+    });
+    fetchMock
+      .mockResolvedValueOnce(respond({ error: { code: "INVALID_STATUS", message: "Já cancelada" } }, 422))
+      .mockResolvedValueOnce(respond({ invoiceId: "inv-4", status: "cancelled" }));
+    const cancelled = await api()
+      .post(`/api/v1/tabs/${second.tabId}/nfce/cancel`)
+      .set(auth(f.token))
+      .send({ reason: "Cliente desistiu da compra inteira" });
+    expect(cancelled.body.fiscal_document).toMatchObject({ status: "CANCELLED" });
   });
 });
 

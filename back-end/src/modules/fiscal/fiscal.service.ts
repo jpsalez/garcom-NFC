@@ -206,6 +206,7 @@ export class FiscalService implements IFiscalService {
     const document = await this.documentOf(restaurantOf(actor), tabId);
     if (document.status !== "AUTHORIZED" || document.cancel_requested_at || !document.external_id)
       throw notAllowed("Só uma nota autorizada pode ser cancelada", "FISCAL_CANCEL_NOT_ALLOWED");
+    await this.emission.account(document);
     const requested = await this.unit.run(
       document.restaurant_id,
       ({ db, now }) =>

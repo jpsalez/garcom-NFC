@@ -19,6 +19,7 @@ Formato: `- [ ] DEC-NN · título`; as linhas indentadas são detalhes. A tela D
 (A lista anterior, sem ids, está em `../_arquivo/decisoes-lista-antiga.md`.)
 
 ## Resolvidas que estavam na lista de tarefas
+- [x] DEC-22 · Estorno com NFC-e — bloqueado enquanto a comanda tem NFC-e `AUTHORIZED` (`409 FISCAL_DOCUMENT_AUTHORIZED`) ou em emissão, `PENDING`/`PROCESSING` (`409 FISCAL_DOCUMENT_IN_PROGRESS`). O operador cancela a nota primeiro e depois estorna. Fora do prazo de cancelamento da SEFAZ, o estorno continua bloqueado. A devolução por nota de devolução fica fora do escopo (20/11/2026).
 - [x] DEC-19 · Taxa de serviço, couvert e gorjeta na NFC-e — ficam fora da nota. A nota tem só os itens consumidos, com desconto rateado, e os pagamentos são rateados até o total da nota. Nenhum dos provedores aceita `vOutro` por item. Vale confirmar com o contador de cada restaurante (20/11/2026).
 - [x] DEC-20 · Emissão fiscal ambígua (timeout/5xx) — consultar, nunca reenviar às cegas. Focus: consulta a ref e reenvia a mesma ref só se ela não existir. Notaas (sem idempotência): sem `invoiceId`, fica em conferência humana depois de 5 min (vincular `invoice_id` ou confirmar que nada saiu) (20/11/2026).
 - [x] DEC-21 · Provedores e retorno fiscal — entram Mock, Focus NFe e Notaas, com HTTP simulado nos testes. O retorno assíncrono vem por job de consulta (30 s), sem webhook fiscal e sem captura de rawBody (20/11/2026).

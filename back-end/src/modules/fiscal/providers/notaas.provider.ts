@@ -136,6 +136,8 @@ export class NotaasProvider implements IFiscalProvider {
     if (isAmbiguousStatus(response.status)) throw new FiscalProviderError();
     if (response.ok) return { state: "REQUESTED" };
     const error = errorOf(await body(response));
+    // Antes de declarar falha, confirma que a nota não ficou cancelada (ex.: pedido repetido).
+    if ((await this.status(account, invoiceId))?.status === "CANCELLED") return { state: "CANCELLED" };
     return {
       state: "FAILED",
       sefazStatus: text(error?.code, 16) ?? String(response.status),

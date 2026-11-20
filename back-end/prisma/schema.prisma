@@ -1204,6 +1204,9 @@ model fiscal_tax_profiles {
 }
 
 /// Uma NFC-e por comanda. A referência no provedor é `id-attempt`.
+// Índice único parcial (o mesmo external_id não serve a duas comandas) fica na migration fiscal_nfce:
+// CREATE UNIQUE INDEX fiscal_documents_external_unique ON fiscal_documents(restaurant_id, provider, external_id) WHERE external_id IS NOT NULL;
+// Nunca aceite um `migrate dev` que o remova.
 model fiscal_documents {
   id                String                 @id @default(uuid())
   restaurant_id     String

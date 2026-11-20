@@ -75,6 +75,10 @@ export function buildNfceInput(
   const gross = items.map(({ grossCents }) => grossCents);
   const discount = gross.reduce((sum, value) => sum + value, 0) - document.total_cents;
   if (discount < 0) return { problem: "Itens abaixo do valor da nota" };
+  const approved = ledger.payments.filter(({ status }) => status === "APPROVED");
+  const paid = approved.reduce((sum, { amount_cents }) => sum + amount_cents, 0);
+  if (!approved.length) return { problem: "Sem pagamento aprovado" };
+  if (paid < document.total_cents) return { problem: "Pagamentos aprovados abaixo do valor da nota" };
   const discounts = discountsFor(gross, discount);
   return {
     input: {

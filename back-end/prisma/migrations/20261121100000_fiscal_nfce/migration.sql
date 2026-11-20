@@ -134,9 +134,11 @@ ALTER TABLE "fiscal_documents" ADD CONSTRAINT "fiscal_documents_valid" CHECK (
   AND ("access_key" IS NULL OR "access_key" ~ '^[0-9]{44}$')
   AND ("cancel_reason" IS NULL OR length(btrim("cancel_reason")) BETWEEN 15 AND 255)
   AND (("status" = 'CANCELLED') = ("cancelled_at" IS NOT NULL))
+  AND ("provider" <> 'MOCK' OR "environment" = 'HOMOLOGACAO')
 );
 
--- Índice parcial (criado à mão): o mesmo ID externo não pode ser vinculado a duas comandas.
+-- Índice parcial criado à mão (o Prisma não o representa; ver comentário em schema.prisma).
+-- Nunca aceite um `migrate dev` que o remova: o mesmo ID externo não pode servir a duas comandas.
 CREATE UNIQUE INDEX "fiscal_documents_external_unique"
   ON "fiscal_documents" ("restaurant_id", "provider", "external_id")
   WHERE "external_id" IS NOT NULL;
