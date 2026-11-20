@@ -16,12 +16,13 @@ import type {
 } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
 import { applyPaymentToCashShift } from "../cash-shifts/cash-shift-balance.ts";
 import { CashShiftsRepository } from "../cash-shifts/cash-shifts.repository.ts";
+import type { FiscalEmissionService } from "../fiscal/fiscal-emission.service.ts";
 import { MenuRepository } from "../menu/menu.repository.ts";
+import { applyTabSalesChange, tabSales } from "../reports/sales-aggregator.ts";
 import { closeTab, notifyClosedTab } from "../tabs/close-tab.ts";
 import { notifyPaymentRequestUpdated } from "../tabs/payment-request-events.ts";
 import { PaymentRequestsRepository } from "../tabs/payment-requests.repository.ts";
 import { requestForConversion } from "../tabs/payment-requests.service.ts";
-import { applyTabSalesChange, tabSales } from "../reports/sales-aggregator.ts";
 import { businessDate } from "../tabs/tab-business-date.ts";
 import { notifyTabUpdated } from "../tabs/tab-events.ts";
 import { loadTabLedger, summarizeLedger } from "../tabs/tab-ledger.ts";
@@ -110,6 +111,7 @@ export class PaymentsService implements IPaymentsService {
     @inject("Notifier") private notifier: INotifier,
     @inject("PaymentProviderRegistry") private providers: PaymentProviderRegistry,
     @inject("PointPaymentsService") private point: PointPaymentsService,
+    @inject("FiscalEmissionService") private fiscal: FiscalEmissionService,
   ) {}
 
   async create(actor: ActorContext, id: string, input: CreatePayment) {
@@ -120,6 +122,8 @@ export class PaymentsService implements IPaymentsService {
     if (result.converted) notifyPaymentRequestUpdated(this.notifier, result.converted);
     if (result.closed) notifyClosedTab(this.notifier, result.closed);
     else notifyTabUpdated(this.notifier, result.tab, result.state.pendingCents);
+    // NFC-e do fechamento automático: o resultado chega por fiscal:updated e em GET /tabs/:id/nfce.
+    if (result.closed?.fiscalDocument) await this.fiscal.dispatch(result.closed.fiscalDocument);
     if (result.payment.provider !== "MERCADO_PAGO") return this.response(result);
 
     return this.response(await this.dispatchPointPayment(result.payment));

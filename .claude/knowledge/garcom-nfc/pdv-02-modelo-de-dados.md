@@ -636,6 +636,11 @@ model product_sales_daily {
 *(Nota: `total_stay_seconds` como `BigInt` evita overflow e permite calcular a média exata em qualquer janela semanal/mensal: `SUM(total_stay_seconds) / SUM(tabs_closed_count)`!)*
 
 ### 3.6 Etapa 6 — `fiscal_settings`, `fiscal_tax_profiles`, `fiscal_documents`
+> **Implementado com diferenças:** veja `schema.prisma` e a migration `20261121100000_fiscal_nfce`, que mandam sobre o esboço abaixo.
+> - `fiscal_settings` não guarda IE, CRT, CSC, série nem `next_nfce_number`, que ficam no provedor. A credencial é opcional para o `MOCK`.
+> - `fiscal_documents` ganhou `PROCESSING`, `attempt`, `external_id`, `total_cents`, `environment`, `dispatched_at` e `cancel_requested_at`. É uma nota por comanda (`@@unique([restaurant_id, tab_id])`), e o número e a série vêm do provedor.
+> - O perfil em `menu_products` usa FK composta `RESTRICT`, sem rota de exclusão de perfil.
+> - Regras e fluxo: `pdv-04` §4.
 ```prisma
 enum fiscal_provider_type {
   MOCK

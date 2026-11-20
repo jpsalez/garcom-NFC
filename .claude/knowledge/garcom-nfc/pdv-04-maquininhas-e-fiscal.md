@@ -23,7 +23,7 @@ MERCADO_PAGO_WEBHOOK_SECRET=...
 MERCADO_PAGO_API_URL=https://api.mercadopago.com
 
 # Etapa 6 — Módulo Fiscal (opcional; cada restaurante informa seu próprio token na config ou usa Org Token)
-NOTAAS_API_URL=https://api.notaas.com.br
+NOTAAS_API_URL=https://platform.notaas.com.br/api/v1
 FOCUS_NFE_HOMOLOG_URL=https://homologacao.focusnfe.com.br/v2
 FOCUS_NFE_PROD_URL=https://api.focusnfe.com.br/v2
 ```
@@ -34,8 +34,8 @@ FOCUS_NFE_PROD_URL=https://api.focusnfe.com.br/v2
 - Funções pequenas: `encryptSecret(plain: string): string` e `decryptSecret(encoded: string): string`.
 - O prefixo `v1:` permite rotação futura de chave sem quebrar dados antigos.
 
-### 1.3 Captura de `rawBody` no Express (`back-end/src/server.ts`)
-O `express.json` preserva o buffer bruto apenas em `/api/v1/webhooks/*` para integrações que assinam o corpo. O Mercado Pago assina o manifesto descrito na seção 3.3.
+### 1.3 Corpo bruto (`rawBody`)
+Não é capturado. O HMAC do Mercado Pago assina um manifesto montado com query e headers (seção 3.3), e o retorno fiscal vem por consulta (DEC-21). Capture o `rawBody` só para uma integração que assine o corpo.
 
 ---
 
@@ -126,54 +126,100 @@ Uma criação sem ID é retomada com a mesma chave dentro dos primeiros cinco mi
 | **Focus NFe** | **Grátis** (homologação ilimitada com a SEFAZ) | Pago (~R$ 95/mês solo; Growth ~R$ 572/mês multi-CNPJ) | **Muito alta** (apenas 3 endpoints REST v2, síncrono, Basic Auth) | **2º adaptador — produção consolidada em escala** |
 | **ACBrLib (Open Source)** | Grátis | R$ 0 por nota | **Alta complexidade** (FFI `.so`/`.dll`, cert local, NTs SEFAZ na mão) | Só compensa em alto volume futuro |
 
-### 4.2 Estrutura do módulo `fiscal` e `providers/`
+### 4.2 Estrutura do módulo `fiscal` (implementada)
 ```text
 back-end/src/modules/fiscal/
-├── fiscal.routes.ts                 # /fiscal/settings, /fiscal/tax-profiles, /tabs/:id/nfce, /webhooks/fiscal/*
-├── fiscal.controller.ts             # HTTP puro (sem try/catch, sem Prisma)
-├── fiscal.service.ts                # emissão, consulta, reenvio, cancelamento e perfis tributários
-├── fiscal.mapper.ts                 # converte tab + orders + payments -> payload fiscal neutro + rateio
-├── fiscal.schemas.ts                # Zod (CNPJ 14 dígitos, NCM 8, CFOP 4, CSOSN 3-4, justificativa 15-255)
-├── fiscal.interfaces.ts
-├── fiscal.repository.interface.ts
-├── fiscal.repository.ts             # Prisma (restaurantId sempre 1º param)
+├── fiscal.routes.ts            # /fiscal/settings, /fiscal/tax-profiles, /fiscal/products/:id/tax-profile, /tabs/:id/nfce*
+├── fiscal.controller.ts        # HTTP puro
+├── fiscal.service.ts           # configuração, perfis, consulta, conferência/reenvio e cancelamento (com ator)
+├── fiscal-emission.service.ts  # emissão pós-commit, aplicação do resultado e job de acompanhamento (sem ator)
+├── fiscal-document.ts          # reserva no fechamento, valor da nota, needs_review e view
+├── nfce-input.ts               # comanda + perfis → NfceInput
+├── fiscal.mapper.ts            # tPag e rateio no centavo (desconto por item, pagamentos até o total da nota)
+├── fiscal.schemas.ts / fiscal.interfaces.ts / fiscal-events.ts (fiscal:updated)
+├── fiscal.repository.ts        # restaurantId sempre 1º parâmetro; updateDocument condicional por estado/tentativa
+├── fiscal-sync.queries.ts      # chaves para o job (cross-tenant; o serviço revalida no tenant)
 └── providers/
-    ├── fiscal-provider.interface.ts # IFiscalProvider
-    ├── fiscal-provider.registry.ts  # resolve MOCK | NOTAAS | FOCUS_NFE (tsyringe)
-    ├── notaas.provider.ts           # piloto gratuito (5 CNPJs sandbox + 20 notas/mês grátis)
-    ├── focus-nfe.provider.ts        # produção consolidada (3 endpoints REST v2)
-    └── mock-fiscal.provider.ts      # testes Vitest sem rede
+    ├── fiscal-provider.interface.ts  # IFiscalProvider
+    ├── fiscal-provider.registry.ts   # MOCK | NOTAAS | FOCUS_NFE
+    ├── fiscal-http.ts                # fetch com timeout, FiscalProviderError (ambíguo), bandeira tBand
+    ├── notaas.provider.ts
+    ├── focus-nfe.provider.ts
+    └── mock-fiscal.provider.ts       # só homologação; recusado em PRODUCAO
 ```
+Job: `back-end/src/shared/jobs/fiscal-reconciliation.job.ts` (a cada 30 s). Migration `20261121100000_fiscal_nfce`.
 
-### 4.3 Contrato `IFiscalProvider` (`fiscal-provider.interface.ts`)
+### 4.3 Contrato `IFiscalProvider`
 ```ts
-export type FiscalProviderType = "MOCK" | "NOTAAS" | "FOCUS_NFE";
-
-export interface IFiscalProvider {
-  readonly kind: FiscalProviderType;
-  emitNfce(config: FiscalAccountConfig, input: NfceEmitInput): Promise<NfceProviderResult>;
-  getNfceStatus(config: FiscalAccountConfig, reference: string): Promise<NfceProviderResult>;
-  cancelNfce(config: FiscalAccountConfig, reference: string, reason: string): Promise<NfceProviderResult>;
-  parseWebhook?(headers: Record<string, string>, rawBody: Buffer, secret: string): Promise<NfceProviderResult | null>;
+interface IFiscalProvider {
+  readonly kind: fiscal_provider_type;
+  readonly idempotentReference: boolean; // Focus e Mock deduplicam pela ref; Notaas não
+  emit(account, input: NfceInput): Promise<NfceResult>;          // PROCESSING | AUTHORIZED | REJECTED
+  status(account, externalId): Promise<NfceResult | null>;       // null = não existe no provedor
+  cancel(account, externalId, reason): Promise<CancelResult>;    // CANCELLED | REQUESTED | FAILED
 }
 ```
-Campos de entrada/saída:
-- **`NfceEmitInput`:** `reference` (`fiscal_documents.id`), `number`, `issuedAt`, `customerDocument?`, `items[]` (`code`, `description`, `ncm`, `cfop`, `csosn`, `origin`, `unit`, `quantity`, `unitPriceCents`, `discountCents`, `additionCents`), `payments[]` (`method`, `amountCents`, `changeCents`, `card?: { brand, acquirerCnpj, authorizationCode, integrated }`).
-- **`NfceProviderResult`:** `status` (`PENDING`/`AUTHORIZED`/`REJECTED`/`CANCELLED`), `accessKey` (44 dígitos), `protocol`, `sefazStatus`, `sefazMessage`, `xmlUrl`, `danfeUrl`, `qrcodeUrl`, `rawPayload`.
+Só resultado **ambíguo** (timeout, rede, 5xx, 429, 408, resposta ilegível) lança `FiscalProviderError`. Uma recusa definitiva (4xx) volta como `REJECTED`/`FAILED`, porque a nota não entrou no provedor.
 
-### 4.4 Mapeamento fiscal neutro (`fiscal.mapper.ts`)
-- **Pagamentos (`tPag` SEFAZ):** `CASH→01` (envia `vTroco`), `CREDIT→03`, `DEBIT→04`, `VOUCHER→10/11`, `PIX→17`, `OTHER→99`. Para `CREDIT`/`DEBIT`: grupo `card` com `tpIntegra` (`1` para N1/N2, `2` para N0), `tBand`, `cAut`, `CNPJ` da credenciadora.
-- **Invariante matemática SEFAZ:** `Σ(vProd - vDesc + vOutro) === Σ(vPag - vTroco)` no centavo exato. O mapper rateia `adjustments_cents` e `service_fee_cents` proporcionalmente pelos itens ativos e aloca qualquer resto de arredondamento (±1–2 centavos) no item de maior valor.
-- **Perfis tributários reutilizáveis (`fiscal_tax_profiles`):** restaurante cria 2–3 perfis (ex.: *Refeição preparada*, *Bebida ST*) + define um `default_tax_profile_id` em `fiscal_settings`. Se faltar NCM/CFOP, falha localmente com `400 FISCAL_TAX_PROFILE_MISSING`.
+### 4.4 Valor da nota e mapeamento (DEC-19)
+- **Valor da nota** = itens ativos (`subtotal_cents`) − descontos ativos. Taxa de serviço, couvert e gorjeta ficam **fora** da NFC-e, porque nenhum dos provedores aceita `vOutro` por item. Comanda com valor ≤ 0 não gera nota.
+- O desconto é rateado entre os itens pelo valor bruto. O resto do arredondamento vai para o maior item e, se passar do bruto dele, o excedente vai para os itens com folga.
+- Os pagamentos aprovados são rateados até somar exatamente o valor da nota, sem `vTroco`, que nenhum dos provedores documenta. Invariante testada: `Σ(vProd − vDesc) = Σ vPag`.
+- `tPag`: CASH→01, CREDIT→03, DEBIT→04, VOUCHER→10, PIX→17, OTHER→99. Cartão leva `tipoIntegracao` (1 se a maquininha é integrada, 2 se é manual), a bandeira (`tBand`) deduzida do `card_brand` e o `cAut` vindo de `authorization_code`.
+- Perfil tributário: o do produto (`menu_products.fiscal_tax_profile_id`) ou, na falta dele, o `default_tax_profile_id`. Sem perfil, a nota é rejeitada localmente (`sefaz_status = LOCAL`) e a comanda continua fechada.
+- Emitente, CSC, certificado A1, série e numeração ficam configurados **no provedor**. O número e a série vêm da resposta.
 
-### 4.5 Mapeamento HTTP dos adaptadores
-- **`notaas.provider.ts`:** `Authorization: Bearer <token>`, `POST /api/v1/emitir` (modelo `65`), upload do A1 centralizado na Notaas, webhook assinado com **HMAC-SHA256**.
-- **`focus-nfe.provider.ts`:** HTTP Basic Auth (`username = apiToken`, `password = ""`), 3 endpoints:
-  - Emitir (síncrono): `POST /v2/nfce?ref=<doc_id>&completa=1`
-  - Consultar: `GET /v2/nfce/<doc_id>?completa=1`
-  - Cancelar (prazo SEFAZ 30 min): `DELETE /v2/nfce/<doc_id>` `{ "justificativa": "..." }` (15–255 chars).
+### 4.5 Contratos HTTP (conferidos na documentação oficial em 20/11/2026)
+- **Notaas** (`https://docs.notaas.com.br/docs/nfe/endpoints`):
+  - `x-api-key: <chave do projeto>`; base `NOTAAS_API_URL` (padrão `https://platform.notaas.com.br/api/v1`).
+  - Emitir: `POST /nfe/emitir` com `modelo: 65`, `items[]` e `pagamentos[]` em reais → `202 { invoiceId }`. O resultado vem de `GET /nfe/invoices/{invoiceId}/status`.
+  - Cancelar: `POST /nfe/cancelar { invoiceId, motivo }` → `202`.
+  - **Não há idempotência**: reenviar cria outra nota.
+  - O CPF/CNPJ do cliente não é enviado, porque a Notaas exige nome e endereço quando há destinatário.
+  - A documentação diverge entre `/emitir` e `/nfe/emitir` e entre `/invoices/{id}/status` e `/nfe/invoices/{id}/status`. Foi usado o da página de endpoints; confirmar no sandbox.
+- **Focus NFe** (`https://doc.focusnfe.com.br/docs/nfce-operacoes-disponiveis-na-api`):
+  - Basic Auth com token como usuário e senha vazia; bases `FOCUS_NFE_HOMOLOG_URL` e `FOCUS_NFE_PROD_URL`.
+  - Emitir: `POST /nfce?ref=<id>-<tentativa>` → `201` com `status` `autorizado` ou `erro_autorizacao`.
+  - `422 pending_operation` e 2xx sem corpo legível → ambíguo.
+  - `401`/`403` → recusa (nada foi processado).
+  - Qualquer outro 4xx consulta a ref antes de virar recusa: se ela existe, o resultado é adotado; se dá 404, é recusa.
+  - Consultar: `GET /nfce/<ref>` (404 = não existe).
+  - Cancelar: `DELETE /nfce/<ref> { justificativa }` (15–255 caracteres, até 30 min).
+  - `caminho_danfe` e `caminho_xml_nota_fiscal` são relativos e são convertidos em absolutos.
+- O resultado assíncrono vem por **consulta periódica** (DEC-21). Não há webhook fiscal nem captura de `rawBody`.
 
-### 4.6 Execução assíncrona segura
-1. `POST /tabs/:id/close` fecha a comanda e, se `fiscal_settings.enabled`, reserva `fiscal_documents(PENDING, next_nfce_number)` dentro do `unit.run`.
-2. **Após o commit**, `FiscalService.dispatchEmission(restaurantId, docId)` chama `provider.emitNfce` fora do lock, salva resultado (`AUTHORIZED` ou `REJECTED`) e emite `fiscal:updated` no Socket.IO.
-3. Em caso de rejeição SEFAZ, a comanda permanece fechada/paga; o gerente ajusta o cadastro fiscal e aciona `POST /tabs/:id/nfce/retry`.
+### 4.6 Fluxo de emissão
+1. O fechamento (`close-tab.ts`, que cobre o manual, o automático e o da sessão) reserva `fiscal_documents(PENDING)` no mesmo `unit.run`, se `fiscal_settings.enabled`.
+2. Depois do commit, `FiscalEmissionService.dispatch`:
+   - reivindica o documento numa transação curta (`dispatched_at`, e `external_id = ref` quando o provedor é idempotente) e monta a nota;
+   - faz o HTTP fora do lock;
+   - aplica o resultado com atualização condicional por estado e tentativa;
+   - emite `fiscal:updated`.
+
+   O `POST /tabs/:id/close` responde com `fiscal_document`. No fechamento automático por pagamento, o resultado chega pelo evento e por `GET /tabs/:id/nfce`.
+3. **Ambíguo (DEC-20)**:
+   - **Focus e Mock:** o job consulta a ref. Se ela não existe (404), reenvia com a mesma ref, o que é seguro.
+   - **Notaas sem `invoiceId`:** **nunca reenvia**. Depois de 5 min, `needs_review = true`. A pessoa confere no painel da Notaas e chama `POST /tabs/:id/nfce/retry`:
+     - com `{ invoice_id }`, que vincula a nota e só vale depois da consulta de status;
+     - ou com `{ confirm_not_issued: true }`, que abre uma nova tentativa.
+4. Rejeição: a comanda segue fechada e paga. Depois de corrigir o perfil ou a configuração, `POST /tabs/:id/nfce/retry` gera `attempt + 1` (nova ref) com o provedor atual.
+5. Cancelamento: `POST /tabs/:id/nfce/cancel { reason }` (15–255 caracteres, `fiscal:configure` = OWNER/MANAGER).
+   - A Focus é síncrona.
+   - Na Notaas o pedido fica em `cancel_requested_at` até o job ver `cancelled`. Sem efeito em 10 min, o pedido é liberado.
+   - Uma recusa responde `409 FISCAL_CANCEL_REJECTED`.
+6. Permissões:
+   - configuração e perfis: `fiscal:configure`;
+   - consulta e reenvio: `fiscal:emit`.
+7. Credencial:
+   - É cifrada com AES-256-GCM (`crypto.ts`) e só pode ser escrita: a API devolve apenas `has_credential`.
+   - Trocar de provedor descarta a credencial anterior.
+   - Provedor real habilitado sem credencial é recusado pela API e por um CHECK, assim como o MOCK em `PRODUCAO`.
+   - Um documento só usa a credencial do provedor em que foi emitido. Se o provedor mudar com notas em andamento, elas ficam paradas (`FISCAL_PROVIDER_CHANGED` no log) até voltar ao provedor anterior.
+8. O mesmo `external_id` não pode ser vinculado a duas comandas (índice único parcial `fiscal_documents_external_unique`).
+9. O job considera um documento parado depois de 45 s, mais que o timeout HTTP de 20 s, para não consultar uma emissão ainda em curso.
+
+### 4.7 Limitações conhecidas
+- Configuração fiscal e cancelamento de nota ainda não gravam na trilha de auditoria (`audit`).
+- Para `tPag 99` a Notaas recebe `descricaoPagamento: "Outros"`. A documentação da Focus não especifica a descrição (`xPag`), que não é enviada.
+- Na Notaas, o CPF/CNPJ do cliente não vai na nota (seção 4.5).
+- `POST /tabs/:id/close` aguarda a emissão (até cerca de 20 s com um provedor lento) para responder com `fiscal_document`. O fechamento já está gravado antes disso.

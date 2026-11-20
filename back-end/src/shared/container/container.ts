@@ -89,6 +89,13 @@ import { PointCredentialRefreshService } from "../../modules/payments/point-cred
 import { PointPaymentsService } from "../../modules/payments/point-payments.service.ts";
 import { MercadoPagoProvider } from "../../modules/payments/providers/mercado-pago.provider.ts";
 import { TerminalsService } from "../../modules/payments/terminals.service.ts";
+import { FiscalEmissionService } from "../../modules/fiscal/fiscal-emission.service.ts";
+import type { IFiscalService } from "../../modules/fiscal/fiscal.interfaces.ts";
+import { FiscalService } from "../../modules/fiscal/fiscal.service.ts";
+import { FiscalProviderRegistry } from "../../modules/fiscal/providers/fiscal-provider.registry.ts";
+import { FocusNfeProvider } from "../../modules/fiscal/providers/focus-nfe.provider.ts";
+import { MockFiscalProvider } from "../../modules/fiscal/providers/mock-fiscal.provider.ts";
+import { NotaasProvider } from "../../modules/fiscal/providers/notaas.provider.ts";
 import type { IReportsService } from "../../modules/reports/reports.interfaces.ts";
 import { ReportsService } from "../../modules/reports/reports.service.ts";
 import { ManualPaymentProvider } from "../../modules/payments/providers/manual.provider.ts";
@@ -118,6 +125,12 @@ export function registerDependencies() {
   container.registerSingleton("PointCredentialRefreshService", PointCredentialRefreshService);
   container.registerSingleton("TerminalsService", TerminalsService);
   container.registerSingleton<IReportsService>("ReportsService", ReportsService);
+  container.registerSingleton("MockFiscalProvider", MockFiscalProvider);
+  container.registerSingleton("NotaasProvider", NotaasProvider);
+  container.registerSingleton("FocusNfeProvider", FocusNfeProvider);
+  container.registerSingleton("FiscalProviderRegistry", FiscalProviderRegistry);
+  container.registerSingleton("FiscalEmissionService", FiscalEmissionService);
+  container.registerSingleton<IFiscalService>("FiscalService", FiscalService);
   container.registerSingleton("PaymentProviderRegistry", PaymentProviderRegistry);
   container.registerSingleton<IOrdersRepository>("OrdersRepository", OrdersRepository);
   container.registerSingleton<IOrdersService>("OrdersService", OrdersService);

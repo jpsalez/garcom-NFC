@@ -3,12 +3,14 @@ import type { ActorContext } from "../../shared/authorization/capabilities.ts";
 import { ConflictError } from "../../shared/errors/http-errors.ts";
 import type { RestaurantTransaction } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
+import { reserveFiscalDocument } from "../fiscal/fiscal-document.ts";
 import { MenuRepository } from "../menu/menu.repository.ts";
 import { applyTabSalesChange } from "../reports/sales-aggregator.ts";
 import { closeSessionResources, notifySessionClosed, type ClosedSession } from "../sessions/close-session.ts";
 import { TableSessionRepository } from "../sessions/sessions.repository.ts";
 import { notifyPaymentRequestUpdated } from "./payment-request-events.ts";
 import { PaymentRequestsRepository } from "./payment-requests.repository.ts";
+import { TabAdjustmentsRepository } from "./tab-adjustments.repository.ts";
 import { businessDate } from "./tab-business-date.ts";
 import { notifyTabClosed } from "./tab-events.ts";
 import { ensureOpenTab } from "./tabs-state.ts";
@@ -47,6 +49,7 @@ export async function closeTab(
   tab: tabs,
   balance: CloseBalance,
   actor: ActorContext,
+  customerDocument?: string,
 ) {
   assertTabCanClose(tab, balance);
   const { db, now, restaurant } = transaction;
@@ -58,6 +61,8 @@ export async function closeTab(
     version: tab.version + 1,
   });
   await applyTabSalesChange(transaction, tab.id);
+  const adjustments = await new TabAdjustmentsRepository(db).list(restaurant.id, tab.id);
+  const fiscalDocument = await reserveFiscalDocument(transaction, closed, adjustments, customerDocument);
   const resources = await closeTabResources(transaction, tab, actor.id);
   await new MenuRepository(db).audit(
     actor,
@@ -67,7 +72,7 @@ export async function closeTab(
     { status: tab.status, paid_cents: tab.paid_cents },
     { status: closed.status, total_cents: closed.total_cents },
   );
-  return { tab: closed, ...resources };
+  return { tab: closed, ...resources, fiscalDocument };
 }
 
 export function notifyClosedTabResources(

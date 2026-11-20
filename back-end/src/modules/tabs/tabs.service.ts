@@ -1,3 +1,4 @@
+import type { FiscalEmissionService } from "../fiscal/fiscal-emission.service.ts";
 import { inject, injectable } from "tsyringe";
 import type { tabs } from "../../../generated/prisma/client.ts";
 import { type ActorContext, requireCapability } from "../../shared/authorization/capabilities.ts";
@@ -85,6 +86,7 @@ export class TabsService implements ITabsService {
     @inject("TabsRepository") private repository: ITabsRepository,
     @inject("RestaurantUnitOfWork") private unit: IRestaurantUnitOfWork,
     @inject("Notifier") private notifier: INotifier,
+    @inject("FiscalEmissionService") private fiscal: FiscalEmissionService,
   ) {}
 
   async open(actor: ActorContext, input: OpenTab) {
@@ -297,12 +299,13 @@ export class TabsService implements ITabsService {
         const tab = await getTab(new TabsRepository(transaction.db), restaurantId, id);
         checkVersion(tab, input.expected_version);
         const balance = summarizeLedger(await loadTabLedger(transaction.db, tab));
-        return closeTab(transaction, tab, balance, transaction.actor ?? actor);
+        return closeTab(transaction, tab, balance, transaction.actor ?? actor, input.customer_document);
       },
       { actor, capability: "tabs:close" },
     );
     notifyClosedTab(this.notifier, result);
-    return { tab: tabSummary(result.tab, false), fiscal_document: null };
+    const fiscal = result.fiscalDocument ? await this.fiscal.dispatch(result.fiscalDocument) : null;
+    return { tab: tabSummary(result.tab, false), fiscal_document: fiscal };
   }
 
   async cancel(actor: ActorContext, id: string, input: CancelTab) {

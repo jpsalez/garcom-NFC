@@ -1,3 +1,4 @@
+import { fiscalDocumentView } from "../fiscal/fiscal-document.ts";
 import type { tabs } from "../../../generated/prisma/client.ts";
 import { orderView } from "../orders/order-progress.ts";
 import { allocatedByItem, type AllocationTotals } from "../payments/payment-allocation.ts";
@@ -98,6 +99,6 @@ export function tabDetail(tab: tabs, ledger: TabLedger) {
     adjustments: ledger.adjustments,
     payments: ledger.payments.map(paymentView),
     payment_requests: ledger.requests.map(paymentRequestView),
-    fiscal_documents: [],
+    fiscal_documents: ledger.fiscalDocuments.map(fiscalDocumentView),
   };
 }

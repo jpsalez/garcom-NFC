@@ -5,8 +5,15 @@ import {
   closeCashShiftSchema,
   openCashShiftSchema,
 } from "../modules/cash-shifts/cash-shifts.schemas.ts";
+import {
+  cancelNfceSchema,
+  fiscalSettingsSchema,
+  productTaxProfileSchema,
+  retryNfceSchema,
+  taxProfileSchema,
+  updateTaxProfileSchema,
+} from "../modules/fiscal/fiscal.schemas.ts";
 import { posSubmitSchema } from "../modules/orders/orders.schemas.ts";
-
 import {
   createPaymentSchema,
   refundPaymentSchema,
@@ -92,6 +99,13 @@ function queryOf(schema: z.ZodType) {
     schema: property,
   }));
 }
+const fiscalErrors = {
+  200: { description: "Resposta no campo settings, profiles, profile ou fiscal_document" },
+  400: { description: "VALIDATION_ERROR" },
+  401: settingsResponses[401],
+  403: { description: "fiscal:configure (OWNER/MANAGER) ou fiscal:emit" },
+  404: { description: "Nota, perfil ou produto não encontrado" },
+};
 const reportErrors = {
   400: { description: "VALIDATION_ERROR (período inválido ou acima do limite)" },
   401: settingsResponses[401],
@@ -460,6 +474,85 @@ export const pdvPaths = {
       summary: "Reconstrói os agregados do período a partir das comandas fechadas (somente OWNER)",
       requestBody: tabBody(rebuildSchema),
       responses: { ...reportErrors, 200: { description: "Período e dias com venda reconstruídos" } },
+    },
+  },
+  "/fiscal/settings": {
+    get: {
+      ...pdvAccess,
+      summary: "Configuração fiscal (sem a credencial; só has_credential)",
+      responses: fiscalErrors,
+    },
+    put: {
+      ...pdvAccess,
+      summary: "Liga a NFC-e e escolhe provedor, ambiente, CNPJ, credencial (só escrita) e perfil padrão",
+      requestBody: tabBody(fiscalSettingsSchema),
+      responses: {
+        ...fiscalErrors,
+        409: { description: "FISCAL_MOCK_PRODUCTION ou FISCAL_CREDENTIAL_REQUIRED" },
+      },
+    },
+  },
+  "/fiscal/tax-profiles": {
+    get: {
+      ...pdvAccess,
+      summary: "Perfis tributários (NCM, CFOP, CSOSN, origem, unidade)",
+      responses: fiscalErrors,
+    },
+    post: {
+      ...pdvAccess,
+      summary: "Cria perfil tributário",
+      requestBody: tabBody(taxProfileSchema),
+      responses: fiscalErrors,
+    },
+  },
+  "/fiscal/tax-profiles/{id}": {
+    patch: {
+      ...pdvAccess,
+      summary: "Altera perfil tributário",
+      parameters: [tabId],
+      requestBody: tabBody(updateTaxProfileSchema),
+      responses: fiscalErrors,
+    },
+  },
+  "/fiscal/products/{id}/tax-profile": {
+    put: {
+      ...pdvAccess,
+      summary: "Define o perfil tributário do produto (null usa o padrão)",
+      parameters: [tabId],
+      requestBody: tabBody(productTaxProfileSchema),
+      responses: fiscalErrors,
+    },
+  },
+  "/tabs/{id}/nfce": {
+    get: {
+      ...pdvAccess,
+      summary: "NFC-e da comanda, com needs_review",
+      parameters: [tabId],
+      responses: fiscalErrors,
+    },
+  },
+  "/tabs/{id}/nfce/retry": {
+    post: {
+      ...pdvAccess,
+      summary: "Reenvia nota rejeitada ou resolve emissão sem retorno (invoice_id ou confirm_not_issued)",
+      parameters: [tabId],
+      requestBody: tabBody(retryNfceSchema),
+      responses: {
+        ...fiscalErrors,
+        409: { description: "FISCAL_RETRY_NOT_ALLOWED ou FISCAL_DOCUMENT_CHANGED" },
+      },
+    },
+  },
+  "/tabs/{id}/nfce/cancel": {
+    post: {
+      ...pdvAccess,
+      summary: "Cancela NFC-e autorizada com justificativa de 15 a 255 caracteres (OWNER ou MANAGER)",
+      parameters: [tabId],
+      requestBody: tabBody(cancelNfceSchema),
+      responses: {
+        ...fiscalErrors,
+        409: { description: "FISCAL_CANCEL_NOT_ALLOWED ou FISCAL_CANCEL_REJECTED" },
+      },
     },
   },
 };

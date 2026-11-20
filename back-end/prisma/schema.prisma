@@ -41,6 +41,9 @@ model restaurants {
   payment_terminals           payment_terminals[]
   daily_sales                 daily_sales[]
   product_sales_daily         product_sales_daily[]
+  fiscal_settings             fiscal_settings?
+  fiscal_tax_profiles         fiscal_tax_profiles[]
+  fiscal_documents            fiscal_documents[]
 }
 
 model users {
@@ -294,6 +297,9 @@ model menu_products {
   variants             menu_product_variants[] @relation("menu_product_variants_product")
   option_groups        menu_option_groups[]    @relation("menu_option_groups_product")
   images               menu_product_images[]   @relation("menu_product_images_product")
+  /// Perfil tributário da NFC-e; fora do rascunho/publicação do cardápio.
+  fiscal_tax_profile_id String?
+  fiscal_tax_profile    fiscal_tax_profiles?    @relation(fields: [restaurant_id, fiscal_tax_profile_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
 
   @@unique([restaurant_id, id])
   @@index([category_id, position, id])
@@ -792,6 +798,7 @@ model tabs {
   adjustments tab_adjustments[]
   payment_requests payment_requests[]
   payments payments[]
+  fiscal_document fiscal_documents?
 
   @@unique([restaurant_id, id])
   @@unique([restaurant_id, number])
@@ -1140,4 +1147,95 @@ model product_sales_daily {
 
   @@id([restaurant_id, business_date, product_id, variant_id, hour_bucket])
   @@index([restaurant_id, product_id, business_date])
+}
+
+enum fiscal_provider_type {
+  MOCK
+  NOTAAS
+  FOCUS_NFE
+}
+
+enum fiscal_environment {
+  HOMOLOGACAO
+  PRODUCAO
+}
+
+enum fiscal_document_status {
+  PENDING
+  PROCESSING
+  AUTHORIZED
+  REJECTED
+  CANCELLED
+}
+
+/// Emitente, CSC, série e numeração ficam configurados no provedor.
+model fiscal_settings {
+  restaurant_id                 String               @id
+  enabled                       Boolean              @default(false)
+  provider                      fiscal_provider_type @default(MOCK)
+  environment                   fiscal_environment   @default(HOMOLOGACAO)
+  cnpj                          String               @db.VarChar(14)
+  provider_credential_encrypted String?
+  default_tax_profile_id        String?
+  updated_at                    DateTime             @default(now()) @updatedAt
+
+  restaurant          restaurants          @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+  default_tax_profile fiscal_tax_profiles? @relation("fiscal_default_profile", fields: [restaurant_id, default_tax_profile_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+}
+
+model fiscal_tax_profiles {
+  id            String   @id @default(uuid())
+  restaurant_id String
+  name          String   @db.VarChar(80)
+  ncm           String   @db.VarChar(8)
+  cfop          String   @db.VarChar(4)
+  csosn         String   @db.VarChar(4)
+  origin        Int      @default(0)
+  unit          String   @default("UN") @db.VarChar(6)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now()) @updatedAt
+
+  restaurant       restaurants       @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+  products         menu_products[]
+  default_settings fiscal_settings[] @relation("fiscal_default_profile")
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, name])
+}
+
+/// Uma NFC-e por comanda. A referência no provedor é `id-attempt`.
+model fiscal_documents {
+  id                String                 @id @default(uuid())
+  restaurant_id     String
+  tab_id            String
+  provider          fiscal_provider_type
+  environment       fiscal_environment
+  status            fiscal_document_status @default(PENDING)
+  attempt           Int                    @default(1)
+  external_id       String?                @db.VarChar(128)
+  total_cents       Int
+  customer_document String?                @db.VarChar(14)
+  number            Int?
+  series            Int?
+  access_key        String?                @db.VarChar(44)
+  protocol          String?                @db.VarChar(64)
+  sefaz_status      String?                @db.VarChar(16)
+  sefaz_message     String?                @db.VarChar(500)
+  xml_url           String?                @db.VarChar(1000)
+  danfe_url         String?                @db.VarChar(1000)
+  qrcode_url        String?                @db.VarChar(2000)
+  dispatched_at     DateTime?
+  issued_at         DateTime?
+  cancel_reason     String?                @db.VarChar(255)
+  cancel_requested_at DateTime?
+  cancelled_at      DateTime?
+  created_at        DateTime               @default(now())
+  updated_at        DateTime               @default(now()) @updatedAt
+
+  restaurant restaurants @relation(fields: [restaurant_id], references: [id], onDelete: Restrict)
+  tab        tabs        @relation(fields: [restaurant_id, tab_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([restaurant_id, id])
+  @@unique([restaurant_id, tab_id])
+  @@index([status, updated_at])
 }

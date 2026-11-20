@@ -1,3 +1,4 @@
+import type { FiscalDocumentView } from "../fiscal/fiscal-document.ts";
 import type { ActorContext } from "../../shared/authorization/capabilities.ts";
 import type {
   CancelTab,
@@ -27,7 +28,7 @@ export interface ITabsService {
     id: string,
     splitBy?: number,
   ): Promise<{ tab: ReturnType<typeof tabDetail>; equal_split_preview?: number[] }>;
-  close(actor: ActorContext, id: string, input: CloseTab): Promise<TabResult & { fiscal_document: null }>;
+  close(actor: ActorContext, id: string, input: CloseTab): Promise<TabResult & { fiscal_document: FiscalDocumentView | null }>;
   cancel(actor: ActorContext, id: string, input: CancelTab): Promise<TabResult>;
   merge(actor: ActorContext, id: string, input: MergeTab): Promise<TabResult>;
 }
