@@ -11,6 +11,19 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    mem_limit: 512m
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - effective_cache_size=192MB
+      - -c
+      - max_connections=50
     environment:
       POSTGRES_USER: garcom
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
@@ -19,21 +32,24 @@ services:
       - pgdata_prod:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U garcom -d garcom"]
-      interval: 5s
+      interval: 10s
       timeout: 3s
       retries: 20
 
   api:
     build: ./back-end
     restart: unless-stopped
+    mem_limit: 512m
     depends_on:
       db:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=384"
+      MALLOC_ARENA_MAX: "2"
       PORT: 4000
       MEDIA_ROOT: /data/media
-      DATABASE_URL: postgresql://garcom:${POSTGRES_PASSWORD}@db:5432/garcom?schema=public
+      DATABASE_URL: postgresql://garcom:${POSTGRES_PASSWORD}@db:5432/garcom?schema=public&connection_limit=10
       JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET com 32+ caracteres (openssl rand -hex 32)}
       FRONTEND_URL: https://${DOMAIN:?defina DOMAIN}
       PUBLIC_APP_URL: https://${DOMAIN}
@@ -45,7 +61,7 @@ services:
       - media_data:/data/media
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 5
       start_period: 30s
@@ -56,12 +72,17 @@ services:
       args:
         NEXT_PUBLIC_API_URL: https://${DOMAIN}/api/v1
     restart: unless-stopped
+    mem_limit: 384m
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=256"
+      MALLOC_ARENA_MAX: "2"
     depends_on:
       - api
 
   proxy:
     image: caddy:2-alpine
     restart: unless-stopped
+    mem_limit: 128m
     depends_on:
       - web
       - api

@@ -16,6 +16,37 @@ type TicketAction = { label: string; operations: Operation[] };
 const TEN_MINUTES_MS = 10 * 60_000;
 const TWENTY_MINUTES_MS = 20 * 60_000;
 
+// Um único timer compartilhado entre todos os tickets montados; pausa com a aba oculta ou sem pedidos.
+const clockListeners = new Set<(now: number) => void>();
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+let visibilityBound = false;
+
+function emitClock() {
+  if (typeof document !== "undefined" && document.hidden) return;
+  const now = performance.now();
+  for (const listener of clockListeners) listener(now);
+}
+
+function subscribeClock(listener: (now: number) => void) {
+  clockListeners.add(listener);
+  if (!clockTimer) clockTimer = setInterval(emitClock, 1000);
+  if (!visibilityBound && typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", emitClock);
+    visibilityBound = true;
+  }
+  return () => {
+    clockListeners.delete(listener);
+    if (clockListeners.size === 0 && clockTimer) {
+      clearInterval(clockTimer);
+      clockTimer = null;
+      if (visibilityBound && typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", emitClock);
+        visibilityBound = false;
+      }
+    }
+  };
+}
+
 /**
  * Monta lote para mover todas as unidades pendentes de cada item para EM PREPARO.
  */
@@ -95,13 +126,17 @@ function KitchenItem({ item, quantity }: { item: OrderItem; quantity: number }) 
   );
 }
 
-function KitchenTicket({ order, now, queue, stage, action }: {
+function KitchenTicket({ order, serverTime, loadedAt, queue, stage, action }: {
   order: Order;
-  now: number;
+  serverTime: number;
+  loadedAt: number;
   queue: OrderQueue;
   stage: StageQuantity;
   action?: TicketAction;
 }) {
+  const [tick, setTick] = useState(loadedAt);
+  useEffect(() => subscribeClock(setTick), []);
+  const now = serverTime + Math.max(0, tick - loadedAt);
   const awaitingWaiter = stage === "ready_quantity";
   const timestamp = awaitingWaiter ? order.ready_since : order.created_at;
   const elapsedMs = elapsedSince(timestamp, now);
@@ -175,14 +210,9 @@ function KitchenColumn({ title, count, emptyText, children }: {
 
 export default function CozinhaPage() {
   const queue = useOrderQueue(canAccessKitchen);
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setTick(performance.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
   const snapshot = queue.snapshot;
-  const now = snapshot ? Date.parse(snapshot.server_time) + Math.max(0, tick - snapshot.loadedAt) : 0;
+  const serverTime = snapshot ? Date.parse(snapshot.server_time) : 0;
+  const loadedAt = snapshot?.loadedAt ?? 0;
   const grouped = snapshot && groupKitchenOrders(snapshot.items);
 
   const newOrders = grouped?.incoming ?? [];
@@ -229,7 +259,8 @@ export default function CozinhaPage() {
                 <KitchenTicket
                   key={`${order.id}/${order.version}`}
                   order={order}
-                  now={now}
+                  serverTime={serverTime}
+                  loadedAt={loadedAt}
                   queue={queue}
                   stage="pending_quantity"
                   action={{ label: "Iniciar preparo", operations: buildStartPreparationOperations(order) }}
@@ -242,7 +273,8 @@ export default function CozinhaPage() {
                 <KitchenTicket
                   key={`${order.id}/${order.version}`}
                   order={order}
-                  now={now}
+                  serverTime={serverTime}
+                  loadedAt={loadedAt}
                   queue={queue}
                   stage="preparing_quantity"
                   action={{ label: "Pronto", operations: buildReadyOperations(order) }}
@@ -252,7 +284,7 @@ export default function CozinhaPage() {
 
             <KitchenColumn title="Aguardando garçom" count={pickupOrders.length} emptyText="Nenhum item aguardando o garçom.">
               {pickupOrders.map((order) => (
-                <KitchenTicket key={`${order.id}/${order.version}`} order={order} now={now} queue={queue} stage="ready_quantity" />
+                <KitchenTicket key={`${order.id}/${order.version}`} order={order} serverTime={serverTime} loadedAt={loadedAt} queue={queue} stage="ready_quantity" />
               ))}
             </KitchenColumn>
           </div>

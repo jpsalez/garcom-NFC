@@ -10,22 +10,23 @@ SaaS multi-restaurante: o cliente escaneia QR/NFC e chama o garçom ou pede a co
 Precisa só do Docker. Na raiz do projeto:
 
 ```
-docker compose up
+docker compose up -d --build --remove-orphans
 ```
 
-Não precisa criar `.env`. No primeiro boot a API instala dependências e aplica as migrations (alguns minutos); depois sobe rápido.
+O primeiro boot prepara a imagem do front-end e aplica as migrations da API. O front passa a servir o build pronto, sem compilador ou hot reload em execução.
 
 | Serviço | Endereço |
 |---|---|
 | Front-end | http://localhost:3000 |
 | API | http://localhost:4000 |
 | Documentação da API (Swagger) | http://localhost:4000/docs |
-| Painel de controle (git, tarefas, decisões, arquivos) | http://localhost:8765 |
 | PostgreSQL (só nesta máquina) | localhost:5432 |
 
 Criar o primeiro restaurante: `POST /auth/register` (pelo Swagger). Dados de exemplo: `docker compose exec api npm run db:seed`.
 
-Para mudar portas ou o segredo do JWT, crie um `.env` na raiz (`JWT_SECRET`, `API_PORT`, `WEB_PORT`, `DB_PORT`). O segredo padrão do compose serve só para desenvolvimento.
+Configure portas e JWT pelo `.env` da raiz (`JWT_SECRET`, `API_PORT`, `WEB_PORT`, `DB_PORT`). O segredo padrão serve só para desenvolvimento.
+
+Para hot reload, suba a API com `API_WATCH=1 docker compose up -d api` e rode `npm run dev` em `front-end/` com as dependências instaladas. Se o serviço `web` já estiver ativo, pare-o antes de usar a mesma porta. Para testar redefinição de senha, use `SMTP_URL=smtp://mailpit:1025 docker compose --profile mail up -d api mailpit` e abra http://localhost:8025.
 
 `docker compose down` para tudo (mantém o banco); `docker compose down -v` apaga o banco.
 

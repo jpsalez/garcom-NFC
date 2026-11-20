@@ -88,7 +88,8 @@ export function useOrderQueue(canAccess?: (user: User) => boolean, options?: { i
     socket.connect();
     window.addEventListener("focus", refreshVisible);
     document.addEventListener("visibilitychange", refreshVisible);
-    const poll = setInterval(() => { if (visible()) queue.poll(); }, 15000);
+    // Socket.IO entrega order:created/order:updated em tempo real; polling fica só como rede de segurança (60 s).
+    const poll = setInterval(() => { if (visible()) queue.poll(); }, 60000);
     queue.refresh();
 
     return () => {

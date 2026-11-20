@@ -3,6 +3,7 @@ import "reflect-metadata";
 // Carrega o .env (JWT_SECRET etc.) antes de qualquer módulo que leia process.env
 import "dotenv/config";
 import { createServer } from "node:http";
+import sharp from "sharp";
 import swaggerUi from "swagger-ui-express";
 import type { ISessionsService } from "./modules/sessions/sessions.interfaces.ts";
 import type { ITokenCleanupService } from "./modules/auth/auth.interfaces.ts";
@@ -20,6 +21,9 @@ import type { IPrintingService } from "./modules/printing/printing.interfaces.ts
 import type { IMediaService } from "./modules/media/media.interfaces.ts";
 
 function bootstrap() {
+  // Evita que o cache nativo da libvips acumule dezenas de MB fora do heap do V8
+  sharp.cache(false);
+  sharp.concurrency(2);
   // Sem o domínio os QR Codes sairiam apontando para o lugar errado
   if (!process.env.PUBLIC_APP_URL) throw new Error("PUBLIC_APP_URL não definido no .env");
   // Em produção, um segredo curto ou o padrão do compose deixaria os tokens forjáveis

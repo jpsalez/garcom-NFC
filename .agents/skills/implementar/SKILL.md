@@ -6,7 +6,7 @@ description: "Modo Full IA: implementa uma tarefa de ponta a ponta (plano, teste
 Tarefa: os argumentos fornecidos pelo usuário. Este comando é a autorização explícita do usuário para ESCREVER código em back-end/ nesta tarefa (e só nela).
 
 Pré-condições (pare e pergunte se falhar):
-1. `python3 .claude/scripts/ai_mode.py status` mostra testes e banco de teste prontos. Se não, proponha `/modo-ia ligar` e espere.
+1. Confira se `back-end/package.json` tem os comandos de typecheck, lint e testes.
 2. Decisões de produto que a tarefa toca estão em `.claude/knowledge/garcom-nfc/decisoes.md` na seção "Decididas". Se não, apresente as opções e a sugestão, e espere a escolha. Nunca assuma.
 3. `git -C back-end status --short` está limpo. Se houver mudanças do usuário, NÃO as misture: peça para ele commitar/guardar ou confirmar que posso trabalhar por cima.
 4. O banco de teste sobe (`npm run test:db:up`). Se o Docker negar permissão, pare e avise.

@@ -106,12 +106,19 @@ export function useBalcao(soundOn: boolean) {
     return () => clearTimeout(timer)
   }, [stale, load])
 
-  // Relógio corrigido pelo do servidor, a cada segundo (cronômetros e vencimentos)
+  // Relógio corrigido pelo do servidor, a cada segundo enquanto a aba está visível (cronômetros e vencimentos)
   useEffect(() => {
-    const tick = () => setNow(Date.now() + offset.current)
+    const tick = () => {
+      if (document.hidden) return
+      setNow(Date.now() + offset.current)
+    }
     tick()
     const timer = setInterval(tick, 1000)
-    return () => clearInterval(timer)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', tick)
+    }
   }, [])
 
   return { calls, sessions, doneToday, live, stale, now, reload: load }

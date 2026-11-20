@@ -1,3 +1,7 @@
 node_modules
 .next
 .env*
+tests
+*.md
+tsconfig.tsbuildinfo
+pnpm-lock.yaml
