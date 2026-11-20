@@ -10,13 +10,24 @@ beforeEach(resetDb);
 afterAll(() => prisma.$disconnect());
 
 async function enableKitchenPrinting(token: string) {
-  const issued = await api().post("/api/v1/printing/kitchen/pairing").set(auth(token));
+  const settings = "/api/v1/printing/kitchen";
+  const cloud = "/api/v1/printing/cloudprnt";
+  const owner = auth(token);
+  const issued = await api().post(`${settings}/printer`).set(owner);
   expect(issued.status).toBe(201);
-  const paired = await api().post("/api/v1/print-agent/pair").send({ code: issued.body.code });
-  expect(paired.status).toBe(201);
-  expect((await api().patch("/api/v1/printing/kitchen").set(auth(token)).send({ enabled: true })).status).toBe(
-    200,
-  );
+  const printer = {
+    Authorization: `Basic ${Buffer.from(`${issued.body.username}:${issued.body.password}`).toString("base64")}`,
+  };
+  const poll = () => api().post(cloud).set(printer).send({ statusCode: "200 OK" });
+  expect((await poll()).status).toBe(200);
+  expect((await api().post(`${settings}/test`).set(owner)).status).toBe(200);
+
+  const offer = await poll();
+  expect(offer.body.jobReady).toBe(true);
+  const jobToken = offer.body.jobToken;
+  expect((await api().get(cloud).set(printer).query({ token: jobToken, type: "image/png" })).status).toBe(200);
+  expect((await api().delete(cloud).set(printer).query({ token: jobToken, code: "200 OK" })).status).toBe(200);
+  expect((await api().patch(settings).set(owner).send({ enabled: true })).status).toBe(200);
 }
 
 describe("PDV interno e comanda sequencial (POST /orders e GET /menu/published)", () => {
