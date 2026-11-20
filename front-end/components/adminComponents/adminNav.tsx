@@ -12,10 +12,14 @@ export default function AdminNav() {
     const items = session.user.role === 'SUPER_ADMIN' ? [{ href: '/admin/restaurantes', label: 'Restaurantes' }] : [{ href: '/admin/waiter', label: 'Chamados' }]
     if (session.user.role === 'OWNER') items.push({ href: '/admin/mesas', label: 'Mesas' }, { href: '/admin/equipe', label: 'Equipe' })
 
+    if (session.user.role === 'OWNER' || (session.user.role === 'STAFF' && session.user.category === 'MANAGER')) items.push({ href: '/admin/cardapio', label: 'Cardápio' })
+
+    if (session.user.role === 'OWNER' || (session.user.role === 'STAFF' && ['MANAGER', 'WAITER', 'KITCHEN'].includes(session.user.category ?? ''))) items.push({ href: '/admin/pedidos', label: 'Pedidos' })
+
     items.push({ href: '/admin/senha', label: 'Senha' })
 
     return(
-        <nav aria-label="Painel" className="w-full flex gap-5 px-5 pt-4 border-b">
+        <nav aria-label="Painel" className="w-full flex gap-5 overflow-x-auto px-5 pt-4 border-b">
             {items.map((item) => (
                 <Link key={item.href} href={item.href} prefetch={false}
                 className={`pb-2 ${pathname === item.href ? 'border-b-2 border-foreground font-bold' : 'text-gray-400'}`}>

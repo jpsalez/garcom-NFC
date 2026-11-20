@@ -74,7 +74,6 @@ export default function Hero() {
       };
       tl.eventCallback('onUpdate', sync);
       let seek: gsap.core.Tween | undefined;
-      let autoplay: gsap.core.Tween | undefined;
       goTo.current = (i) => {
         autoplay?.kill();
         seek?.kill();
@@ -128,7 +127,7 @@ export default function Hero() {
         .to(pulse.current, { scroll: 1, ease: 'none' }, 0);
       document.addEventListener('visibilitychange', update);
       update();
-      autoplay = gsap.delayedCall(0.8, play);
+      const autoplay = gsap.delayedCall(0.8, play);
 
       // Entrada; se ninguém rolar, a animação começa sozinha
       gsap.timeline({ delay: 0.1 })

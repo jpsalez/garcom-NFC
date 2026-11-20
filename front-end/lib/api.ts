@@ -24,6 +24,8 @@ type Options = {
   renew?: boolean;
   // Resposta que não é JSON (ex.: SVG do QR Code)
   text?: boolean;
+  // Imagem privada com autenticação e renovação de sessão.
+  blob?: boolean;
 };
 
 let renewing: Promise<Session | null> | null = null;
@@ -46,20 +48,22 @@ async function renew(): Promise<Session | null> {
 }
 
 export async function api<T>(path: string, options: Options = {}, canRetry = true): Promise<T> {
-  const { method = "GET", body, deviceToken, renew = !deviceToken, text } = options;
+  const { method = "GET", body, deviceToken, renew = !deviceToken, text, blob } = options;
   const headers: Record<string, string> = {};
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const multipart = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body !== undefined && !multipart) headers["Content-Type"] = "application/json";
   if (deviceToken) headers["X-Table-Token"] = deviceToken;
 
   const response = await fetch(`${API_URL}${path}`, {
     method,
     headers,
     credentials: "include",
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
   });
 
   if (response.status === 204) return undefined as T;
   if (text && response.ok) return (await response.text()) as T;
+  if (blob && response.ok) return (await response.blob()) as T;
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {

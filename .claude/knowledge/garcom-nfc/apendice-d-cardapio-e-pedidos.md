@@ -1,6 +1,6 @@
 # Apêndice D. Cardápio, mídia e pedidos — implementação atual
 
-Backend implementado: schema/migration, inicialização transacional, capacidades, catálogo editável, publicação, mídia local, envio e andamento dos pedidos, auditoria e eventos autorizados. Contratos detalhados a seguir e no Swagger de desenvolvimento. Telas do editor, cardápio/carrinho e painel integrado pertencem ao próximo trabalho de frontend; PDV e Amazon S3 continuam como evoluções futuras.
+Backend e frontend implementados para esta etapa: catálogo editável, publicação, mídia local, cardápio da mesa, envio e acompanhamento de pedidos, auditoria e eventos autorizados. Contratos detalhados a seguir e no Swagger de desenvolvimento. PDV e Amazon S3 continuam como evoluções futuras.
 
 Implantação, logs, backup e restauração são detalhados neste apêndice.
 
@@ -19,6 +19,15 @@ Implantação, logs, backup e restauração são detalhados neste apêndice.
 - Eventos order:created/order:updated ficam na sala autorizada de pedidos e carregam só ID/versão; o contrato de recuperação por REST está documentado para o frontend.
 
 Não há categorias obrigatórias, publicação automática ou habilitação automática de pedidos. As respostas existentes de cadastro continuam devolvendo os campos anteriores, sem expor estruturas internas adicionadas.
+
+## Frontend: cardápio e pedidos [Implementado]
+
+- `front-end/app/(app)/admin/cardapio/` e `components/adminComponents/cardapioPage.tsx` / `menuManagement.tsx`: OWNER e STAFF MANAGER gerenciam identidade, cores, fontes e prévia; categorias, produtos, variantes e opções; imagens, ordenação, arquivamento, disponibilidade, publicação e habilitação dos pedidos. A API verifica as permissões e as versões. Alterações do rascunho precisam ser publicadas; disponibilidade e configuração de pedidos têm efeito imediato.
+- `front-end/app/(app)/m/[code]/` e `components/mesaComponents/`: a página da mesa mantém os botões existentes e abre o cardápio sobre a página, com fechamento pelo X. O cliente escolhe variante e opções, informa quantidade/observação, revisa e envia o pedido e consulta os próprios pedidos. Não há produtos fictícios no cardápio público quando a publicação falta.
+- O envio guarda chave e corpo em `sessionStorage` antes da requisição e reutiliza ambos na tentativa de recuperar um resultado incerto. Sem armazenamento, o envio é bloqueado. Se o atendimento muda com uma pendência, é necessário confirmar a situação com a equipe antes de liberar novo envio; não há reenvio automático na nova sessão.
+- `front-end/app/(app)/admin/pedidos/` e `components/garcomComponents/pedidosPage.tsx`: OWNER, MANAGER, WAITER e KITCHEN consultam pedidos em andamento e atualizam quantidades por etapa, inclusive cancelamento com motivo. O frontend reconcilia com REST em eventos, reconexão, retorno à aba e a cada 15 s enquanto visível; conflito de versão requer nova avaliação.
+- Requisições ficam em `front-end/services/menu.ts` e `orders.ts`; tipos em `front-end/lib/menuTypes.ts` e `orderTypes.ts`. `lib/api.ts` envia JSON ou multipart, inclui cookies administrativos e `X-Table-Token` quando necessário e permite obter imagens privadas como Blob.
+- Verificações desta etapa: `npm test` no frontend (18 testes, incluindo 5 cenários de serviços com HTTP simulado), `npm run typecheck`, `npm run lint` (dois avisos preexistentes em `app/layout.tsx`) e `npm run build`; backend `npm test` passou com 165 testes em 22 arquivos usando o banco de testes. Usuário informou ter testado o fluxo no navegador. Os testes de serviços simulados não substituem cobertura automatizada ponta a ponta.
 
 ## Integração com Prisma
 
@@ -164,7 +173,7 @@ As respostas também incluem X-Request-Id para diagnóstico. Logs estruturados e
 
 Socket.IO usa os cookies existentes. `order:created` e `order:updated` enviam somente `{ order_id, version }` para a sala de funcionários com orders:read daquele restaurante. Não há sala pública de pedidos; outros STAFF não recebem esses eventos. Trocar categoria invalida o cache e desconecta o usuário.
 
-Contrato para o frontend posterior: carregar via REST ao entrar, reconectar ou voltar à aba; reconciliar a cada 15 s enquanto painel estiver visível. Cliente consulta o próprio pedido a cada 10 s enquanto visível e pendente, interrompendo em conclusão/401. Eventos podem se perder; o banco/REST é a fonte de verdade. Uma falha de emissão não desfaz a venda.
+O frontend carrega via REST ao entrar, reconectar ou voltar à aba e reconcilia a cada 15 s enquanto o painel estiver visível. Na tela de pedidos do cliente, a consulta ocorre a cada 10 s enquanto visível e houver pedido pendente, interrompendo em conclusão/401. Eventos podem se perder; o banco/REST é a fonte de verdade. Uma falha de emissão não desfaz a venda.
 
 ### Limites e erros
 
@@ -186,7 +195,7 @@ Requer PostgreSQL 16 e uma instância da API com disco persistente. Os Compose d
 
 Antes de aplicar a migration em base existente: backup, execução das consultas da seção D.3, confirmação da URL de destino e revisão do schema. A aplicação neste trabalho foi exclusivamente em bancos temporários de teste. O entrypoint de produção aplica migrations pendentes ao iniciar; executar um deploy real é uma ação distinta, não realizada por este trabalho.
 
-Na primeira inicialização, restaurantes antigos recebem rascunho vazio e envio desabilitado. O dono/gerente cadastra categorias/produtos, envia imagens, publica e habilita pedidos. O cliente só envia pelo contexto de mesa ativa. Interfaces de usuário ainda precisam consumir os contratos do backend.
+Na primeira inicialização, restaurantes antigos recebem rascunho vazio e envio desabilitado. O dono/gerente cadastra categorias/produtos, envia imagens, publica e habilita pedidos. O cliente só envia pelo contexto de mesa ativa. As interfaces de usuário consomem os contratos descritos acima.
 
 ### Logs e diagnóstico
 
