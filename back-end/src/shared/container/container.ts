@@ -88,6 +88,11 @@ import { PaymentsService } from "../../modules/payments/payments.service.ts";
 import { ManualPaymentProvider } from "../../modules/payments/providers/manual.provider.ts";
 import { PaymentProviderRegistry } from "../../modules/payments/providers/payment-provider.registry.ts";
 
+import type { ICashShiftsRepository } from "../../modules/cash-shifts/cash-shifts.repository.interface.ts";
+import { CashShiftsRepository } from "../../modules/cash-shifts/cash-shifts.repository.ts";
+import type { ICashShiftsService } from "../../modules/cash-shifts/cash-shifts.interfaces.ts";
+import { CashShiftsService } from "../../modules/cash-shifts/cash-shifts.service.ts";
+
 export function registerDependencies() {
   // Infra
   container.register<DbClient>("DbClient", { useValue: prisma });
@@ -99,6 +104,8 @@ export function registerDependencies() {
   container.registerSingleton<ITabAdjustmentsService>("TabAdjustmentsService", TabAdjustmentsService);
   container.registerSingleton<IPaymentRequestsService>("PaymentRequestsService", PaymentRequestsService);
   container.registerSingleton<IPaymentsService>("PaymentsService", PaymentsService);
+  container.registerSingleton<ICashShiftsRepository>("CashShiftsRepository", CashShiftsRepository);
+  container.registerSingleton<ICashShiftsService>("CashShiftsService", CashShiftsService);
   container.registerSingleton("ManualPaymentProvider", ManualPaymentProvider);
   container.registerSingleton("PaymentProviderRegistry", PaymentProviderRegistry);
   container.registerSingleton<IOrdersRepository>("OrdersRepository", OrdersRepository);

@@ -15,6 +15,8 @@ import type {
   IRestaurantUnitOfWork,
   RestaurantTransaction,
 } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
+import { applyPaymentToCashShift } from "../cash-shifts/cash-shift-balance.ts";
+import { CashShiftsRepository } from "../cash-shifts/cash-shifts.repository.ts";
 import { MenuRepository } from "../menu/menu.repository.ts";
 import { closeTab, notifyClosedTab } from "../tabs/close-tab.ts";
 import { notifyPaymentRequestUpdated } from "../tabs/payment-request-events.ts";
@@ -185,7 +187,7 @@ export class PaymentsService implements IPaymentsService {
     };
   }
 
-  private persistManualPayment(
+  private async persistManualPayment(
     { db, now }: RestaurantTransaction,
     tab: tabs,
     actor: ActorContext,
@@ -202,6 +204,7 @@ export class PaymentsService implements IPaymentsService {
     const { method, received_cents, tip_cents, installments, idempotency_key } = input;
     const amount_cents = data.amount;
     const charge = provider.recordCharge({ method, amount_cents, received_cents });
+    const shift = await new CashShiftsRepository(db).findOpenByOperator(tab.restaurant_id, actor.id);
     return new PaymentsRepository(db).create(
       tab.restaurant_id,
       {
@@ -209,6 +212,7 @@ export class PaymentsService implements IPaymentsService {
         ...input.manual_details,
         provider: provider.kind,
         tab_id: tab.id,
+        cash_shift_id: shift?.id,
         method,
         amount_cents,
         received_cents,
@@ -240,6 +244,7 @@ export class PaymentsService implements IPaymentsService {
   }
 
   private async applyApprovedPayment(db: DbClient, tab: tabs, payment: PaymentRecord, actor: ActorContext) {
+    await applyPaymentToCashShift(db, payment);
     const paid = await new TabsRepository(db).update(tab.restaurant_id, tab.id, {
       paid_cents: tab.paid_cents + payment.amount_cents,
       version: tab.version + 1,
@@ -329,6 +334,7 @@ export class PaymentsService implements IPaymentsService {
       refunded_at: now,
       refunded_by_user_id: actor.id,
     });
+    await applyPaymentToCashShift(db, refunded);
     const updated = await new TabsRepository(db).update(restaurant_id, tabId, {
       paid_cents: tab.paid_cents - payment.amount_cents,
       version: tab.version + 1,

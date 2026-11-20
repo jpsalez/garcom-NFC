@@ -1,6 +1,7 @@
 import express from "express";
 import { menuRoutes } from "./modules/menu/menu.routes.ts";
 import { paymentRequestsRoutes } from "./modules/tabs/payment-requests.routes.ts";
+import { cashShiftsRoutes } from "./modules/cash-shifts/cash-shifts.routes.ts";
 import { paymentsRoutes } from "./modules/payments/payments.routes.ts";
 import { tabsRoutes } from "./modules/tabs/tabs.routes.ts";
 import { ordersRoutes } from "./modules/orders/orders.routes.ts";
@@ -211,6 +212,7 @@ export function SetupRoutes() {
   router.use(tabsRoutes());
   router.use(paymentRequestsRoutes());
   router.use(paymentsRoutes());
+  router.use(cashShiftsRoutes());
   router.use(mediaRoutes());
   router.use(printingRoutes());
   return router;

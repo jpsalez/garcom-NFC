@@ -1,5 +1,11 @@
 import { z } from "zod";
 import {
+  cashMovementSchema,
+  cashShiftsQuery,
+  closeCashShiftSchema,
+  openCashShiftSchema,
+} from "../modules/cash-shifts/cash-shifts.schemas.ts";
+import {
   restaurantSettingsPatchSchema,
   restaurantSettingsSchema,
 } from "../modules/restaurants/restaurant-settings.schema.ts";
@@ -79,7 +85,70 @@ export const posOrderOperation = {
 
 const deviceAccess = { ...pdvAccess, security: [{ tableToken: [] }] };
 
+const cashShiftErrors = {
+  400: tabErrors[400],
+  401: tabErrors[401],
+  403: { description: "Operação exige cash_shift:operate" },
+  404: { description: "Turno de caixa não encontrado no escopo do operador" },
+  409: { description: "Turno já aberto ou encerrado, ou saldo insuficiente" },
+};
+const cashShiftQueryParameters = Object.entries(
+  z.toJSONSchema(cashShiftsQuery, { io: "input" }).properties ?? {},
+).map(([name, schema]) => ({ name, in: "query", schema }));
+
 export const pdvPaths = {
+  "/cash-shifts": {
+    get: {
+      ...pdvAccess,
+      summary: "Lista turnos do restaurante. CASHIER consulta apenas os próprios turnos",
+      parameters: cashShiftQueryParameters,
+      responses: { ...cashShiftErrors, 200: { description: "Lista no campo shifts" } },
+    },
+  },
+  "/cash-shifts/current": {
+    get: {
+      ...pdvAccess,
+      summary: "Consulta o turno aberto do operador autenticado",
+      responses: {
+        ...cashShiftErrors,
+        200: { description: "shift com movimentos e totais por meio, ou null" },
+      },
+    },
+  },
+  "/cash-shifts/{id}": {
+    get: {
+      ...pdvAccess,
+      summary: "Consulta o saldo, os movimentos e os totais por meio de pagamento do turno",
+      parameters: [tabId],
+      responses: { ...cashShiftErrors, 200: { description: "Turno detalhado no campo shift" } },
+    },
+  },
+  "/cash-shifts/open": {
+    post: {
+      ...pdvAccess,
+      summary: "Abre o turno do operador com o valor inicial informado",
+      requestBody: tabBody(openCashShiftSchema),
+      responses: { ...cashShiftErrors, 201: { description: "Turno aberto no campo shift" } },
+    },
+  },
+  "/cash-shifts/{id}/movements": {
+    post: {
+      ...pdvAccess,
+      summary: "Registra sangria ou suprimento em um turno aberto",
+      parameters: [tabId],
+      requestBody: tabBody(cashMovementSchema),
+      responses: { ...cashShiftErrors, 201: { description: "Turno atualizado no campo shift" } },
+    },
+  },
+  "/cash-shifts/{id}/close": {
+    post: {
+      ...pdvAccess,
+      summary: "Fecha o turno e apura a diferença entre o valor contado e o esperado",
+      parameters: [tabId],
+      requestBody: tabBody(closeCashShiftSchema),
+      responses: { ...cashShiftErrors, 200: { description: "Turno encerrado no campo shift" } },
+    },
+  },
   "/tabs/{id}/pre-bill": {
     post: {
       ...pdvAccess,

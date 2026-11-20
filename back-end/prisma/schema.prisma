@@ -36,6 +36,7 @@ model restaurants {
   operation_events            restaurant_operation_events[] @relation("restaurant_operation_events_restaurant")
   print_destinations          print_destinations[]
   tabs                        tabs[]
+  cash_shifts                 cash_shifts[]
 }
 
 model users {
@@ -65,6 +66,8 @@ model users {
   handled_payment_requests    payment_requests[]            @relation("payment_request_handled_by")
   created_payments            payments[]                    @relation("payment_actor")
   refunded_payments           payments[]                    @relation("payment_refunded_by")
+  closed_cash_shifts          cash_shifts[]                 @relation("cash_shift_closed_by")
+  cash_movements              cash_movements[]              @relation("cash_movement_actor")
 
   @@unique([restaurant_id, id])
 }
@@ -933,6 +936,7 @@ model payments {
   updated_at           DateTime              @default(now()) @updatedAt
 
   tab             tabs                  @relation(fields: [restaurant_id, tab_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  cash_shift      cash_shifts?          @relation(fields: [restaurant_id, cash_shift_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
   /// As FKs SQL de autoria limpam apenas os IDs dos usuários ao excluí-los.
   actor           users?                @relation("payment_actor", fields: [restaurant_id, actor_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
   refunded_by     users?                @relation("payment_refunded_by", fields: [restaurant_id, refunded_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
@@ -962,4 +966,59 @@ model payment_allocations {
 
   @@unique([restaurant_id, payment_id, order_item_id])
   @@index([restaurant_id, order_item_id])
+}
+
+enum cash_shift_status {
+  OPEN
+  CLOSED
+}
+
+enum cash_movement_type {
+  SANGRIA
+  SUPRIMENTO
+}
+
+model cash_shifts {
+  id                  String            @id @default(uuid())
+  restaurant_id       String
+  /// Identificador histórico do operador, preservado na exclusão do usuário.
+  opened_by_user_id   String
+  closed_by_user_id   String?
+  status              cash_shift_status @default(OPEN)
+  opening_cents       Int
+  expected_cash_cents Int               @default(0)
+  counted_cash_cents  Int?
+  difference_cents    Int?
+  notes               String?           @db.VarChar(500)
+  opened_at           DateTime          @default(now())
+  closed_at           DateTime?
+
+  restaurant restaurants      @relation(fields: [restaurant_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  /// A FK SQL limpa apenas closed_by_user_id ao excluir o usuário.
+  closed_by  users?           @relation("cash_shift_closed_by", fields: [restaurant_id, closed_by_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+  payments   payments[]
+  movements  cash_movements[]
+
+  @@unique([restaurant_id, id])
+  @@index([restaurant_id, status, opened_at])
+  @@index([restaurant_id, opened_by_user_id, opened_at])
+  @@index([restaurant_id, closed_by_user_id])
+}
+
+model cash_movements {
+  id            String             @id @default(uuid())
+  restaurant_id String
+  cash_shift_id String
+  type          cash_movement_type
+  amount_cents  Int
+  reason        String             @db.VarChar(500)
+  actor_user_id String?
+  created_at    DateTime           @default(now())
+
+  cash_shift cash_shifts @relation(fields: [restaurant_id, cash_shift_id], references: [restaurant_id, id], onDelete: Restrict, onUpdate: Restrict)
+  /// A FK SQL limpa apenas actor_user_id ao excluir o usuário.
+  actor      users?      @relation("cash_movement_actor", fields: [restaurant_id, actor_user_id], references: [restaurant_id, id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@index([restaurant_id, cash_shift_id, created_at])
+  @@index([restaurant_id, actor_user_id])
 }

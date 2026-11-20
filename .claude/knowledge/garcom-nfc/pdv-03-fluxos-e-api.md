@@ -229,10 +229,17 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
 ---
 
 ### 3.5 Turno de caixa (`back-end/src/modules/cash-shifts/`)
-- `POST /api/v1/cash-shifts/open` → `{ "opening_cents": 20000 }` → `201 Created`.
-- `GET /api/v1/cash-shifts/current` → turno aberto do operador com totais em tempo real (`expected_cash_cents`, totais por meio, movimentos).
-- `POST /api/v1/cash-shifts/:id/movements` → `{ "type": "SANGRIA", "amount_cents": 50000, "reason": "Depósito cofre" }` → recalcula `expected_cash_cents` (`+` suprimento, `-` sangria).
-- `POST /api/v1/cash-shifts/:id/close` → `{ "counted_cash_cents": 45200, "notes": "Tudo certo" }` → devolve `expected_cash_cents`, `counted_cash_cents`, `difference_cents` e resumo completo por meio de pagamento.
+
+As rotas exigem `cash_shift:operate`. `OWNER` e `MANAGER` administram os turnos do próprio restaurante. `CASHIER` acessa apenas seus turnos. Turnos fora desse escopo retornam `404`.
+
+- `POST /api/v1/cash-shifts/open` recebe `{ "opening_cents": 20000 }` e retorna `201 { "shift": ... }`. Se já houver um turno aberto para o operador, retorna `409 CASH_SHIFT_ALREADY_OPEN`.
+- `GET /api/v1/cash-shifts/current` retorna `{ "shift": ... }` do operador autenticado ou `{ "shift": null }`.
+- `GET /api/v1/cash-shifts` retorna `{ "shifts": [...] }` com filtros opcionais `status`, `limit` e `offset`.
+- `GET /api/v1/cash-shifts/:id` retorna `{ "shift": ... }` com `movements` e `totals_by_method`, um mapa dos totais em centavos de pagamentos aprovados por meio.
+- `POST /api/v1/cash-shifts/:id/movements` recebe `{ "type": "SANGRIA", "amount_cents": 5000, "reason": "Depósito no cofre" }` e retorna `201 { "shift": ... }`. Sangria reduz o saldo e suprimento aumenta.
+- `POST /api/v1/cash-shifts/:id/close` recebe `{ "counted_cash_cents": 45200, "notes": "Tudo certo" }` e retorna `{ "shift": ... }` com a diferença em centavos entre o contado e o esperado.
+
+O pagamento é vinculado ao turno aberto do operador, quando houver. Dinheiro acrescenta apenas o valor líquido pago ao saldo esperado. O estorno corrige o turno vinculado mesmo após o fechamento, preservando a contagem física e recalculando a diferença. Sangria ou estorno que levaria o saldo abaixo de zero retorna `409 CASH_SHIFT_INSUFFICIENT_CASH`.
 
 ---
 

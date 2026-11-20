@@ -118,6 +118,8 @@ As operações no banco usam `payment-requests.repository.ts` e `tab-adjustments
 2. **Módulo `back-end/src/modules/cash-shifts/`:** `cash-shifts.interfaces.ts`, `cash-shifts.schemas.ts`, `cash-shifts.repository.interface.ts`, `cash-shifts.repository.ts`, `cash-shifts.service.ts`, `cash-shifts.controller.ts`, `cash-shifts.routes.ts`.
 3. **Integração em `payments.service.ts`:** ao registrar pagamento, associar automaticamente `cash_shift_id` do turno aberto do operador (e somar `amount_cents` em `expected_cash_cents` quando `method === 'CASH'`; subtrair no estorno).
 
+`cash-shift-balance.ts` aplica o mesmo limite de saldo a movimentações, pagamentos e estornos.
+
 ### Testes obrigatórios (`tests/cash-shifts.test.ts`)
 - Abrir turno (2º turno aberto do mesmo operador retorna `409 CASH_SHIFT_ALREADY_OPEN`), receber em dinheiro com troco (soma só o líquido!), receber em cartão (não altera `expected_cash_cents`), registrar sangria (`-`) e suprimento (`+`), fechar informando `counted_cash_cents` e verificar `difference_cents` exato.
 - `WAITER` toma `403` em `/cash-shifts/*`; `CASHIER` vê apenas o próprio turno na listagem.
