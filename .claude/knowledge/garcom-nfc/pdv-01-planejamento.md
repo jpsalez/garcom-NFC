@@ -56,9 +56,9 @@ Nova categoria em `staff_category`: `CASHIER` (atualizar também o CHECK `order_
 | `terminals:configure` (conectar Mercado Pago / maquininhas) | Sim | Sim | Não | Não | Não |
 | `fiscal:configure` (certificado A1, CSC, perfis tributários) | Sim | Sim | Não | Não | Não |
 | `fiscal:emit` (emitir/consultar NFC-e no fechamento) | Sim | Sim | Sim | Sim | Não |
-| `reports:read` (histórico, KPIs e previsões) | Sim | Sim | Próprio turno* | Não | Não |
+| `reports:read` (histórico, KPIs e previsões) | Sim | Sim | Não* | Não | Não |
 
-*\*`CASHIER` consulta apenas o resumo do próprio turno para conferência de gaveta.*
+*\*`CASHIER` consulta apenas o resumo do próprio turno, pelo módulo de caixa e com `cash_shift:operate`.*
 
 ## 5. Roadmap estruturado (7 etapas)
 | Etapa | Nome | Entregáveis no back-end | Dependência |

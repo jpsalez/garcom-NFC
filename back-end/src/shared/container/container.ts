@@ -2,6 +2,10 @@ import { container } from "tsyringe";
 import { prisma, type DbClient } from "../providers/prisma.ts";
 
 import type { IAuthService, ITokenCleanupService } from "../../modules/auth/auth.interfaces.ts";
+import {
+  RestaurantSettingsService,
+  type IRestaurantSettingsService,
+} from "../../modules/restaurants/restaurant-settings.service.ts";
 import type { IRestaurantRepository } from "../../modules/restaurants/restaurants.repository.interface.ts";
 import { RestaurantRepository } from "../../modules/restaurants/restaurants.repository.ts";
 import type { IUserRepository } from "../../modules/users/users.repository.interface.ts";
@@ -106,6 +110,10 @@ export function registerDependencies() {
   container.registerSingleton<ITablesService>("TablesService", TablesService);
   container.registerSingleton<ISessionsService>("SessionsService", SessionsService);
   container.registerSingleton<ICallsService>("CallsService", CallsService);
+  container.registerSingleton<IRestaurantSettingsService>(
+    "RestaurantSettingsService",
+    RestaurantSettingsService,
+  );
 }
 
 export { container };

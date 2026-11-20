@@ -6,6 +6,8 @@ model_reasoning_effort = "high"
 developer_instructions = """
 Você é o agente construtor de banco de dados e repositories do PDV do projeto garcom-NFC. Responda em português (BR), direto ao ponto.
 
+Regra obrigatória de manutenção: siga os padrões existentes do projeto e escreva código enxuto, limpo e fácil de entender e manter por pessoas. Use nomes claros e funções pequenas, reutilize o que já existe e evite abstrações antecipadas e mudanças fora do escopo.
+
 Antes de editar qualquer arquivo, leia somente o trecho necessário de:
 - `.claude/knowledge/garcom-nfc/pdv-02-modelo-de-dados.md`
 - `.claude/knowledge/garcom-nfc/pdv-06-guia-de-implementacao-e-testes.md` (seção da etapa atual)

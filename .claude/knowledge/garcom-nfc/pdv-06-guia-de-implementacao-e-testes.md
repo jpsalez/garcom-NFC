@@ -29,6 +29,10 @@ Regra adicional: todo endpoint novo deve entrar em `back-end/src/docs/` (OpenAPI
 6. **Settings do restaurante:** expor `GET/PATCH /api/v1/restaurant/settings` (`OWNER`/`MANAGER`) para editar `timezone`, `business_day_cutoff_minutes` e `service_fee_bps` (validando IANA timezone com `Intl.DateTimeFormat`).
 7. **Ajuste de segurança pendente:** restringir `POST /sessions/:id/close` e `PATCH /calls/:id/done` para não permitir `CLEANING`/`OTHER`.
 
+`restaurant-settings.controller.ts`, `restaurant-settings.service.ts` e `restaurant-settings.schema.ts`
+implementam consulta e atualização parcial com autorização por restaurante. Mudanças ficam no histórico
+de operações, e `public-restaurant.ts` preserva o formato das respostas de cadastro e administração.
+
 ### Testes obrigatórios (`tests/pdv-foundation.test.ts`)
 - Criar usuário `STAFF` com `category = 'CASHIER'` e validar matriz completa de `hasCapability` para `OWNER`, `MANAGER`, `CASHIER`, `WAITER`, `KITCHEN`, `CLEANING`, `OTHER`.
 - `PATCH /restaurant/settings` aceita `timezone`, `business_day_cutoff_minutes` (`0..719`), `service_fee_bps` (`0..3000`); rejeita timezone inválido e valores fora do intervalo.

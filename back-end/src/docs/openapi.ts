@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { printingPaths } from "./printing-openapi.ts";
 import { menuPaths } from "./menu-openapi.ts";
+import { pdvPaths } from "./pdv-openapi.ts";
 import { createRestaurantSchema, setActiveSchema } from "../modules/administration/administration.schema.ts";
 import { forgotPasswordSchema, resetPasswordSchema } from "../modules/auth/password-reset.schema.ts";
 import { changePasswordSchema, createUserSchema, loginUserSchema } from "../modules/auth/auth.schema.ts";
@@ -77,6 +78,7 @@ export const openApiSpec = {
   paths: {
     ...menuPaths,
     ...printingPaths,
+    ...pdvPaths,
     "/health": { get: operation({ tag: "Sistema", summary: "Verifica se a API está no ar", auth: false }) },
     "/auth/register": {
       post: operation({
@@ -253,7 +255,7 @@ export const openApiSpec = {
     "/sessions/{id}/close": {
       post: operation({
         tag: "Atendimentos",
-        summary: "Encerra: revoga tokens e cancela chamados abertos (OWNER ou STAFF)",
+        summary: "Encerra e revoga tokens; acesso vedado a CLEANING e OTHER",
         params: ["id"],
       }),
     },
@@ -284,7 +286,7 @@ export const openApiSpec = {
     "/calls/{id}/done": {
       patch: operation({
         tag: "Chamados",
-        summary: "Finaliza o chamado; 409 CALL_NOT_OPEN se não estiver mais aberto (OWNER ou STAFF)",
+        summary: "Finaliza o chamado; acesso vedado a CLEANING e OTHER; 409 CALL_NOT_OPEN se já finalizado",
         params: ["id"],
       }),
     },

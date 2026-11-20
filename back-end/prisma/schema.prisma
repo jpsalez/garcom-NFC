@@ -16,21 +16,25 @@ datasource db {
 }
 
 model restaurants {
-  id               String                        @id @default(uuid())
-  name             String
-  slug             String                        @unique
-  active           Boolean                       @default(true)
-  created_at       DateTime                      @default(now())
-  users            users[]
-  tables           tables[]
-  tableSessions    table_sessions[]
-  calls            calls[]
-  menus            menus[]                       @relation("menus_restaurant")
-  order_settings   restaurant_order_settings[]   @relation("restaurant_order_settings_restaurant")
-  media_assets     media_assets[]                @relation("media_assets_restaurant")
-  orders           orders[]                      @relation("orders_restaurant")
-  operation_events restaurant_operation_events[] @relation("restaurant_operation_events_restaurant")
-  print_destinations print_destinations[]
+  id                          String                        @id @default(uuid())
+  name                        String
+  slug                        String                        @unique
+  active                      Boolean                       @default(true)
+  created_at                  DateTime                      @default(now())
+  timezone                    String                        @default("America/Sao_Paulo") @db.VarChar(64)
+  business_day_cutoff_minutes Int                           @default(0)
+  service_fee_bps             Int                           @default(1000)
+  next_tab_number             Int                           @default(1)
+  users                       users[]
+  tables                      tables[]
+  tableSessions               table_sessions[]
+  calls                       calls[]
+  menus                       menus[]                       @relation("menus_restaurant")
+  order_settings              restaurant_order_settings[]   @relation("restaurant_order_settings_restaurant")
+  media_assets                media_assets[]                @relation("media_assets_restaurant")
+  orders                      orders[]                      @relation("orders_restaurant")
+  operation_events            restaurant_operation_events[] @relation("restaurant_operation_events_restaurant")
+  print_destinations          print_destinations[]
 }
 
 model users {
@@ -160,6 +164,7 @@ enum staff_category {
   CLEANING
   KITCHEN
   OTHER
+  CASHIER
 }
 
 // Renovação do login: o valor existe só no aparelho do usuário; o banco guarda o hash. Cada uso gera um novo e revoga o anterior.

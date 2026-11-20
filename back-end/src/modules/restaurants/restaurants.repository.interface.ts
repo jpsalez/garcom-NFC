@@ -4,7 +4,7 @@ import type { CreateRestaurantData } from "./restaurant-initialization.ts";
 export interface IRestaurantRepository {
   create(data: CreateRestaurantData): Promise<restaurants>;
   findAll(): Promise<restaurants[]>;
-  findById(id: string): Promise<restaurants | null>;
+  findById(restaurantId: string): Promise<restaurants | null>;
   findBySlug(slug: string): Promise<restaurants | null>;
-  update(id: string, data: Prisma.restaurantsUpdateInput): Promise<restaurants>;
+  update(restaurantId: string, data: Prisma.restaurantsUpdateInput): Promise<restaurants>;
 }

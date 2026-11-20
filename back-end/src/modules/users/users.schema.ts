@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { staff_category } from "../../../generated/prisma/enums.ts";
 
-const category = z.enum(["WAITER", "MANAGER", "CLEANING", "KITCHEN", "OTHER"]);
+const category = z.enum(staff_category);
 
 const newUser = {
   name: z.string().min(1).max(100),

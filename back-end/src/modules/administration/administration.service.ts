@@ -8,6 +8,7 @@ import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts
 import type { IAdministrationService } from "./administration.interfaces.ts";
 import type { createRestaurantInput } from "./administration.schema.ts";
 import type { IRestaurantUnitOfWork } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
+import { toPublicRestaurant } from "../restaurants/public-restaurant.ts";
 import { RestaurantRepository } from "../restaurants/restaurants.repository.ts";
 
 // Operações da plataforma (só SUPER_ADMIN): não filtram por restaurante do token
@@ -32,11 +33,12 @@ export class AdministrationService implements IAdministrationService {
     if (await this.restaurantRepository.findBySlug(input.slug)) {
       throw new ConflictError("Slug já em uso");
     }
-    return this.restaurantRepository.create({ name: input.name, slug: input.slug });
+    const restaurant = await this.restaurantRepository.create({ name: input.name, slug: input.slug });
+    return toPublicRestaurant(restaurant);
   }
 
-  listRestaurants() {
-    return this.restaurantRepository.findAll();
+  async listRestaurants() {
+    return (await this.restaurantRepository.findAll()).map(toPublicRestaurant);
   }
 
   async setRestaurantActive(id: string, active: boolean, userId: string) {
@@ -65,6 +67,6 @@ export class AdministrationService implements IAdministrationService {
         this.notifier.toRestaurant(id, "session:closed", { id: sessionId, reason: "STAFF" });
       this.notifier.disconnectRestaurant(id);
     }
-    return result.restaurant;
+    return toPublicRestaurant(result.restaurant);
   }
 }
