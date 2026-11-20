@@ -7,9 +7,11 @@ import { decodeCursor } from "../../shared/utils/cursor.ts";
 import type { ActorContext } from "../../shared/authorization/capabilities.ts";
 import {
   orderInclude,
+  pendingOrderItem,
   staffOrderInclude,
   type IOrdersRepository,
   type OrderReadOptions,
+  type OrderSubmission,
   type TableContext,
 } from "./orders.repository.interface.ts";
 import type { PricedLine } from "./order-pricing.ts";
@@ -55,9 +57,6 @@ export class OrdersRepository implements IOrdersRepository {
   }
   list(restaurantId: string, query: OrdersQuery, tokenId?: string) {
     const cursor = decodeCursor(query.cursor);
-    const open = {
-      OR: [{ pending_quantity: { gt: 0 } }, { preparing_quantity: { gt: 0 } }, { ready_quantity: { gt: 0 } }],
-    };
     const progress = query.progress ?? (tokenId ? undefined : "open");
     const sortField = progress === "closed" ? "updated_at" : "created_at";
     const where: Prisma.ordersWhereInput = {
@@ -72,15 +71,18 @@ export class OrdersRepository implements IOrdersRepository {
             }
           : undefined,
     };
-    if (progress === "open") where.items = { some: open };
+    if (progress === "open") where.items = { some: pendingOrderItem };
     if (progress === "ready") where.items = { some: { ready_quantity: { gt: 0 } } };
-    if (progress === "closed") where.items = { none: open };
+    if (progress === "closed") where.items = { none: pendingOrderItem };
     if (progress === "completed") {
-      where.AND = [{ items: { none: open } }, { items: { some: { delivered_quantity: { gt: 0 } } } }];
+      where.AND = [
+        { items: { none: pendingOrderItem } },
+        { items: { some: { delivered_quantity: { gt: 0 } } } },
+      ];
     }
     if (progress === "cancelled") {
       where.AND = [
-        { items: { none: { OR: [...open.OR, { delivered_quantity: { gt: 0 } }] } } },
+        { items: { none: { OR: [...pendingOrderItem.OR, { delivered_quantity: { gt: 0 } }] } } },
         { items: { some: { cancelled_quantity: { gt: 0 } } } },
       ];
     }
@@ -110,73 +112,76 @@ export class OrdersRepository implements IOrdersRepository {
         where: {
           restaurant_id: restaurantId,
           order: { session_id: sessionId },
-          OR: [
-            { pending_quantity: { gt: 0 } },
-            { preparing_quantity: { gt: 0 } },
-            { ready_quantity: { gt: 0 } },
-          ],
+          ...pendingOrderItem,
         },
       })) > 0
     );
   }
-  async create(
-    context: TableContext,
-    key: string,
-    hash: string,
-    publicationId: string,
-    total: number,
-    lines: PricedLine[],
-  ) {
-    const id = randomUUID(),
-      rest = context.restaurantId;
+  async create(restaurantId: string, submission: OrderSubmission, lines: PricedLine[]) {
+    const id = randomUUID();
+    const { actor, ...data } = submission;
     await this.db.orders.create({
-      data: {
-        id,
-        restaurant_id: rest,
-        session_id: context.sessionId,
-        submitted_by_token_id: context.tokenId,
-        publication_id: publicationId,
-        table_label_snapshot: context.tableLabel,
-        submission_key: key,
-        request_hash: hash,
-        total_cents: total,
-      },
+      data: { ...data, id, restaurant_id: restaurantId, submitted_by_user_id: actor?.id },
     });
-    for (const [position, { selections, ...line }] of lines.entries()) {
-      const itemId = randomUUID();
-      await this.db.order_items.create({
-        data: {
-          ...line,
-          id: itemId,
-          restaurant_id: rest,
-          order_id: id,
-          position,
-          pending_quantity: line.quantity,
-        },
-      });
-      if (selections.length)
-        await this.db.order_item_options.createMany({
-          data: selections.map((selection) => ({
-            ...selection,
-            id: randomUUID(),
-            restaurant_id: rest,
-            product_id: line.product_id,
-            order_item_id: itemId,
-          })),
-        });
+    for (const [position, line] of lines.entries()) {
+      await this.createItem(restaurantId, id, position, line);
     }
     await this.db.order_events.create({
       data: {
-        restaurant_id: rest,
+        restaurant_id: restaurantId,
         order_id: id,
         sequence: 1,
         action: "CREATED",
-        actor_type: "TABLE_DEVICE",
+        actor_type: actor ? "USER" : "TABLE_DEVICE",
+        actor_user_id: actor?.id,
+        actor_role_snapshot: actor?.role,
+        actor_category_snapshot: actor?.category,
+        actor_label_snapshot: actor?.id,
         resulting_order_version: 1,
       },
     });
-    return this.get(rest, id);
+    return this.get(restaurantId, id);
   }
+
+  private async createItem(restaurantId: string, orderId: string, position: number, input: PricedLine) {
+    const { selections, ...line } = input;
+    const id = randomUUID();
+    await this.db.order_items.create({
+      data: {
+        ...line,
+        id,
+        restaurant_id: restaurantId,
+        order_id: orderId,
+        position,
+        pending_quantity: line.quantity,
+      },
+    });
+    if (!selections.length) return;
+    await this.db.order_item_options.createMany({
+      data: selections.map((selection) => ({
+        ...selection,
+        id: randomUUID(),
+        restaurant_id: restaurantId,
+        product_id: line.product_id,
+        order_item_id: id,
+      })),
+    });
+  }
+
+  moveToTab(restaurantId: string, sourceTabId: string, targetTabId: string, tableLabel?: string) {
+    return this.db.orders.updateMany({
+      where: { restaurant_id: restaurantId, tab_id: sourceTabId },
+      data: { tab_id: targetTabId, table_label_snapshot: tableLabel },
+    });
+  }
+
+  relabelForTab(restaurantId: string, tabId: string, tableLabel: string) {
+    return this.db.orders.updateMany({
+      where: { restaurant_id: restaurantId, tab_id: tabId },
+      data: { table_label_snapshot: tableLabel },
+    });
+  }
+
   async claim(restaurantId: string, id: string, version: number, operationCount: number) {
     const result = await this.db.orders.updateMany({
       where: { restaurant_id: restaurantId, id, version },

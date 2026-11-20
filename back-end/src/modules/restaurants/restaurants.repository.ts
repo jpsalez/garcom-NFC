@@ -34,6 +34,15 @@ export class RestaurantRepository implements IRestaurantRepository {
     await this.db.$queryRaw`SELECT id FROM restaurants WHERE id = ${restaurantId} FOR UPDATE`;
   }
 
+  async nextTabNumber(restaurantId: string) {
+    const restaurant = await this.db.restaurants.update({
+      where: { id: restaurantId },
+      data: { next_tab_number: { increment: 1 } },
+      select: { next_tab_number: true },
+    });
+    return restaurant.next_tab_number - 1;
+  }
+
   update(restaurantId: string, data: Prisma.restaurantsUpdateInput) {
     return this.db.restaurants.update({ where: { id: restaurantId }, data });
   }

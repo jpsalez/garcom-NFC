@@ -3,25 +3,38 @@ export const selectionSchema = z.strictObject({
   option_id: z.uuid(),
   quantity: z.number().int().min(1).max(50),
 });
-export const submitSchema = z.strictObject({
+const orderItemFields = {
+  product_id: z.uuid(),
+  variant_id: z.uuid(),
+  quantity: z.number().int().min(1).max(20),
+  notes: z.string().trim().max(500).optional(),
+};
+const orderSelections = z
+  .array(selectionSchema)
+  .max(1000)
+  .refine((rows) => new Set(rows.map((row) => row.option_id)).size === rows.length, "Opção repetida");
+const orderSubmissionFields = {
   submission_key: z.uuid(),
   publication_id: z.uuid(),
+};
+export const submitSchema = z.strictObject({
+  ...orderSubmissionFields,
   items: z
-    .array(
-      z.strictObject({
-        product_id: z.uuid(),
-        variant_id: z.uuid(),
-        quantity: z.number().int().min(1).max(20),
-        selections: z
-          .array(selectionSchema)
-          .max(1000)
-          .refine((rows) => new Set(rows.map((row) => row.option_id)).size === rows.length, "Opção repetida"),
-        notes: z.string().trim().max(500).optional(),
-      }),
-    )
+    .array(z.strictObject({ ...orderItemFields, selections: orderSelections }))
     .min(1)
     .max(50),
 });
+export const posSubmitSchema = z
+  .strictObject({
+    ...orderSubmissionFields,
+    table_id: z.uuid().optional(),
+    tab_id: z.uuid().optional(),
+    items: z
+      .array(z.strictObject({ ...orderItemFields, options: orderSelections }))
+      .min(1)
+      .max(50),
+  })
+  .refine((data) => Boolean(data.table_id) !== Boolean(data.tab_id), "Informe a mesa ou a comanda");
 export const stages = z.enum(["PENDING", "PREPARING", "READY", "DELIVERED", "CANCELLED"]);
 export const transitionsSchema = z.strictObject({
   expected_version: z.number().int().positive(),

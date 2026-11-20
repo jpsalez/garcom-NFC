@@ -106,7 +106,7 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
   ```
 
 #### `GET /api/v1/tabs/:id` (`tabs:read`)
-- **Response `200 OK`:** além dos campos do resumo, retorna:
+- **Response `200 OK`:** `{ "tab": TabDetail }`. Além dos campos do resumo, `tab` retorna:
   - `orders[]` (cada pedido com `items[]`, cada item com `active_line_cents`, `allocated_cents`, `unallocated_cents`, `submitted_by_token_id`, `guest_label`).
   - `by_guest[]` — agrupamento pronto para o caixa/garçom:
     ```json
@@ -128,13 +128,19 @@ Todo cálculo roda em centavos (`Int`) dentro de `tabs-pricing.ts` (função pur
 - **Request:** `{ "waived": true, "reason": "Cliente optou por não pagar os 10%" }`
 - **Response `200 OK`:** `{ "tab": TabSummary }`
 
+#### `PATCH /api/v1/tabs/:id` (`tabs:manage`)
+- **Request:** `{ "expected_version": 5, "label": "João", "guests_count": 2 }`. Envie os campos que deseja alterar. Use `null` para limpar o nome ou o número de pessoas.
+- **Response `200 OK`:** `{ "tab": TabSummary }`.
+
 #### `POST /api/v1/tabs/:id/transfer-table` (`tabs:manage`)
 - **Request:** `{ "target_table_id": "uuid-mesa-destino", "expected_version": 5 }`
 - **Erros:** `409 TAB_ALREADY_OPEN` (mesa destino ocupada), `409 VERSION_CONFLICT`.
+- A transferência move a sessão ativa da mesa principal. As sessões de mesas secundárias preservam suas mesas e a comanda vinculada.
 
 #### `POST /api/v1/tabs/:id/merge` (`tabs:manage`)
 - **Request:** `{ "source_tab_id": "uuid-comanda-origem", "expected_version": 5 }`
-- Transfere pedidos, ajustes e pagamentos aprovados da origem para `:id`, marca origem como `CANCELLED`. Bloqueia se origem tiver pagamento `PENDING`/`PROCESSING`.
+- Transfere pedidos e sessões da origem para `:id`, e marca a origem como `CANCELLED`. Na Etapa 2, transfere ajustes e pagamentos aprovados e bloqueia se a origem tiver pagamento `PENDING`/`PROCESSING`.
+- O vínculo secundário dura até o fim da sessão original. Depois de um timeout, o scan na mesa principal reencontra a comanda aberta pela mesa; nas secundárias, começa uma nova sessão sem vínculo.
 
 #### `POST /api/v1/tabs/:id/close` (`tabs:close`)
 - **Request:** `{ "expected_version": 6, "customer_document": "12345678909" }` *(CPF/CNPJ opcional para NFC-e)*

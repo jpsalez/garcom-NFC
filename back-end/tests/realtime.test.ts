@@ -24,9 +24,9 @@ beforeAll(async () => {
   api();
   server = createServer(app);
   const printing = container.resolve<IPrintingService>("PrintingService");
-  container.resolve<SocketNotifier>("Notifier").attach(
-    server, authenticateToken, [], (ticket) => printing.authenticateStationSocket(ticket),
-  );
+  container
+    .resolve<SocketNotifier>("Notifier")
+    .attach(server, authenticateToken, [], (ticket) => printing.authenticateStationSocket(ticket));
   await new Promise<void>((resolve) => server.listen(0, resolve));
   url = `http://localhost:${(server.address() as AddressInfo).port}`;
 });
@@ -182,6 +182,94 @@ describe("sala autorizada de pedidos", () => {
       .resolve<SocketNotifier>("Notifier")
       .toOrders(owner.restaurantId, "order:updated", { order_id: "test-order", version: 2 });
     await silent();
+  });
+});
+
+describe("atualizações de comandas no PDV", () => {
+  it("avisa o caixa quando a última entrega libera a comanda", async () => {
+    const f = await menuFixture();
+    const cashier = await categoryToken(f.restaurantId, "CASHIER");
+    const submitted = await api()
+      .post("/api/v1/public/orders")
+      .set("X-Table-Token", f.deviceToken)
+      .send(f.submission());
+    expect(submitted.status).toBe(201);
+    const order = submitted.body.order;
+    const { tab } = await prisma.orders.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { tab: true },
+    });
+    const tabPath = `/api/v1/tabs/${tab.id}`;
+    const before = await api().get(tabPath).set(auth(cashier.token));
+    expect(before.body.tab).toMatchObject({ has_pending_kitchen_items: true, version: tab.version });
+
+    const cashierSocket = await connectAs(cashier.token);
+    const [event, delivery] = await Promise.all([
+      next(cashierSocket, "tab:updated"),
+      api()
+        .post(`/api/v1/orders/${order.id}/transitions`)
+        .set(auth(f.token))
+        .send({
+          expected_version: order.version,
+          operations: [
+            { item_id: order.items[0].id, from_stage: "PENDING", to_stage: "DELIVERED", quantity: 1 },
+          ],
+        }),
+    ]);
+
+    expect(delivery.status).toBe(200);
+    expect(event).toMatchObject({ tab_id: tab.id, version: tab.version + 1, status: "OPEN" });
+    const after = await api().get(tabPath).set(auth(cashier.token));
+    expect(after.body.tab).toMatchObject({ has_pending_kitchen_items: false, version: event.version });
+  });
+
+  it("avisa a cozinha do pedido cujo rótulo muda na transferência e na junção", async () => {
+    const f = await menuFixture();
+    const kitchen = await categoryToken(f.restaurantId, "KITCHEN");
+    const transferTable = await createTable(f.restaurantId, "Mesa transferida");
+    const mergeTable = await createTable(f.restaurantId, "Mesa reunida");
+    const target = await api()
+      .post("/api/v1/tabs")
+      .set(auth(f.token))
+      .send({ kind: "TABLE", table_id: mergeTable.id });
+    expect(target.status).toBe(201);
+    const submitted = await api()
+      .post("/api/v1/public/orders")
+      .set("X-Table-Token", f.deviceToken)
+      .send(f.submission());
+    expect(submitted.status).toBe(201);
+    const order = submitted.body.order;
+    const { tab } = await prisma.orders.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { tab: true },
+    });
+    const kitchenSocket = await connectAs(kitchen.token);
+
+    const [changed, transfer] = await Promise.all([
+      next(kitchenSocket, "order:updated"),
+      api()
+        .post(`/api/v1/tabs/${tab.id}/transfer-table`)
+        .set(auth(f.token))
+        .send({ target_table_id: transferTable.id, expected_version: tab.version }),
+    ]);
+    expect(transfer.status).toBe(200);
+    const readOrder = () => api().get(`/api/v1/orders/${order.id}`).set(auth(kitchen.token));
+    expect((await readOrder()).body).toMatchObject({
+      table_label: transferTable.label,
+      version: changed.version,
+    });
+    expect(changed.order_id).toBe(order.id);
+
+    const [moved, merge] = await Promise.all([
+      next(kitchenSocket, "order:updated"),
+      api()
+        .post(`/api/v1/tabs/${target.body.tab.id}/merge`)
+        .set(auth(f.token))
+        .send({ source_tab_id: tab.id, expected_version: target.body.tab.version }),
+    ]);
+    expect(merge.status).toBe(200);
+    expect((await readOrder()).body).toMatchObject({ table_label: mergeTable.label, version: moved.version });
+    expect(moved.order_id).toBe(order.id);
   });
 });
 
@@ -404,7 +492,9 @@ describe("avisos de impressão da estação", () => {
 
   function connectStation(ticket?: string) {
     const socket = connect(`${url}/print-station`, {
-      auth: { ticket }, reconnection: false, forceNew: true,
+      auth: { ticket },
+      reconnection: false,
+      forceNew: true,
     });
     sockets.push(socket);
     return new Promise<Socket>((resolve, reject) => {
@@ -427,8 +517,8 @@ describe("avisos de impressão da estação", () => {
     const foreignSilence = expectSilence(foreign, "print:available");
     const staffSilence = expectSilence(staff, "print:available");
     const claim = () => api().post(`${station}/next`).set("Cookie", localStation.cookie);
-    const report = (token: string) => api().post(`${station}/result`).set("Cookie", localStation.cookie)
-      .send({ token, submitted: true });
+    const report = (token: string) =>
+      api().post(`${station}/result`).set("Cookie", localStation.cookie).send({ token, submitted: true });
 
     expect((await claim()).status).toBe(204);
     const testSignal = next(local, "print:available");
@@ -438,7 +528,9 @@ describe("avisos de impressão da estação", () => {
     expect(test.document).toBe("TEST");
     expect((await report(test.token)).status).toBe(204);
 
-    expect((await api().post(`${station}/verify-test`).set(auth(f.token)).send({ token: test.token })).status).toBe(200);
+    expect(
+      (await api().post(`${station}/verify-test`).set(auth(f.token)).send({ token: test.token })).status,
+    ).toBe(200);
     const enabledSignal = next(local, "print:available");
     expect((await api().patch(settings).set(auth(f.token)).send({ enabled: true })).status).toBe(200);
     await enabledSignal;

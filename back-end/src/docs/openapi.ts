@@ -255,7 +255,8 @@ export const openApiSpec = {
     "/sessions/{id}/close": {
       post: operation({
         tag: "Atendimentos",
-        summary: "Encerra e revoga tokens; acesso vedado a CLEANING e OTHER",
+        summary:
+          "Encerra e revoga tokens. Comanda com pedidos retorna 409 TAB_HAS_UNPAID_BALANCE. CLEANING e OTHER recebem 403.",
         params: ["id"],
       }),
     },

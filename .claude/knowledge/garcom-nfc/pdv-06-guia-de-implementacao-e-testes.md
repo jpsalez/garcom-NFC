@@ -62,6 +62,10 @@ de operações, e `public-restaurant.ts` preserva o formato das respostas de cad
    - `shared/realtime/socket-notifier.ts`: adicionar sala `restaurant:{id}:pos` e método `toPos()`.
    - `shared/container/container.ts` e `src/routes.ts`: registrar `TabsRepository`, `TabsService` e `tabsRoutes`.
 
+`tabs-state.ts` coordena operações dentro da transação do restaurante, `tabs-view.ts` monta os DTOs e
+`tab-events.ts` publica as alterações após o commit. `tab-business-date.ts` aplica o fuso e o corte
+configurado ao fechar uma comanda vazia junto com a sessão manual.
+
 ### Testes obrigatórios (`tests/tabs-core.test.ts`)
 - Abrir comanda `TABLE` (1 aberta por mesa — 2ª retorna `409 TAB_ALREADY_OPEN`) e `COUNTER` (várias simultâneas, numeração sequencial).
 - Pedido via NFC abre comanda automaticamente no 1º pedido; pedido via PDV (`POST /orders`) funciona mesmo com `customer_ordering_enabled = false`, gera impressão e recalcula `subtotal_cents`/`service_fee_cents`/`total_cents`.

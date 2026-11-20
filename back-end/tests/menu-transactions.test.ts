@@ -46,7 +46,7 @@ describe("autorização e unidade de trabalho", () => {
     ]);
     if (send.status === 201) {
       expect(close.status).toBe(409);
-      expect(close.body.code).toBe("SESSION_HAS_PENDING_ORDERS");
+      expect(close.body.code).toBe("TAB_HAS_UNPAID_BALANCE");
       expect((await prisma.table_sessions.findUniqueOrThrow({ where: { id: session.id } })).status).toBe(
         "ACTIVE",
       );

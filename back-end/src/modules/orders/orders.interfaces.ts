@@ -2,9 +2,14 @@ import type { ActorContext } from "../../shared/authorization/capabilities.ts";
 import type { TableContext } from "./orders.repository.interface.ts";
 import type { orderView } from "./order-progress.ts";
 import type { OrdersQuery } from "./orders.schemas.ts";
+import type { TabSummary } from "../tabs/tabs.interfaces.ts";
 export type OrderView = ReturnType<typeof orderView>;
 export interface IOrdersService {
   submit(context: TableContext, input: unknown): Promise<{ order: OrderView; replayed: boolean }>;
+  posSubmit(
+    actor: ActorContext,
+    input: unknown,
+  ): Promise<{ order: OrderView; tab: TabSummary; replayed: boolean }>;
   list(
     actor: ActorContext,
     query: OrdersQuery,

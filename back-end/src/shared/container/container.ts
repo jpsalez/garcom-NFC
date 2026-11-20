@@ -70,6 +70,10 @@ import { MediaService } from "../../modules/media/media.service.ts";
 import type { IMediaService } from "../../modules/media/media.interfaces.ts";
 import type { IStorageProvider } from "../storage/storage.interface.ts";
 import { LocalStorageProvider } from "../storage/local-storage.ts";
+import type { ITabsRepository } from "../../modules/tabs/tabs.repository.interface.ts";
+import { TabsRepository } from "../../modules/tabs/tabs.repository.ts";
+import { TabsService } from "../../modules/tabs/tabs.service.ts";
+import type { ITabsService } from "../../modules/tabs/tabs.interfaces.ts";
 
 export function registerDependencies() {
   // Infra
@@ -77,6 +81,8 @@ export function registerDependencies() {
   container.registerSingleton<IRestaurantUnitOfWork>("RestaurantUnitOfWork", RestaurantUnitOfWork);
   container.registerSingleton<IMenuRepository>("MenuRepository", MenuRepository);
   container.registerSingleton<IMenuService>("MenuService", MenuService);
+  container.registerSingleton<ITabsRepository>("TabsRepository", TabsRepository);
+  container.registerSingleton<ITabsService>("TabsService", TabsService);
   container.registerSingleton<IOrdersRepository>("OrdersRepository", OrdersRepository);
   container.registerSingleton<IOrdersService>("OrdersService", OrdersService);
   container.registerSingleton<IOrderSettingsRepository>("OrderSettingsRepository", OrderSettingsRepository);

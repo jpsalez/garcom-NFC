@@ -35,6 +35,14 @@ export function move(item: Counters, op: Transition): Counters {
   result[keys[op.to_stage]] += op.quantity;
   return result;
 }
+export function hasPendingOrderItems(orders: OrderRecord[]) {
+  return orders.some((order) =>
+    order.items.some(
+      (item) => item.pending_quantity > 0 || item.preparing_quantity > 0 || item.ready_quantity > 0,
+    ),
+  );
+}
+
 function readyTiming(order: OrderRecord) {
   const remaining = new Map(
     order.items.filter((item) => item.ready_quantity > 0).map((item) => [item.id, item.ready_quantity]),

@@ -31,6 +31,12 @@ export class TableSessionRepository implements ITableSessionRepository {
     });
   }
 
+  findActiveByTab(restaurantId: string, tabId: string) {
+    return this.db.table_sessions.findMany({
+      where: { restaurant_id: restaurantId, tab_id: tabId, status: tableStatus.ACTIVE },
+    });
+  }
+
   findMany(restaurantId: string, filter: { status?: tableStatus; limit?: number; offset?: number } = {}) {
     return this.db.table_sessions.findMany({
       where: { restaurant_id: restaurantId, status: filter.status },
@@ -42,6 +48,32 @@ export class TableSessionRepository implements ITableSessionRepository {
         table: { select: { id: true, label: true } },
         _count: { select: { session_tokens: { where: { revoked_at: null } } } },
       },
+    });
+  }
+
+  linkTab(restaurantId: string, id: string, tabId: string) {
+    return this.db.table_sessions.updateMany({
+      where: { restaurant_id: restaurantId, id, status: tableStatus.ACTIVE },
+      data: { tab_id: tabId },
+    });
+  }
+
+  moveActiveToTable(restaurantId: string, tabId: string, fromTableId: string, tableId: string) {
+    return this.db.table_sessions.updateMany({
+      where: {
+        restaurant_id: restaurantId,
+        tab_id: tabId,
+        table_id: fromTableId,
+        status: tableStatus.ACTIVE,
+      },
+      data: { table_id: tableId },
+    });
+  }
+
+  moveToTab(restaurantId: string, sourceTabId: string, targetTabId: string) {
+    return this.db.table_sessions.updateMany({
+      where: { restaurant_id: restaurantId, tab_id: sourceTabId },
+      data: { tab_id: targetTabId },
     });
   }
 
