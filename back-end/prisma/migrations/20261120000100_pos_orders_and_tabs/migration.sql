@@ -29,10 +29,43 @@ ALTER TABLE "orders"
   ADD COLUMN "tab_number_snapshot" INTEGER,
   ADD COLUMN "submitted_by_user_id" TEXT;
 
+ALTER TABLE "orders" DISABLE TRIGGER "order_snapshot_guard";
+
 UPDATE "orders" o
 SET "tab_number_snapshot" = ts."tab_number"
 FROM "table_sessions" ts
 WHERE o."session_id" = ts."id" AND o."restaurant_id" = ts."restaurant_id";
+
+ALTER TABLE "orders" ENABLE TRIGGER "order_snapshot_guard";
+
+-- Permite ON DELETE SET NULL em submitted_by_user_id preservando a imutabilidade dos demais campos
+CREATE OR REPLACE FUNCTION menu_guard_order_record() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Orders and item snapshots cannot be deleted' USING ERRCODE = '23514';
+  END IF;
+  IF TG_TABLE_NAME = 'orders' THEN
+    IF (to_jsonb(NEW) - ARRAY['version','last_event_sequence','updated_at','submitted_by_token_id','submitted_by_user_id'])
+       IS DISTINCT FROM
+       (to_jsonb(OLD) - ARRAY['version','last_event_sequence','updated_at','submitted_by_token_id','submitted_by_user_id'])
+       OR NEW.version < OLD.version OR NEW.last_event_sequence < OLD.last_event_sequence
+       OR (NEW.submitted_by_token_id IS DISTINCT FROM OLD.submitted_by_token_id
+           AND NEW.submitted_by_token_id IS NOT NULL)
+       OR (NEW.submitted_by_user_id IS DISTINCT FROM OLD.submitted_by_user_id
+           AND NEW.submitted_by_user_id IS NOT NULL) THEN
+      RAISE EXCEPTION 'Order financial/context snapshot is immutable' USING ERRCODE = '23514';
+    END IF;
+  ELSIF TG_TABLE_NAME = 'order_items' THEN
+    IF (to_jsonb(NEW) - ARRAY['pending_quantity','preparing_quantity','ready_quantity','delivered_quantity','cancelled_quantity'])
+       IS DISTINCT FROM
+       (to_jsonb(OLD) - ARRAY['pending_quantity','preparing_quantity','ready_quantity','delivered_quantity','cancelled_quantity']) THEN
+      RAISE EXCEPTION 'Order item financial snapshot is immutable' USING ERRCODE = '23514';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'Order selection snapshot is immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
 
 ALTER TABLE "orders" ALTER COLUMN "tab_number_snapshot" SET NOT NULL;
 ALTER TABLE "orders" ADD CONSTRAINT "orders_tab_number_snapshot_positive" CHECK ("tab_number_snapshot" > 0);
