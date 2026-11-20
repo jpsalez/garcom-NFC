@@ -10,6 +10,7 @@ export type CreateTableSessionData = {
   restaurant_id: string;
   table_id: string;
   expires_at: Date;
+  tab_number?: number;
 };
 
 export type UpdateTableSessionData = {
@@ -29,6 +30,7 @@ export type TableSessionListItem = Prisma.table_sessionsGetPayload<{
 }>;
 
 export interface ITableSessionRepository {
+  nextTabNumber(restaurantId: string): Promise<number>;
   create(data: CreateTableSessionData): Promise<table_sessions>;
   findById(restaurantId: string, id: string): Promise<table_sessions | null>;
   findActiveByTable(restaurantId: string, tableId: string): Promise<table_sessions | null>;

@@ -71,6 +71,7 @@ const payload = object({
   order_id: uuid,
   created_at: dateTime,
   table_label: string,
+  tab_number: integer,
   items: array(
     object({
       item_id: uuid,

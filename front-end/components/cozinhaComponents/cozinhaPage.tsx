@@ -6,14 +6,19 @@ import OrderQueueFeedback, { preparationStages } from "@/components/orderCompone
 import { type OrderQueue, useOrderQueue } from "@/hooks/useOrderQueue";
 import { formatDuration } from "@/lib/format";
 import { canAccessKitchen, groupKitchenOrders } from "@/lib/kitchenQueue";
-import type { Order } from "@/lib/orderTypes";
+import { formatTableTab, type Order } from "@/lib/orderTypes";
 
 function KitchenOrderCard({ order, now, queue }: { order: Order; now: number; queue: OrderQueue }) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <header className="mb-4 flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="text-lg font-bold">{order.table_label}</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-bold">{formatTableTab(order.table_label, order.tab_number)}</h3>
+            {order.source === "POS" && (
+              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">PDV</span>
+            )}
+          </div>
           <p className="break-all text-xs text-slate-600">Pedido {order.id}</p>
         </div>
         <p className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold tabular-nums">

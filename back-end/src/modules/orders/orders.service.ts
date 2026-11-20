@@ -2,18 +2,29 @@ import { inject, injectable } from "tsyringe";
 import type { ActorContext } from "../../shared/authorization/capabilities.ts";
 import { requireCapability } from "../../shared/authorization/capabilities.ts";
 import { ConflictError, NotFoundError } from "../../shared/errors/http-errors.ts";
+import type { DbClient } from "../../shared/providers/prisma.ts";
 import type { IRestaurantUnitOfWork } from "../../shared/transactions/restaurant-unit-of-work.interface.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
 import { encodeCursor } from "../../shared/utils/cursor.ts";
 import { enqueueOriginal } from "../printing/print-job.ts";
 import { MenuRepository } from "../menu/menu.repository.ts";
+import { closeSessionResources } from "../sessions/close-session.ts";
+import { TableSessionRepository } from "../sessions/sessions.repository.ts";
+import { sessionTtlMs } from "../sessions/sessions.service.ts";
+import { TableRepository } from "../tables/tables.repository.ts";
 import type { IOrdersService } from "./orders.interfaces.ts";
 import { OrdersRepository } from "./orders.repository.ts";
 import type { IOrdersRepository, OrderRecord, TableContext } from "./orders.repository.interface.ts";
 import { OrderSettingsRepository } from "./order-settings.repository.ts";
 import { priceSubmission, submissionHash } from "./order-pricing.ts";
 import { move, orderView } from "./order-progress.ts";
-import { submitSchema, transitionsSchema, type OrdersQuery } from "./orders.schemas.ts";
+import {
+  posSubmitSchema,
+  submitSchema,
+  transitionsSchema,
+  type OrdersQuery,
+  type Submission,
+} from "./orders.schemas.ts";
 
 @injectable()
 export class OrdersService implements IOrdersService {
@@ -32,6 +43,37 @@ export class OrdersService implements IOrdersService {
     } catch {
       console.error("Falha ao emitir evento de pedido", { order_id: order.id });
     }
+  }
+  private notifyRestaurant(restaurantId: string, event: string, payload: unknown) {
+    try {
+      this.notifier.toRestaurant(restaurantId, event, payload);
+    } catch {
+      console.error("Falha ao emitir evento de atendimento", { event, restaurant_id: restaurantId });
+    }
+  }
+  private async priceFromPublished(db: DbClient, restaurantId: string, publicationId: string, input: Submission) {
+    const menu = new MenuRepository(db),
+      publication = await menu.published(restaurantId);
+    if (!publication) throw new ConflictError("Cardápio não está recebendo pedidos", "MENU_NOT_ORDERABLE");
+    if (publication.id !== publicationId)
+      throw new ConflictError("Cardápio mudou; revise o pedido", "MENU_REVISION_CHANGED");
+    return {
+      publicationId: publication.id,
+      ...priceSubmission(publication.content, await menu.availability(restaurantId), input),
+    };
+  }
+  private async resolvePosSession(db: DbClient, restaurantId: string, tableId: string, now: Date) {
+    const sessions = new TableSessionRepository(db);
+    const active = await sessions.findActiveByTable(restaurantId, tableId);
+    if (active && (active.keep_open || active.expires_at > now))
+      return { session: active, opened: false, expiredId: null as string | null };
+    if (active) await closeSessionResources(db, restaurantId, active.id, now, "TIMEOUT");
+    const created = await sessions.create({
+      restaurant_id: restaurantId,
+      table_id: tableId,
+      expires_at: new Date(now.getTime() + sessionTtlMs()),
+    });
+    return { session: created, opened: true, expiredId: active?.id ?? null };
   }
   async submit(context: TableContext, input: unknown) {
     const parsed = submitSchema.parse(input),
@@ -52,29 +94,99 @@ export class OrdersService implements IOrdersService {
       const settings = await new OrderSettingsRepository(db).get(context.restaurantId);
       if (!settings.customer_ordering_enabled)
         throw new ConflictError("Pedidos pelo cardápio estão desabilitados", "CUSTOMER_ORDERING_DISABLED");
-      const menu = new MenuRepository(db),
-        publication = await menu.published(context.restaurantId);
-      if (!publication) throw new ConflictError("Cardápio não está recebendo pedidos", "MENU_NOT_ORDERABLE");
-      if (publication.id !== parsed.publication_id)
-        throw new ConflictError("Cardápio mudou; revise o pedido", "MENU_REVISION_CHANGED");
-      const { lines, total } = priceSubmission(
-        publication.content,
-        await menu.availability(context.restaurantId),
+      const { publicationId, lines, total } = await this.priceFromPublished(
+        db,
+        context.restaurantId,
+        parsed.publication_id,
         parsed,
       );
-      const record = await repo.create(
-        { ...context, tableLabel: session.table.label },
-        parsed.submission_key,
-        hash,
-        publication.id,
-        total,
+      const record = await repo.create({
+        restaurantId: context.restaurantId,
+        source: "LOCAL_MENU",
+        sessionId: context.sessionId,
+        tabNumberSnapshot: session.tab_number,
+        tableLabelSnapshot: session.table.label,
+        submittedByTokenId: context.tokenId,
+        submittedByUserId: null,
+        publicationId,
+        submissionKey: parsed.submission_key,
+        requestHash: hash,
+        totalCents: total,
         lines,
-      );
+      });
       await enqueueOriginal(db, record);
       return { record, replayed: false };
     });
     if (!result.replayed) this.notify(result.record, "order:created");
     return { order: orderView(result.record), replayed: result.replayed };
+  }
+  async posSubmit(actor: ActorContext, input: unknown) {
+    const parsed = posSubmitSchema.parse(input),
+      hash = submissionHash(parsed, parsed.table_id),
+      restaurantId = this.tenant(actor);
+    const result = await this.unit.run(
+      restaurantId,
+      async ({ db, now, actor: current }) => {
+        const live = current ?? actor,
+          repo = new OrdersRepository(db);
+        const previous = await repo.findSubmission(restaurantId, parsed.submission_key);
+        if (previous) {
+          if (
+            previous.source !== "POS" ||
+            previous.submitted_by_user_id !== live.id ||
+            previous.session?.table_id !== parsed.table_id ||
+            previous.request_hash !== hash
+          )
+            throw new ConflictError("Chave de envio já utilizada", "IDEMPOTENCY_CONFLICT");
+          return { record: previous, replayed: true, openedSession: null, tableLabel: null, expiredId: null };
+        }
+        const table = await new TableRepository(db).findById(restaurantId, parsed.table_id);
+        if (!table) throw new NotFoundError("Mesa não encontrada");
+        if (!table.active) throw new ConflictError("A mesa está inativa", "TABLE_INACTIVE");
+        const { session, opened, expiredId } = await this.resolvePosSession(db, restaurantId, table.id, now);
+        const { publicationId, lines, total } = await this.priceFromPublished(
+          db,
+          restaurantId,
+          parsed.publication_id,
+          parsed,
+        );
+        const record = await repo.create({
+          restaurantId,
+          source: "POS",
+          sessionId: session.id,
+          tabNumberSnapshot: session.tab_number,
+          tableLabelSnapshot: table.label,
+          submittedByTokenId: null,
+          submittedByUserId: live.id,
+          publicationId,
+          submissionKey: parsed.submission_key,
+          requestHash: hash,
+          totalCents: total,
+          lines,
+          actor: live,
+        });
+        await enqueueOriginal(db, record);
+        return {
+          record,
+          replayed: false,
+          openedSession: opened ? session : null,
+          tableLabel: table.label,
+          expiredId,
+        };
+      },
+      { actor, capability: "orders:create" },
+    );
+    if (result.expiredId)
+      this.notifyRestaurant(restaurantId, "session:closed", { id: result.expiredId, reason: "TIMEOUT" });
+    if (result.openedSession && result.tableLabel)
+      this.notifyRestaurant(restaurantId, "session:opened", {
+        id: result.openedSession.id,
+        tab_number: result.openedSession.tab_number,
+        table: { id: result.openedSession.table_id, label: result.tableLabel },
+        expires_at: result.openedSession.expires_at,
+      });
+    if (!result.replayed) this.notify(result.record, "order:created");
+    return { order: orderView(result.record, true), replayed: result.replayed };
   }
   private page(records: OrderRecord[], limit: number, staff: boolean) {
     const rows = records.slice(0, limit),
@@ -177,6 +289,7 @@ export class OrdersService implements IOrdersService {
         publication = await new MenuRepository(db).published(context.restaurantId);
       return {
         session_id: session.id,
+        tab_number: session.tab_number,
         expires_at: session.expires_at,
         table: { label: session.table.label },
         can_order: settings.customer_ordering_enabled && Boolean(publication),

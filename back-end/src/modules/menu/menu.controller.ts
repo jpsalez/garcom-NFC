@@ -35,6 +35,7 @@ export class MenuController {
     res.json(await this.service.save(actorOf(req), kind, req.body, undefined, String(req.params.id)));
   associate = (kind: "groups" | "images") => async (req: Request, res: Response) =>
     res.json(await this.service.associate(actorOf(req), kind, String(req.params.id), req.body));
+  published = async (req: Request, res: Response) => res.json(await this.service.published(actorOf(req)));
   publicMenu = (by: "slug" | "table") => async (req: Request, res: Response) =>
     res.json(await this.service.publicMenu(by, String(req.params[by === "slug" ? "slug" : "code"])));
 }

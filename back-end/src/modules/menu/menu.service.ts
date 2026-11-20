@@ -265,14 +265,10 @@ export class MenuService implements IMenuService {
       { actor, capability: "menu:publish" },
     );
   }
-  async publicMenu(by: "slug" | "table", value: string) {
-    const table = by === "table" ? await this.tables.findByPublicCode(value) : null;
-    const restaurant = by === "table" ? table?.restaurant : await this.restaurants.findBySlug(value);
-    if (!restaurant?.active || (by === "table" && !table?.active))
-      throw new NotFoundError("Restaurante ou mesa não encontrado");
-    const published = await this.repository.published(restaurant.id);
+  private async buildPublishedMenu(restaurantId: string) {
+    const published = await this.repository.published(restaurantId);
     if (!published) throw new AppError("Cardápio não publicado", 404, undefined, "MENU_NOT_PUBLISHED");
-    const available = await this.repository.availability(restaurant.id);
+    const available = await this.repository.availability(restaurantId);
     const publishedIds = published.content.categories.flatMap((c) =>
       c.products.flatMap((p) => [
         p.id,
@@ -284,7 +280,7 @@ export class MenuService implements IMenuService {
       publication_id: published.id,
       content: published.content,
       availability: Object.fromEntries(publishedIds.map((id) => [id, available.get(id) === true])),
-      customer_ordering_enabled: (await this.settings.get(restaurant.id)).customer_ordering_enabled,
+      customer_ordering_enabled: (await this.settings.get(restaurantId)).customer_ordering_enabled,
       media_paths: Object.fromEntries(
         snapshotMedia(published.content).map((id) => [
           id,
@@ -292,6 +288,17 @@ export class MenuService implements IMenuService {
         ]),
       ),
     };
+  }
+  async published(actor: ActorContext) {
+    requireCapability(actor, "orders:create");
+    return this.buildPublishedMenu(this.tenant(actor));
+  }
+  async publicMenu(by: "slug" | "table", value: string) {
+    const table = by === "table" ? await this.tables.findByPublicCode(value) : null;
+    const restaurant = by === "table" ? table?.restaurant : await this.restaurants.findBySlug(value);
+    if (!restaurant?.active || (by === "table" && !table?.active))
+      throw new NotFoundError("Restaurante ou mesa não encontrado");
+    return this.buildPublishedMenu(restaurant.id);
   }
   async availability(actor: ActorContext, input: unknown) {
     const parsed = availabilitySchema.parse(input);

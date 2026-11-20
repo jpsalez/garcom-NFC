@@ -21,10 +21,11 @@ export type PricedLine = {
     price_delta_cents: number;
   }[];
 };
-export function submissionHash(input: Submission) {
+export function submissionHash(input: Submission, tableId?: string) {
   return createHash("sha256")
     .update(
       JSON.stringify({
+        ...(tableId ? { table_id: tableId } : {}),
         publication_id: input.publication_id,
         items: input.items.map((item) => ({
           product_id: item.product_id,

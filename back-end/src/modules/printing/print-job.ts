@@ -28,6 +28,7 @@ export function printPayload(order: OrderRecord, reprint: boolean) {
     order_id: order.id,
     created_at: order.created_at.toISOString(),
     table_label: order.table_label_snapshot,
+    tab_number: order.tab_number_snapshot,
     items,
     ...(reprint ? { reprint: { label: "SEGUNDA VIA" } } : {}),
   };

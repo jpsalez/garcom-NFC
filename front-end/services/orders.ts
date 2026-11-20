@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { PublicMenu } from "@/lib/menuTypes";
 import type {
   DeviceOrderQuery,
   Order,
@@ -8,6 +9,7 @@ import type {
   OrderQuery,
   OrderSubmission,
   OrderTransition,
+  PosOrderSubmission,
   TableContext,
 } from "@/lib/orderTypes";
 
@@ -72,4 +74,12 @@ export function getOrderingSettings() {
 
 export function updateOrderingSettings(body: { expected_version: number; customer_ordering_enabled: boolean }) {
   return api<OrderingSettings>("/ordering-settings", { method: "PATCH", body });
+}
+
+export function getPublishedMenuForStaff() {
+  return api<PublicMenu>("/menu/published");
+}
+
+export function createPosOrder(body: PosOrderSubmission) {
+  return api<{ order: Order; replayed: boolean }>("/orders", { method: "POST", body });
 }

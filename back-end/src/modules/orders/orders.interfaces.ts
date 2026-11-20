@@ -5,6 +5,7 @@ import type { OrdersQuery } from "./orders.schemas.ts";
 export type OrderView = ReturnType<typeof orderView>;
 export interface IOrdersService {
   submit(context: TableContext, input: unknown): Promise<{ order: OrderView; replayed: boolean }>;
+  posSubmit(actor: ActorContext, input: unknown): Promise<{ order: OrderView; replayed: boolean }>;
   list(
     actor: ActorContext,
     query: OrdersQuery,

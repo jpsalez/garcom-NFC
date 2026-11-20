@@ -10,6 +10,11 @@ export function canConfigurePrinting(user: User) {
   return user.role === "OWNER" || (user.role === "STAFF" && user.category === "MANAGER");
 }
 
+export function canUsePdv(user: User) {
+  return user.role === "OWNER" ||
+    (user.role === "STAFF" && (user.category === "MANAGER" || user.category === "WAITER"));
+}
+
 export function groupKitchenOrders(orders: Order[]) {
   const sorted = [...orders].sort((a, b) =>
     Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id),

@@ -21,6 +21,10 @@ describe("contrato OpenAPI de cardápio e pedidos", () => {
     expect(spec.paths["/media"].post.requestBody.content["multipart/form-data"].schema.required).toEqual([
       "file",
     ]);
+    expect(spec.paths["/menu/published"].get.security).toEqual([{ cookieAuth: [] }]);
+    expect(spec.paths["/orders"].post.security).toEqual([{ cookieAuth: [] }]);
+    const posSchema = spec.paths["/orders"].post.requestBody.content["application/json"].schema;
+    expect(posSchema.required).toEqual(expect.arrayContaining(["table_id", "publication_id", "submission_key", "items"]));
   });
 });
 

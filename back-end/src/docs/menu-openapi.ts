@@ -14,6 +14,7 @@ import {
   deviceOrdersQuery,
   eventsQuery,
   ordersQuery,
+  posSubmitSchema,
   settingsSchema,
   submitSchema,
   transitionsSchema,
@@ -78,6 +79,9 @@ export const menuPaths: Record<string, PathItem> = {
     patch: operation("Edita identidade do rascunho", "staff", identitySchema),
   },
   "/menu/preview": { get: operation("Prévia privada; não cria pedido") },
+  "/menu/published": {
+    get: operation("Cardápio publicado para lançamento no PDV; OWNER/MANAGER/WAITER"),
+  },
   "/menu/order": { put: operation("Reordena todos os irmãos ativos de uma coleção", "staff", reorderSchema) },
   "/menu/publications": {
     post: operation("Publica revisão validada; OWNER/MANAGER", "staff", publishSchema, 201),
@@ -107,7 +111,12 @@ export const menuPaths: Record<string, PathItem> = {
     patch: operation("Habilita/desabilita novos pedidos imediatamente", "staff", settingsSchema),
   },
   "/orders": {
-    get: operation("Fila persistente por mesa/período/andamento", "staff", undefined, 200, [], ordersQuery),
+    get: operation("Fila persistente por mesa/período/andamento (inclui tab_number)", "staff", undefined, 200, [], ordersQuery),
+    post: {
+      ...operation("Lança pedido interno do PDV por mesa; abre comanda sequencial (tab_number) se necessário", "staff", posSubmitSchema, 201),
+      description:
+        "Permitido para OWNER, MANAGER e WAITER mesmo com customer_ordering_enabled=false. Abre atendimento automático se a mesa não tiver sessão ativa ou se a vigente estiver vencida, e grava comanda de impressão quando a cozinha está ativa.",
+    },
   },
   "/orders/{id}": { get: operation("Pedido administrativo", "staff", undefined, 200, ["id"]) },
   "/orders/{id}/events": {
@@ -140,7 +149,7 @@ export const menuPaths: Record<string, PathItem> = {
   "/public/orders/{id}": {
     get: operation("Pedido do próprio aparelho na sessão ativa", "table", undefined, 200, ["id"]),
   },
-  "/public/table-context": { get: operation("Verifica contexto e can_order; não emite token", "table") },
+  "/public/table-context": { get: operation("Verifica contexto (session_id, tab_number e can_order); não emite token", "table") },
   "/media/{id}": { delete: operation("Exclui mídia sem referências", "staff", undefined, 204, ["id"]) },
   "/media/{id}/{variant}": {
     get: operation("Imagem privada do restaurante; OWNER/MANAGER", "staff", undefined, 200, [

@@ -262,6 +262,7 @@ test('falha na fila de impressão fica isolada na seção de impressão e KDS se
     },
     '@/lib/format': load('../lib/format.ts'),
     '@/lib/kitchenQueue': kitchen,
+    '@/lib/orderTypes': load('../lib/orderTypes.ts'),
   });
 
   const html = renderToStaticMarkup(React.createElement(CozinhaPage));

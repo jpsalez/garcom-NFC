@@ -78,8 +78,12 @@ export function renderOrderTicket(payload: PrintPayload): Buffer {
   if (payload.reprint?.label) {
     lines.push(payload.reprint.label);
   }
+  const tableHeader =
+    payload.tab_number !== undefined
+      ? `${payload.table_label} · Comanda #${payload.tab_number}`
+      : payload.table_label;
   lines.push(
-    payload.table_label,
+    tableHeader,
     `Pedido ${payload.order_id}`,
     formatTicketDate(payload.created_at),
     "-".repeat(TICKET_WIDTH),
@@ -107,6 +111,7 @@ export function sampleTestPayload(): PrintPayload {
     order_id: "00000000-0000-4000-8000-000000000001",
     created_at: new Date().toISOString(),
     table_label: "Mesa Teste",
+    tab_number: 1,
     items: [
       {
         item_id: "00000000-0000-4000-8000-000000000002",
