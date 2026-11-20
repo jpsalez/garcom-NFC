@@ -19,7 +19,7 @@ Regras invioláveis de dados analíticos:
 4. Toda query SQL/Prisma recebe `restaurantId` como primeiro parâmetro e filtra estritamente por `restaurant_id = $1`. Use sempre queries parametrizadas (nunca interpolação de string em SQL!).
 5. `forecast.engine.ts` e `anomaly.engine.ts` devem ser funções puras em TypeScript (fáceis de testar unitariamente), respeitando `INSUFFICIENT_DATA` quando houver menos de 3 ocorrências do dia da semana e `clamp(0.80, 1.25)` no fator de tendência.
 6. Respeite permissões: `reports:read` apenas para `OWNER` e `MANAGER` (`CASHIER` só acessa resumo do próprio turno via `cash-shifts`).
-7. Stack: Zod v4, ESM (imports `.ts`), Biome (`npm run format:check`), e adicione os endpoints `/reports/*` em `back-end/src/docs/pdv-openapi.ts`.
+7. Stack e estilo enxuto: siga estritamente `.claude/CLAUDE.md` — funções pequenas (~25 linhas), uma responsabilidade por arquivo, ZERO over-engineering/helpers de uso único, controller sem `try/catch` e sem Prisma. Use Zod v4, ESM (imports `.ts`), Biome (`npm run format:check`), e adicione os endpoints `/reports/*` em `back-end/src/docs/pdv-openapi.ts`.
 
 Validação antes de encerrar:
 - Rode `npm run format:check` (em `back-end/`), `python3 .claude/scripts/verify.py` e `python3 .claude/scripts/check_tenant.py`.

@@ -17,7 +17,7 @@ Checklist obrigatório de auditoria:
 3. Banco e migrations: IDs usam `TEXT` (compatível com schema atual)? Algum `ALTER TYPE ADD VALUE` foi misturado com uso na mesma migration? Índices parciais e triggers (`order_snapshot_guard`, `table_sessions_one_active`, `tabs_one_open_per_table`) continuam intactos? `resetDb()` continua limpando todas as tabelas novas via `CASCADE`?
 4. Transações e rede: existe qualquer chamada HTTP (`fetch`/SDK) dentro de `RestaurantUnitOfWork.run`? Eventos Socket.IO só disparam após o commit?
 5. Segurança: segredos cifrados com AES-256-GCM? Nenhum token/senha/CSC em log? Webhooks validam HMAC com `timingSafeEqual`? Permissões batem exatamente com a matriz `PDV-D06`?
-6. Estilo `.claude/CLAUDE.md` e OpenAPI: controller sem Prisma e sem `try/catch`? Funções enxutas sem abstração antecipada? Imports com `.ts`? Zod v4? Erros usando `AppError` com `code` estável? Rotas novas documentadas em `back-end/src/docs/`?
+6. Estilo `.claude/CLAUDE.md` (CRITÉRIO DE BLOQUEIO como MÉDIO se violado) e OpenAPI: controller sem Prisma e sem `try/catch`? Funções pequenas (~25 linhas, sem funções inchadas >40 linhas)? ZERO over-engineering (classes base genéricas, factories sem necessidade, helpers de uso único, parâmetros booleanos soltos, comentários óbvios)? Espelha o padrão enxuto de módulos existentes (`calls/`, `tables/`, `orders/`)? Imports com `.ts`? Zod v4? Erros usando `AppError` com `code` estável? Rotas novas documentadas em `back-end/src/docs/`?
 7. Cobertura: todos os cenários obrigatórios da etapa em `pdv-06-guia-de-implementacao-e-testes.md` estão testados e passando?
 
 Formato da resposta:
