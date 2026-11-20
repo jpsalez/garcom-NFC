@@ -25,16 +25,20 @@ function escapeXml(value: string) {
 
 function ticketLines(payload: PrinterDocument) {
   if (payload === "TEST") return ["PSIU · IMPRESSÃO DE TESTE", "", "Impressora da cozinha conectada."];
-  const shortId = payload.order_id.slice(0, 6).toUpperCase();
   const time = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "UTC" });
   return [
     payload.reprint?.label ?? "PSIU · COMANDA DA COZINHA",
     `Mesa: ${payload.table_label}`,
-    `Pedido #${shortId} · ${time.format(new Date(payload.created_at))} UTC`,
+    "Pedido",
+    payload.order_id.toUpperCase(),
+    `${time.format(new Date(payload.created_at))} UTC`,
     ...payload.items.flatMap((item) => [
       "",
       `${item.quantity}x ${item.product_name}${item.variant_name ? ` · ${item.variant_name}` : ""}`,
-      ...item.selections.map((choice) => `  + ${choice.quantity}x ${choice.option_name}`),
+      ...item.selections.map((choice) => {
+        const label = choice.group_name ? `${choice.group_name}: ${choice.option_name}` : choice.option_name;
+        return `  + ${choice.quantity}x ${label}`;
+      }),
       ...(item.notes ? item.notes.split(/\r?\n/).map((note) => `  Obs: ${note}`) : []),
     ]),
   ];
