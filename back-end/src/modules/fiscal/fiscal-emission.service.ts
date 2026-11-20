@@ -1,5 +1,6 @@
 import { inject, injectable } from "tsyringe";
 import type { fiscal_documents } from "../../../generated/prisma/client.ts";
+import { AppError } from "../../shared/errors/AppError.ts";
 import { ConflictError } from "../../shared/errors/http-errors.ts";
 import type { DbClient } from "../../shared/providers/prisma.ts";
 import type { INotifier } from "../../shared/realtime/notifier.ts";
@@ -29,8 +30,8 @@ export function resultData(result: NfceResult, now: Date): DocumentUpdate {
     series: result.series,
     access_key: result.accessKey,
     protocol: result.protocol,
-    sefaz_status: result.sefazStatus,
-    sefaz_message: result.sefazMessage,
+    sefaz_status: result.sefazStatus ?? null,
+    sefaz_message: result.sefazMessage ?? null,
     xml_url: result.xmlUrl,
     danfe_url: result.danfeUrl,
     qrcode_url: result.qrcodeUrl,
@@ -74,10 +75,11 @@ export class FiscalEmissionService {
       this.waitConfiguration(current, error),
     );
     if (!account) return;
-    const claimed = await this.claim(key).catch((error: unknown) => ({
-      document: current,
-      problem: `Falha ao montar a nota (${errorFields(error).error})`,
-    }));
+    // Só erro determinístico (AppError) rejeita; falha de infraestrutura volta para o job tentar de novo.
+    const claimed = await this.claim(key).catch((error: unknown) => {
+      if (!(error instanceof AppError)) throw error;
+      return { document: current, problem: `Falha ao montar a nota (${error.code})` };
+    });
     if (!claimed) return;
     if ("problem" in claimed) return this.rejectLocally(claimed.document, claimed.problem);
     try {
@@ -101,7 +103,12 @@ export class FiscalEmissionService {
   private async waitConfiguration(document: fiscal_documents, error: unknown) {
     if (!(error instanceof ConflictError)) throw error;
     logOperation({ event: "fiscal.waiting_configuration", document_id: document.id, code: error.code });
-    await this.touch(document);
+    // Também adia o documento na fila do job.
+    await this.update(
+      document,
+      { status: ["PENDING"] },
+      { sefaz_message: `Aguardando configuração fiscal (${error.code})` },
+    );
     return null;
   }
 
@@ -253,10 +260,25 @@ export class FiscalEmissionService {
       await this.release(document);
       return this.send(key);
     }
-    // ID sem nota no provedor (ex.: vínculo manual errado): volta para conferência humana.
-    if (!provider.idempotentReference)
-      return this.update(document, { status: ["PROCESSING"] }, { status: "PENDING", external_id: null });
+    if (document.status === "PROCESSING" && !provider.idempotentReference)
+      return this.lostExternalId(document);
     await this.touch(key);
+  }
+
+  // ID sem nota no provedor (atraso de consistência ou vínculo errado): volta para conferência humana,
+  // guardando o ID antigo para a pessoa conferir no painel antes de qualquer reenvio.
+  private lostExternalId(document: fiscal_documents) {
+    logOperation({ event: "fiscal.external_id_not_found", document_id: document.id });
+    return this.update(
+      document,
+      { status: ["PROCESSING"] },
+      {
+        status: "PENDING",
+        external_id: null,
+        sefaz_status: "NOT_FOUND",
+        sefaz_message: `Notaas não encontrou ${document.external_id}; confira no painel antes de reenviar`,
+      },
+    );
   }
 
   private async syncCancel(document: fiscal_documents) {

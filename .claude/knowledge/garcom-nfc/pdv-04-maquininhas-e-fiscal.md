@@ -217,15 +217,16 @@ Só resultado **ambíguo** (timeout, rede, 5xx, 429, 408, resposta ilegível) la
    - Um documento só usa a credencial do provedor em que foi emitido. Se o provedor mudar com notas em andamento, elas ficam paradas (`FISCAL_PROVIDER_CHANGED` no log) até voltar ao provedor anterior.
 8. O mesmo `external_id` não pode ser vinculado a duas comandas (índice único parcial `fiscal_documents_external_unique`).
 9. Notas que esperam configuração ou falham ao ser montadas:
-   - Se o provedor ou o ambiente da configuração não bate com o da nota, ou se falta credencial, a nota espera sem HTTP e sem ser rejeitada (`fiscal.waiting_configuration`). O cancelamento também recusa nesse caso.
-   - Uma falha ao montar a nota vira `REJECTED` local com o motivo, sem repetir para sempre.
+   - Se o provedor ou o ambiente da configuração não bate com o da nota, ou se falta credencial, a nota espera sem HTTP e sem ser rejeitada. O motivo fica em `sefaz_message` ("Aguardando configuração fiscal (<code>)") e no log `fiscal.waiting_configuration`. O cancelamento também recusa nesse caso.
+   - Uma falha determinística ao montar a nota (um `AppError`) vira `REJECTED` local com o code. Falha de infraestrutura (conexão, lock, deadlock) mantém a nota `PENDING` sem envio, e o job tenta de novo.
    - Sem pagamento aprovado, ou com pagamentos abaixo do valor da nota (por exemplo, depois de um estorno), o reenvio é rejeitado localmente.
-   - Na Notaas, um `invoiceId` que responde 404 volta para `PENDING` sem ID, ou seja, para a conferência humana.
+   - Na Notaas, uma nota `PROCESSING` cujo `invoiceId` responde 404 volta para `PENDING` sem ID, ou seja, para a conferência humana. O motivo e o ID antigo ficam em `sefaz_status = NOT_FOUND` e `sefaz_message` ("Notaas não encontrou <id>; confira no painel antes de reenviar"), com o log `fiscal.external_id_not_found`. O 404 pode ser só atraso de consistência depois do 202, então confira no painel antes de `confirm_not_issued`. O job nunca reenvia.
    - Na Notaas, um 4xx no cancelamento consulta o status antes de declarar falha.
 10. Estorno (DEC-22): bloqueado com NFC-e `AUTHORIZED` (`409 FISCAL_DOCUMENT_AUTHORIZED`) ou em emissão (`409 FISCAL_DOCUMENT_IN_PROGRESS`). Cancele a nota e depois estorne. Com a nota `REJECTED` ou `CANCELLED`, o estorno segue normal.
 11. O job considera um documento parado depois de 45 s, mais que o timeout HTTP de 20 s, para não consultar uma emissão ainda em curso.
 
 ### 4.7 Limitações conhecidas
+- Uma nota parada esperando configuração (credencial ausente, ou provedor ou ambiente trocado) bloqueia o estorno com `FISCAL_DOCUMENT_IN_PROGRESS` até a configuração ser corrigida. Não há prazo que a rejeite sozinha: quem corrige é quem configura o módulo.
 - Devolução por nota de devolução (NF-e de entrada) fora do escopo. Depois do prazo de cancelamento da SEFAZ (30 min em SP; 24 h na maioria das UFs), o pagamento de uma comanda com NFC-e autorizada não pode ser estornado pelo sistema (DEC-22).
 - Configuração fiscal e cancelamento de nota ainda não gravam na trilha de auditoria (`audit`).
 - Para `tPag 99` a Notaas recebe `descricaoPagamento: "Outros"`. A documentação da Focus não especifica a descrição (`xPag`), que não é enviada.

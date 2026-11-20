@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { payment_method } from "../generated/prisma/enums.ts";
 import { allocate, discountsFor, notePayments } from "../src/modules/fiscal/fiscal.mapper.ts";
+import { FiscalRepository } from "../src/modules/fiscal/fiscal.repository.ts";
 import type { FiscalEmissionService } from "../src/modules/fiscal/fiscal-emission.service.ts";
 import { container } from "../src/shared/container/container.ts";
+import { ConflictError } from "../src/shared/errors/http-errors.ts";
 import type { INotifier } from "../src/shared/realtime/notifier.ts";
 import { api } from "./helpers/app.ts";
 import { auth } from "./helpers/auth.ts";
@@ -55,7 +57,10 @@ async function configure(f: Fixture, settings: object = {}, withProfile = true) 
 }
 
 // Comanda de balcão paga e entregue; fecha por /tabs/:id/close para receber a NFC-e na resposta.
-async function closedSale(f: Fixture, { quantity = 1, method = "PIX" as payment_method, discount = 0 } = {}) {
+async function closedSale(
+  f: Fixture,
+  { quantity = 1, method = "PIX" as payment_method, discount = 0, split = false } = {},
+) {
   const opened = await api()
     .post("/api/v1/tabs")
     .set(auth(f.token))
@@ -84,10 +89,14 @@ async function closedSale(f: Fixture, { quantity = 1, method = "PIX" as payment_
       .set(auth(f.token))
       .send({ type: "DISCOUNT", mode: "FIXED_CENTS", value: discount, reason: "Cortesia da casa" });
   const tab = (await api().get(`/api/v1/tabs/${tabId}`).set(auth(f.token))).body.tab;
-  const paid = await api()
-    .post(`/api/v1/tabs/${tabId}/payments`)
-    .set(auth(f.token))
-    .send({ idempotency_key: randomUUID(), provider: "MANUAL", method, amount_cents: tab.remaining_cents });
+  const pay = (amount_cents: number) =>
+    api()
+      .post(`/api/v1/tabs/${tabId}/payments`)
+      .set(auth(f.token))
+      .send({ idempotency_key: randomUUID(), provider: "MANUAL", method, amount_cents });
+  const half = split ? Math.floor(tab.remaining_cents / 2) : 0;
+  const first = half ? await pay(half) : null;
+  const paid = await pay(tab.remaining_cents - half);
   expect(paid.status).toBe(201);
   const version = (await prisma.tabs.findUniqueOrThrow({ where: { id: tabId } })).version;
   const closed = await api()
@@ -100,6 +109,7 @@ async function closedSale(f: Fixture, { quantity = 1, method = "PIX" as payment_
     closed: closed.body,
     paidCents: tab.remaining_cents as number,
     paymentId: paid.body.payment.id as string,
+    firstPaymentId: first?.body.payment.id as string | undefined,
   };
 }
 
@@ -417,7 +427,15 @@ describe("provedor e ambiente em andamento", () => {
     await prisma.fiscal_documents.updateMany({ where: { tab_id: tabId }, data: { updated_at: new Date(0) } });
     fetchMock.mockResolvedValueOnce(respond({ error: { code: "NOT_FOUND" } }, 404));
     await reconcile();
-    expect(await document(tabId)).toMatchObject({ status: "PENDING", external_id: null });
+    const lost = await document(tabId);
+    expect(lost).toMatchObject({ status: "PENDING", external_id: null, sefaz_status: "NOT_FOUND" });
+    expect(lost.sefaz_message).toContain("inv-3");
+    // DEC-20: sem ID, o job nunca reenvia; só a conferência humana decide.
+    await prisma.fiscal_documents.update({ where: { id: lost.id }, data: { updated_at: new Date(0) } });
+    await reconcile();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const review = await api().get(`/api/v1/tabs/${tabId}/nfce`).set(auth(f.token));
+    expect(review.body.fiscal_document.sefaz_message).toContain("confira no painel");
 
     fetchMock.mockResolvedValueOnce(respond({ invoiceId: "inv-4" }, 202));
     const second = await closedSale(f);
@@ -434,6 +452,103 @@ describe("provedor e ambiente em andamento", () => {
       .set(auth(f.token))
       .send({ reason: "Cliente desistiu da compra inteira" });
     expect(cancelled.body.fiscal_document).toMatchObject({ status: "CANCELLED" });
+  });
+});
+
+// Nota de uma comanda já fechada sem módulo fiscal, criada direto no banco para montar cenários.
+async function seededDocument(f: Fixture, data: object = {}, sale?: Parameters<typeof closedSale>[1]) {
+  const closed = await closedSale(f, sale);
+  const created = await prisma.fiscal_documents.create({
+    data: {
+      restaurant_id: f.restaurantId,
+      tab_id: closed.tabId,
+      provider: "MOCK",
+      environment: "HOMOLOGACAO",
+      total_cents: 3000,
+      ...data,
+    },
+  });
+  return { ...closed, document: created };
+}
+
+describe("falhas locais e espera por configuração", () => {
+  it("espera sem HTTP a nota sem credencial e bloqueia o estorno enquanto isso", async () => {
+    const f = await menuFixture();
+    const { tabId, paymentId, document: created } = await seededDocument(f, { provider: "FOCUS_NFE" });
+    await prisma.fiscal_settings.create({
+      data: { restaurant_id: f.restaurantId, enabled: false, provider: "FOCUS_NFE", cnpj },
+    });
+    await prisma.fiscal_documents.update({ where: { id: created.id }, data: { updated_at: new Date(0) } });
+    await reconcile();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await document(tabId)).toMatchObject({
+      status: "PENDING",
+      dispatched_at: null,
+      sefaz_message: "Aguardando configuração fiscal (FISCAL_CREDENTIAL_REQUIRED)",
+    });
+    const refund = await api()
+      .post(`/api/v1/tabs/${tabId}/payments/${paymentId}/refund`)
+      .set(auth(f.token))
+      .send({ reason: "Pagamento em duplicidade" });
+    expect([refund.status, refund.body.code]).toEqual([409, "FISCAL_DOCUMENT_IN_PROGRESS"]);
+  });
+
+  it("rejeita localmente pagamentos abaixo do valor da nota", async () => {
+    const f = await menuFixture();
+    // Nota de 2 × 30,00 paga em duas partes; estornar uma deixa os pagamentos abaixo da nota.
+    const { tabId, firstPaymentId } = await seededDocument(
+      f,
+      { status: "REJECTED", total_cents: 6000 },
+      { quantity: 2, split: true },
+    );
+    const refunded = await api()
+      .post(`/api/v1/tabs/${tabId}/payments/${firstPaymentId}/refund`)
+      .set(auth(f.token))
+      .send({ reason: "Pagamento em duplicidade" });
+    expect(refunded.status).toBe(200);
+    await configure(f);
+    const retried = await api().post(`/api/v1/tabs/${tabId}/nfce/retry`).set(auth(f.token)).send({});
+    expect(retried.body.fiscal_document).toMatchObject({
+      status: "REJECTED",
+      sefaz_status: "LOCAL",
+      sefaz_message: "Pagamentos aprovados abaixo do valor da nota",
+    });
+  });
+
+  it("rejeita falha determinística ao montar a nota e mantém PENDING em falha de infraestrutura", async () => {
+    const f = await menuFixture();
+    const transient = await seededDocument(f);
+    await configure(f);
+    const profiles = vi.spyOn(FiscalRepository.prototype, "productProfiles");
+    profiles.mockRejectedValueOnce(new Error("conexão encerrada"));
+    await prisma.fiscal_documents.update({
+      where: { id: transient.document.id },
+      data: { updated_at: new Date(0) },
+    });
+    await reconcile();
+    expect(await document(transient.tabId)).toMatchObject({ status: "PENDING", dispatched_at: null });
+    await prisma.fiscal_documents.update({
+      where: { id: transient.document.id },
+      data: { updated_at: new Date(0) },
+    });
+
+    profiles.mockRejectedValueOnce(new ConflictError("Cadastro inconsistente", "MENU_INCONSISTENT"));
+    await reconcile();
+    expect(await document(transient.tabId)).toMatchObject({
+      status: "REJECTED",
+      sefaz_status: "LOCAL",
+      sefaz_message: "Falha ao montar a nota (MENU_INCONSISTENT)",
+    });
+  });
+
+  it("recusa no banco o provedor simulado em produção", async () => {
+    const f = await menuFixture();
+    await expect(
+      prisma.fiscal_settings.create({
+        data: { restaurant_id: f.restaurantId, provider: "MOCK", environment: "PRODUCAO", cnpj },
+      }),
+    ).rejects.toThrow(/fiscal_settings_valid/);
+    await expect(seededDocument(f, { environment: "PRODUCAO" })).rejects.toThrow(/fiscal_documents_valid/);
   });
 });
 
