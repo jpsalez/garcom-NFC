@@ -112,7 +112,7 @@ test('consulta percorre todos os cursores da fila aberta e ordena as duas seçõ
   assert.equal(items[0].id, 'new');
 });
 
-test('cartão mostra a espera e os três estágios da mesma linha com variante, adicionais e observação', () => {
+test('painel KDS exibe mesa, código curto, espera com alerta, itens limpos e botões discretos no rodapé', () => {
   const order = {
     id: '1587c93d-4d34-424d-ac44-30e20ab13012',
     table_label: 'Mesa 12',
@@ -127,29 +127,87 @@ test('cartão mostra a espera e os três estágios da mesma linha com variante, 
       pending_quantity: 0, preparing_quantity: 0, ready_quantity: 0, delivered_quantity: 1,
     }],
   };
+  const orderWarning = {
+    id: 'abcdef12-0000-0000-0000-000000000000',
+    table_label: 'Mesa 5',
+    created_at: '2026-11-19T18:50:00Z',
+    progress: { pending: 1, preparing: 0, ready: 0 },
+    items: [{
+      id: 'single', name: 'Suco de Laranja', variant_name: '500ml', notes: null,
+      selections: [],
+      pending_quantity: 1, preparing_quantity: 0, ready_quantity: 0,
+    }],
+  };
+  const orderNormal = {
+    id: '99887766-0000-0000-0000-000000000000',
+    table_label: 'Mesa 2',
+    created_at: '2026-11-19T18:59:00Z',
+    progress: { pending: 0, preparing: 0, ready: 2 },
+    items: [{
+      id: 'ready-item', name: 'Batata Frita', variant_name: 'Pequena', notes: null,
+      selections: [],
+      pending_quantity: 0, preparing_quantity: 0, ready_quantity: 2,
+    }],
+  };
   const feedback = load('../components/orderComponents/orderQueueFeedback.tsx');
-  const { default: CozinhaPage } = load('../components/cozinhaComponents/cozinhaPage.tsx', {
+  const {
+    default: CozinhaPage,
+    buildStartPreparationOperations,
+    buildReadyOperations,
+  } = load('../components/cozinhaComponents/cozinhaPage.tsx', {
     react: { useEffect: () => {}, useState: () => [0] },
-    '@/components/cozinhaComponents/printJobsPanel': { default: () => null },
     '@/components/orderComponents/orderQueueFeedback': feedback,
     '@/hooks/useOrderQueue': { useOrderQueue: () => ({
-      snapshot: { items: [order], server_time: '2026-11-19T19:02:09Z', loadedAt: 0 },
+      snapshot: {
+        items: [order, orderWarning, orderNormal],
+        server_time: '2026-11-19T19:02:09Z',
+        loadedAt: 0,
+      },
+      degraded: false,
+      denied: false,
+      disabled: false,
     }) },
     '@/lib/format': load('../lib/format.ts'),
     '@/lib/kitchenQueue': load('../lib/kitchenQueue.ts'),
   });
   const card = renderToStaticMarkup(React.createElement(CozinhaPage));
-  for (const label of ['Mesa 12', order.id, 'Espera 1:02:09', 'Hambúrguer', 'Grande', '2× Queijo', 'Sem cebola']) {
+  for (const label of [
+    'Cozinha', 'Ao vivo', 'Mesa 12', '#1587C9', `title="${order.id}"`,
+    'Espera 1:02:09', 'Em preparo', '6×', 'Hambúrguer', 'Grande', '+ 2× Queijo',
+    'Obs: Sem cebola', '2 novos · 3 em preparo · 1 pronto',
+    'Mesa 5', '#ABCDEF', 'Novo', '1×', 'Suco de Laranja',
+    'Mesa 2', '#998877', 'Batata Frita', 'Pronto',
+  ]) {
     assert.ok(card.includes(label), label);
   }
-  assert.match(card, /<dt>Novas<\/dt><dd[^>]*>2<\/dd>/);
-  assert.match(card, /<dt>Em preparo<\/dt><dd[^>]*>3<\/dd>/);
-  assert.match(card, /<dt>Prontas<\/dt><dd[^>]*>1<\/dd>/);
-  assert.match(card, /<input[^>]*max="2"/);
-  assert.match(card, /<input[^>]*max="3"/);
-  assert.match(card, /Iniciar preparo/);
-  assert.match(card, /Marcar pronto/);
+  assert.match(card, /data-wait-level="critical"/);
+  assert.match(card, /data-wait-level="warning"/);
+  assert.match(card, /data-wait-level="normal"/);
+  assert.match(card, /sm:grid-cols-2 xl:grid-cols-3/);
+  assert.match(card, />Iniciar preparo<\/button>/);
+  assert.match(card, />Pronto<\/button>/);
+  assert.doesNotMatch(card, /<input\b/i);
+  assert.doesNotMatch(card, /<dt>Novas<\/dt>|<dt>Em preparo<\/dt>|<dt>Prontas<\/dt>/);
   assert.doesNotMatch(card, /Item entregue|Marcar entregue|Cancelar itens/);
+  assert.doesNotMatch(card, /1 novo</);
+  assert.doesNotMatch(card, /2 prontos</);
+
+  assert.deepEqual(structuredClone(buildStartPreparationOperations(order)), [
+    { item_id: 'mixed', from_stage: 'PENDING', to_stage: 'PREPARING', quantity: 2 },
+  ]);
+  assert.deepEqual(structuredClone(buildReadyOperations(order)), [
+    { item_id: 'mixed', from_stage: 'PREPARING', to_stage: 'READY', quantity: 3 },
+  ]);
+  assert.deepEqual(structuredClone(buildReadyOperations({
+    items: [
+      { id: 'a', pending_quantity: 2, preparing_quantity: 1, ready_quantity: 0 },
+      { id: 'b', pending_quantity: 3, preparing_quantity: 0, ready_quantity: 0 },
+      { id: 'c', pending_quantity: 0, preparing_quantity: 0, ready_quantity: 2 },
+    ],
+  })), [
+    { item_id: 'a', from_stage: 'PREPARING', to_stage: 'READY', quantity: 1 },
+    { item_id: 'b', from_stage: 'PENDING', to_stage: 'READY', quantity: 3 },
+  ]);
 });
 
 function deferred() {
@@ -332,6 +390,18 @@ test('o painel reconcilia no foco, polling e reconexão e bloqueia após mudanç
     await tick();
     assert.equal(writes[1].expected_version, 2);
 
+    const batch = [
+      { item_id: 'item-1', from_stage: 'PENDING', to_stage: 'PREPARING', quantity: 2 },
+      { item_id: 'item-2', from_stage: 'PENDING', to_stage: 'PREPARING', quantity: 1 },
+    ];
+    await render().change(render().snapshot.items[0], batch);
+    await tick();
+    assert.equal(writes[2].expected_version, 3);
+    assert.deepEqual(writes[2].operations, batch);
+
+    await render().change(render().snapshot.items[0], []);
+    assert.equal(writes.length, 3);
+
     current.category = 'WAITER';
     socket.connected = false;
     handlers.get('disconnect')('io server disconnect');
@@ -341,7 +411,7 @@ test('o painel reconcilia no foco, polling e reconexão e bloqueia após mudanç
     assert.equal(denied.denied, true);
     assert.equal(denied.snapshot, null);
     await denied.change(previous, operation);
-    assert.equal(writes.length, 2);
+    assert.equal(writes.length, 3);
   } finally {
     cleanup?.();
   }
@@ -366,4 +436,15 @@ test('a confirmação apresenta as quantidades da nova versão ou permite descar
   const unavailable = render({ conflict, snapshot: { items: [] } });
   assert.match(unavailable, /Descartar ação/);
   assert.doesNotMatch(unavailable, /Confirmar: Marcar pronto/);
+
+  const batchConflict = {
+    orderId: 'order', version: 1,
+    operations: [
+      { item_id: 'item', from_stage: 'PREPARING', to_stage: 'READY', quantity: 2 },
+      { item_id: 'item-2', from_stage: 'PENDING', to_stage: 'READY', quantity: 1 },
+    ],
+  };
+  const batchReview = render({ conflict: batchConflict, snapshot: { items: [order] } });
+  assert.match(batchReview, /Mesa 1 · 1 item disponível/);
+  assert.match(batchReview, /Confirmar: Marcar pronto/);
 });

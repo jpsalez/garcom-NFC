@@ -8,7 +8,12 @@ import { getCurrentUser } from "@/services/auth";
 import { listOpenOrders, transitionOrder } from "@/services/orders";
 
 type Operation = OrderTransition["operations"][number];
-type Conflict = { orderId: string; version: number; operation: Operation };
+type Conflict = {
+  orderId: string;
+  version: number;
+  operation?: Operation;
+  operations?: Operation[];
+};
 
 function isDenied(error: unknown) {
   return error instanceof ApiError && (error.status === 401 || error.status === 403);
@@ -87,7 +92,9 @@ export function useOrderQueue(canAccess?: (user: User) => boolean) {
   const { snapshot, degraded, denied, waiting } = current?.state ?? emptyOrderQueue;
   const activeAction = action?.scope === scope ? action : undefined;
 
-  async function change(order: Order, operation: Operation) {
+  async function change(order: Order, operationOrList: Operation | Operation[]) {
+    const operations = Array.isArray(operationOrList) ? operationOrList : [operationOrList];
+    if (operations.length === 0) return;
     const active = connection.current;
     if (!active || active.scope !== scope || active.busy || !active.queue.canOperate()) return;
     active.busy = true;
@@ -95,12 +102,17 @@ export function useOrderQueue(canAccess?: (user: User) => boolean) {
     try {
       await active.checkAccess();
       if (connection.current !== active || !active.queue.canOperate()) return;
-      await transitionOrder(order.id, { expected_version: order.version, operations: [operation] });
+      await transitionOrder(order.id, { expected_version: order.version, operations });
     } catch (err) {
       if (connection.current !== active) return;
       if (isDenied(err)) active.queue.denyAccess();
       else if (err instanceof ApiError && err.code === "ORDER_VERSION_CONFLICT") {
-        setAction({ scope, conflict: { orderId: order.id, version: order.version, operation } });
+        setAction({
+          scope,
+          conflict: operations.length === 1
+            ? { orderId: order.id, version: order.version, operation: operations[0] }
+            : { orderId: order.id, version: order.version, operations },
+        });
       } else {
         setAction({ scope, error: err instanceof ApiError ? err.message : "Não foi possível atualizar o pedido." });
       }

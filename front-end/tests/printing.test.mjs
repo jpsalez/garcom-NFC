@@ -41,7 +41,7 @@ class MockApiError extends Error {
 
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
-test('acesso direto a /admin/cozinha/configuracoes e AdminNav restringem configuração a OWNER e MANAGER', () => {
+test('acesso direto a /admin/cozinha/configuracoes restringe configuração a OWNER e MANAGER e AdminNav oculta o link', () => {
   const cases = [
     [undefined, false],
     [null, false, '/login'],
@@ -80,7 +80,7 @@ test('acesso direto a /admin/cozinha/configuracoes e AdminNav restringem configu
       '@/lib/kitchenQueue': kitchen,
     });
     const nav = renderToStaticMarkup(React.createElement(AdminNav));
-    assert.equal(nav.includes('href="/admin/cozinha/configuracoes"'), allowed, JSON.stringify(user));
+    assert.equal(nav.includes('href="/admin/cozinha/configuracoes"'), false, JSON.stringify(user));
   }
 });
 
@@ -195,7 +195,7 @@ test('segunda via preserva a mesma chave de idempotência ao repetir envio após
   }
 });
 
-test('falha na fila de impressão fica isolada na seção de impressão e KDS segue operando normalmente', () => {
+test('falha na fila de impressão fica isolada no PrintJobsPanel e KDS segue limpo sem painel de impressão', () => {
   const order = {
     id: 'ord-1',
     table_label: 'Mesa 4',
@@ -248,7 +248,6 @@ test('falha na fila de impressão fica isolada na seção de impressão e KDS se
   const feedback = load('../components/orderComponents/orderQueueFeedback.tsx');
   const { default: CozinhaPage } = load('../components/cozinhaComponents/cozinhaPage.tsx', {
     react: { useEffect: () => {}, useState: () => [0] },
-    '@/components/cozinhaComponents/printJobsPanel': { default: PrintJobsPanel },
     '@/components/orderComponents/orderQueueFeedback': feedback,
     '@/hooks/useOrderQueue': {
       useOrderQueue: () => ({
@@ -264,13 +263,17 @@ test('falha na fila de impressão fica isolada na seção de impressão e KDS se
     '@/lib/kitchenQueue': kitchen,
   });
 
-  const html = renderToStaticMarkup(React.createElement(CozinhaPage));
-  assert.match(html, /Mesa 4/);
-  assert.match(html, /Pizza Margherita/);
-  assert.match(html, /<button[^>]*>Iniciar preparo<\/button>/);
-  assert.doesNotMatch(html, /<button[^>]*\sdisabled(?:=|\s|>)[^>]*>Iniciar preparo<\/button>/);
-  assert.match(html, /Serviço de impressão indisponível/);
-  assert.doesNotMatch(html, /Configurações de impressão/);
+  const kdsHtml = renderToStaticMarkup(React.createElement(CozinhaPage));
+  assert.match(kdsHtml, /Mesa 4/);
+  assert.match(kdsHtml, /Pizza Margherita/);
+  assert.match(kdsHtml, /<button[^>]*>Iniciar preparo<\/button>/);
+  assert.match(kdsHtml, /<button[^>]*>Pronto<\/button>/);
+  assert.doesNotMatch(kdsHtml, /<button[^>]*\sdisabled(?:=|\s|>)[^>]*>Iniciar preparo<\/button>/);
+  assert.doesNotMatch(kdsHtml, /Serviço de impressão indisponível|Configurações de impressão/);
+
+  const printHtml = renderToStaticMarkup(React.createElement(PrintJobsPanel, { enabled: true, orders: [order] }));
+  assert.match(printHtml, /Serviço de impressão indisponível/);
+  assert.doesNotMatch(printHtml, /Configurações de impressão/);
 });
 
 test('painel de impressão destaca FAILED e UNCERTAIN e exibe formulário de segunda via com erro 409', () => {
