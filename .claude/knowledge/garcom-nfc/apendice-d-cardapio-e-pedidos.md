@@ -187,7 +187,7 @@ A tela sinaliza desconexão do Socket.IO ou falha da leitura REST. Em indisponib
 
 ### Configuração de impressão e comanda original [Implementado]
 
-A migration `20261119110000_kitchen_printing` cria `print_destinations` e `print_jobs`, com os enums `print_destination` e `print_job_status`. Cada restaurante começa com a impressão de `KITCHEN` pausada. A primeira emissão de código persiste a configuração. A pausa conserva o agente pareado e as tarefas existentes.
+A migration `20261119110000_kitchen_printing` cria `print_destinations` e `print_jobs`, com os enums `print_destination` e `print_job_status`. Cada restaurante começa com a impressão de `KITCHEN` pausada. A primeira emissão de código persiste a configuração. A pausa conserva o agente pareado e retém as tarefas pendentes para revisão.
 
 | Operação sob `/api/v1` | Contrato |
 | --- | --- |
@@ -204,7 +204,23 @@ Um pedido novo criado com a impressão ativa grava uma tarefa `PENDING` de orige
 
 O payload versão 1 reúne `order_id`, `created_at` em UTC, `table_label` e `items`. Cada item contém `item_id`, `product_name`, `variant_name`, `quantity`, `notes` e `selections` com `group_name`, `option_name` e `quantity` por unidade. A comanda usa snapshots persistidos na confirmação do pedido. A ativação vale para novos envios.
 
-Cobertura em `back-end/tests/printing.test.ts`: isolamento, expiração, troca concorrente, revogação, contato, ausência de comanda para pedidos anteriores, concorrência no envio, vínculos do banco e rollback provocado por uma restrição no PostgreSQL. As reservas e os resultados entram na entrega #8. O agente local e a interface de configuração entram na #9.
+### Reserva, resultado e segunda via [Implementado]
+
+| Operação sob `/api/v1` | Contrato |
+| --- | --- |
+| POST `/print-jobs/claim` | Bearer do agente. Corpo ausente ou `{}`. Retorna `200` com `{ id, destination, reservation_id, expires_at, payload_version, order_version, payload }`. Retorna `204` quando pausada, sem trabalho elegível ou com reserva vigente. |
+| POST `/print-jobs/:id/result` | Bearer do agente que reservou e corpo `{ reservation_id, outcome }`. Aceita `SENT`, `FAILED_BEFORE_SEND` ou `UNCERTAIN`. Retorna `204` no registro ou replay idêntico da última reserva. Retorna `404` fora do restaurante/destino e `409 PRINT_RESERVATION_CONFLICT` quando vencida, substituída ou divergente. |
+| GET `/print-jobs` | OWNER/MANAGER/KITCHEN. Filtros opcionais `status`, `destination` e `order_id`. `limit` de 1 a 100, padrão 50. Use `next_cursor` como `cursor` para percorrer `{ jobs, next_cursor, server_time }` em ordem decrescente de criação e ID. |
+| POST `/orders/:id/reprints` | OWNER/MANAGER/KITCHEN. Recebe `{ idempotency_key, reason }`, com chave UUID e motivo de 3 a 500 caracteres. Responde `201` na criação ou `200` ao repetir chave, motivo e autor no mesmo pedido/destino. O trabalho registra autor e comanda original. O payload reservado inclui `reprint: { label: "SEGUNDA VIA" }`; o agente deve imprimir essa indicação. |
+| PATCH `/printing/kitchen` para revisão | OWNER/MANAGER. Envie `{ review: { job_ids, decision } }` com 1 a 100 IDs de comandas `REVIEW_REQUIRED` e `RELEASE` ou `DISCARD`. Liberar recoloca na fila e exige contato recente. Descartar marca `SUPPRESSED`. A resposta é o estado da configuração. Se alguma comanda já mudou, o lote inteiro retorna `409 PRINT_REVIEW_CONFLICT`. |
+
+A pausa, a revogação e a troca de pareamento retêm a fila pendente. Um intervalo de pelo menos cinco minutos sem contato retém as pendências ao consultar a fila ou no próximo contato do agente. As comandas preexistentes na migration entram em revisão. Liste `REVIEW_REQUIRED` para decidir quais saídas ainda são necessárias antes de retomá-las. Se a impressão passar de ativa para pausada durante uma reserva, uma falha pré-envio posterior também exige revisão antes de uma nova tentativa.
+
+O agente deve conferir `expires_at` antes de enviar. O enum `print_job_outcome` registra o resultado informado pelo agente. A reserva vale 30 segundos e o banco limita a uma comanda `SENDING` por restaurante e destino. Reservas vencidas aparecem como `UNCERTAIN` na próxima operação da fila, sem retry. `SENT` indica que o transporte aceitou a comanda. `FAILED_BEFORE_SEND` reprograma com espera de 5 e depois 10 segundos, até o total de três tentativas. A terceira falha pré-envio marca `FAILED`. Em caso incerto, a equipe confere o papel antes de pedir segunda via.
+
+A reserva revalida cancelamentos sob o mesmo lock usado pelas transições de pedido. Uma comanda totalmente cancelada vira `SUPPRESSED`; cancelamentos parciais fixam a versão e as quantidades restantes na reserva. Depois da reserva, comunicar cancelamentos à cozinha. A segunda via exige uma original existente e fora de `PENDING`, `REVIEW_REQUIRED` ou `SENDING` com prazo vigente, e um pedido com unidades não canceladas. Reaproveitar a chave com motivo ou autor diferente retorna `409 PRINT_REPRINT_KEY_CONFLICT`.
+
+A suíte PostgreSQL em `back-end/tests/printing.test.ts` cobre pareamento, rollback, concorrência, isolamento, expiração, replay, segunda via, revisão, cancelamentos e prazos. O agente local e a interface de configuração entram na #9.
 
 O módulo `back-end/src/modules/printing/` usa `printing.routes.ts`, `printing.controller.ts`, `printing.schemas.ts`, `printing.interfaces.ts`, `printing.service.ts`, `printing.repository.interface.ts`, `printing.repository.ts` e `print-job.ts`. Os contratos HTTP estão em `back-end/src/docs/printing-openapi.ts`.
 

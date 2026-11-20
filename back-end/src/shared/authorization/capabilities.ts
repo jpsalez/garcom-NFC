@@ -6,6 +6,7 @@ export type Capability =
   | "menu:publish"
   | "ordering:configure"
   | "printing:configure"
+  | "printing:operate"
   | "availability:write"
   | "orders:read"
   | "orders:prepare"
@@ -29,6 +30,7 @@ export function hasCapability(actor: ActorContext, capability: Capability) {
   if (actor.role === "OWNER") return true;
   if (actor.role !== "STAFF") return false;
   if (actor.category === "MANAGER") return true;
+  if (capability === "printing:operate") return actor.category === "KITCHEN";
   return (actor.category === "WAITER" || actor.category === "KITCHEN") && operational.includes(capability);
 }
 export function requireCapability(actor: ActorContext, capability: Capability) {
