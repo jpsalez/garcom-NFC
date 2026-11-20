@@ -1060,7 +1060,6 @@ model payment_provider_accounts {
   access_token_encrypted   String
   refresh_token_encrypted  String?
   token_expires_at         DateTime?
-  webhook_secret_encrypted String?
   metadata_json            Json?
   created_at               DateTime                @default(now())
   updated_at               DateTime                @default(now()) @updatedAt

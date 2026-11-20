@@ -1,0 +1,30 @@
+CHECKPOINT DO PDV · 20/11/2026
+
+Objetivo
+O usuário autorizou implementar as Etapas 0–6 do PDV de forma autônoma e pediu a transferência para Claude. Continue na worktree da Etapa 4. Faça um commit local somente depois da auditoria do diff. Nunca altere main diretamente, faça push, merge em main ou abra PR sem autorização explícita. Preserve as alterações do usuário na worktree raiz.
+
+Etapas auditadas e registradas em commits locais
+0. pdv/etapa-0-fundacao — 7786664 — schema/configuração do restaurante, CASHIER, capabilities, settings e regras de sessões/chamados. Inclui a regra obrigatória de manutenção nos cinco builders em .codex/agents.
+1. pdv/etapa-1-comandas — 625591b — comandas, backfill legado, pedidos POS/NFC, impressão, transferência/junção e eventos pós-commit.
+2. pdv/etapa-2-pagamentos — 9335d9b — pré-conta, ajustes, simultaneidade/versões, pedidos de pagamento NFC, divisão, pagamento manual e estorno.
+3. pdv/etapa-3-caixa — 65b6180 — turnos, movimentos, saldo esperado e integração com pagamentos/estornos.
+
+Estado atual da Etapa 4
+Worktree /home/jpsalez/orca/workspaces/garcom-NFC/pdv-etapa-4
+ID Orca 3970431b-c0c2-492c-964b-14ac5938ebc2::/home/jpsalez/orca/workspaces/garcom-NFC/pdv-etapa-4
+Branch pdv/etapa-4-mercado-pago-point, HEAD 65b6180 da Etapa 3. O diff inteiro da Etapa 4, incluindo arquivos não rastreados, está nesta worktree e aguarda auditoria. Não faça reset, stash ou nova worktree para terminar a Etapa 4.
+- Migration 20261120190000_payment_providers_and_terminals foi aplicada. As 25 migrations passaram em PostgreSQL limpo. FKs e índices parciais vinculam conta, terminal e pagamento ao tenant.
+- Integração implementada com API Orders Point, OAuth por tenant, AES-256-GCM, HMAC de webhook, consulta autoritativa, idempotência, conciliação e integração com caixa. A API real foi simulada nos testes. Nenhuma cobrança externa foi enviada.
+- A rodada inicial passou nos 11 testes Point. O integrador também rodou verify.py integral com typecheck, lint e testes verdes. A última rodada inclui proteção de cabeçalhos Authorization, teste de resposta definitiva de terminal ocupado e confirmação de um só evento SYSTEM em replay do webhook. A rodada final do agente de testes terminou com 132/132 testes em 10 arquivos, typecheck e Biome do teste verdes, sem migrations pendentes. Log em /tmp/pdv-etapa-4-tdd-green.log. O próximo passo é a auditoria, ainda sem commit da Etapa 4.
+- Baseline da Etapa 3: 43 falhas antigas de formatação global do Biome, 11 alertas antigos em check_tenant.py e 33 em doc_drift.py. Na Etapa 4, o integrador mediu 42 falhas globais herdadas e Biome dirigido verde nos 31 arquivos TS na rodada dele. Reavalie o diff final incluindo testes.
+- Um HTTP 202 de cancelamento remoto não libera a reserva. HTTP 5xx/timeout ambíguo conserva a reserva; uma cobrança sem ID que permanece ambígua após cinco minutos exige conferência operacional. Estorno N0 segue suportado. O endpoint local bloqueia estorno N1 nesta etapa para não registrar devolução sem confirmação externa.
+
+Ordem de retomada
+1. Termine a auditoria da Etapa 4 com um revisor somente leitura (garcom-revisor no Claude). Revise OAuth, segredos, segurança de webhook, vínculos e autorização por tenant, idempotência, ausência de HTTP no lock, estados/pagamentos e eventos pós-commit. Execute verify.py sob flock, check_tenant.py, routes_inventory.py, doc_drift.py e Biome dirigido. Corrija achados críticos/médios, reaudite e faça o commit local quando aprovado.
+2. Etapa 5 em nova worktree Orca a partir de pdv/etapa-4-mercado-pago-point. Agregados de vendas, KPIs e previsões. Leia pdv-05 e o checklist no pdv-06. Exclua legacy_closed da receita. Reuse o cálculo de dia operacional já existente. O fechamento manual e automático passam por close-tab.ts. Hooks de fechamento e estorno precisam ocorrer na mesma transação dos efeitos financeiros. Rebuild e atualização incremental devem reproduzir o mesmo resultado.
+3. Etapa 6 em nova worktree Orca a partir da Etapa 5. Fiscal NFC-e opcional. Leia pdv-04 e pdv-06 e confirme contratos nos provedores. A documentação oficial atual da Notaas para NFC-e usa https://platform.notaas.com.br/api/v1/nfe/emitir, x-api-key, modelo 65 e HTTP 202 com invoiceId. Isso difere do exemplo local antigo. Veja https://docs.notaas.com.br/docs/nfe/endpoints e https://docs.notaas.com.br/docs/nfe/webhooks. Focus usa https://doc.focusnfe.com.br/docs/nfce-operacoes-disponiveis-na-api. Não reenvie automaticamente uma emissão ambígua sem garantia de idempotência. Provedores devem ser simulados em teste.
+
+Ambiente e processo
+- Leia AGENTS.md, .claude/CLAUDE.md, .claude/knowledge/garcom-nfc/pdv-06-guia-de-implementacao-e-testes.md e o documento técnico da etapa. Há skills Claude em .claude/skills/pdv-etapa, pdv-migration, pdv-kpi e pdv-provider. Use agentes compatíveis, separe esquema/repos, testes, domínio e revisão, com um único escritor por worktree. Mantenha código enxuto, limpo, legível, no padrão existente e fácil de manter por pessoas.
+- O socket do Docker não está acessível ao usuário local. O coordenador deixou um PostgreSQL 16.16 descartável escutando em 127.0.0.1:5433, banco garcom_test com a configuração de back-end/.env.test. Cluster em /tmp/garcom-nfc-pdv-pg16.PCcCUe/data, log postgres.log no mesmo diretório pai. Nunca aponte os comandos a outro banco. Use flock /tmp/garcom-nfc-db-test.lock para npm test, verify.py e Prisma migrate deploy. Não paralelize o banco entre worktrees. Dependências já instaladas até a Etapa 4. Para nova worktree, npm ci no back-end e prisma generate.
+- Só crie automação Orca se trouxer benefício. A listagem inicial estava vazia e o Codex não criou automações. Para agendar validação, inspecione a listagem, use precheck e proteja qualquer acesso ao banco com o mesmo lock. Desabilite/remova gatilhos temporários ao fechar a etapa.

@@ -1,6 +1,13 @@
 # 9. Estado de implementação, roadmap e limitações 
 
-> **Atualização de 20/11/2026:** cardápio, pedidos por mesa, painel da cozinha e impressão via CloudPRNT estão implementados. Consulte o Apêndice D para os contratos e a operação, e o Apêndice E para as etapas do pedido. A prova em impressora física e a integração com o PDV seguem pendentes. As tabelas abaixo registram o estado do levantamento anterior.
+> **Atualização de 20/11/2026:** cardápio, pedidos por mesa, painel da cozinha e impressão via CloudPRNT estão implementados. Consulte o Apêndice D para os contratos e a operação, e o Apêndice E para as etapas do pedido. A prova em impressora física segue pendente. As tabelas abaixo registram o estado do levantamento anterior.
+>
+> **PDV entregue (Etapas 0 a 6, 20/11/2026) [Implementado]:** `tabs` (com payment-requests), `payments` (Mercado Pago Point e conferência manual, DEC-16), `cash-shifts`, `reports`, `fiscal` (NFC-e opcional: Mock, Focus, Notaas) e configurações do restaurante. As tabelas 9.1 a 9.3 não cobrem esses módulos; veja `pdv-00` a `pdv-06` e `decisoes.md` (DEC-16 a DEC-22, todas resolvidas).
+>
+> **Limitações conhecidas do PDV (detalhe nas seções de origem):**
+> - pdv-04 §4.7: limitações fiscais (nota de devolução fora do escopo; estorno bloqueado com NFC-e autorizada, DEC-22).
+> - pdv-05 (limitações finais): `basketTabs` carrega itens em memória; a janela de tendência da previsão cai no futuro para datas distantes; fusos que trocam de horário à meia-noite deslocam o dia operacional.
+> - DEC-17: o estorno de pagamento Point continua bloqueado (`INTEGRATED_REFUND_UNAVAILABLE`); só o estorno manual existe.
 
 
 Conferido com o código em 14/11/2026 (branch `dev`). O MVP do chamado está completo no back-end e integrado ao front; restam as pendências listadas em 9.5, nenhuma bloqueante.

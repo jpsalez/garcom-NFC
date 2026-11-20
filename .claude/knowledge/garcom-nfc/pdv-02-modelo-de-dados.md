@@ -538,7 +538,6 @@ model payment_provider_accounts {
   access_token_encrypted   String
   refresh_token_encrypted  String?
   token_expires_at         DateTime?
-  webhook_secret_encrypted String?
   metadata_json            Json?
   created_at               DateTime                @default(now())
   updated_at               DateTime                @default(now()) @updatedAt
@@ -549,8 +548,8 @@ model payment_provider_accounts {
   @@unique([restaurant_id, id])
   @@unique([restaurant_id, provider, environment])
 }
-// [Implementado] webhook_secret_encrypted está reservado e não é usado: hoje o segredo do webhook
-// vem de MERCADO_PAGO_WEBHOOK_SECRET no ambiente (global). Decisão pendente: DEC-18.
+// [Implementado] DEC-18: a coluna webhook_secret_encrypted foi REMOVIDA (migration
+// 20261121110000_drop_unused_webhook_secret). O segredo do webhook é global, em MERCADO_PAGO_WEBHOOK_SECRET.
 
 model payment_terminals {
   id                  String                     @id @default(uuid())

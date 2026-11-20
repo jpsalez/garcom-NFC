@@ -25,6 +25,17 @@ Middlewares: `ensureAuthenticated` consulta o banco (`findForAuth`) com cache em
 Infra: CORS por `FRONTEND_URL`; rate limit (login 10/15 min por IP+e-mail; register 5/h por IP; scan 30/15 min por IP+código; chamados 10/5 min por token; off com NODE_ENV=test; `TRUST_PROXY` opcional); `docker-compose.yml`, `.env.example`, `.env.test`, `.github/workflows/ci.yml` existem; `vitest.config.ts` e a pasta `tests/` existem (cerca de 100 testes); seeds `prisma/seed.ts` (OWNER demo) e `prisma/seed-super-admin.ts` (SUPER_ADMIN via `SUPER_ADMIN_EMAIL`/`SUPER_ADMIN_PASSWORD`, 12+ caracteres). E-mail normalizado (trim+lowercase), senha mínima 8.
 Backlog restante: tela Tarefas do painel (`.claude/painel/tasks.json`, 121 tarefas).
 
+## PDV [Implementado, Etapas 0 a 6, 20/11/2026]
+Referência: `pdv-00` (levantamento) a `pdv-06` (guia e testes). Módulos novos em `back-end/src/modules`:
+- `tabs`: comandas, ajustes e `payment-requests` (pedidos de pagamento).
+- `payments`: pagamentos manuais e Mercado Pago Point (OAuth, webhook, reconciliação, terminais).
+- `payments` (conferência manual de Point, DEC-16): `POST /tabs/:id/payments/:paymentId/resolve` para `needs_review`.
+- `cash-shifts`: turnos de caixa e saldo.
+- `reports`: histórico, KPIs e previsões (pdv-05).
+- `fiscal`: NFC-e opcional, com provedores Mock, Focus e Notaas.
+- restaurant settings: configurações do restaurante (fuso, dia operacional, fiscal).
+Decisões DEC-16 a DEC-22 resolvidas (ver `decisoes.md`): estorno Point segue bloqueado (DEC-17); segredo do webhook global por env e coluna `webhook_secret_encrypted` removida (DEC-18). Skills `pdv-*` e agentes `pdv_*` arquivados em `_arquivo/pdv-dev/`. Limitações: cap-09 §9.4.
+
 ## Papéis [Implementado em 12/11/2026]
 Enum role: SUPER_ADMIN (plataforma; sem restaurante), OWNER (substitui ADMIN; um restaurante), STAFF (funcionário; `users.category` enum staff_category WAITER/MANAGER/CLEANING/KITCHEN/OTHER, só para STAFF; MANAGER é categoria; `job_title` removido). `users.active` e `restaurants.active`. CHECKs `users_category_only_staff` e `users_restaurant_by_role`. Resolvidas: fluxo B do register; primeiro SUPER_ADMIN por seed; remover STAFF = existem desativar (PATCH active) e excluir (DELETE). Ainda [Planejado]: painel de chamados e métricas/insights (SUPER_ADMIN e OWNER). Pendente: criar usuário em restaurante inativo. Detalhes em `decisoes.md`.
 
@@ -32,7 +43,7 @@ Enum role: SUPER_ADMIN (plataforma; sem restaurante), OWNER (substitui ADMIN; um
 restaurants, users, tables, table_sessions, session_tokens, calls. Enums de papel SUPER_ADMIN/OWNER/STAFF e staff_category; 6 migrations; estados de chamado OPEN/DONE/CANCELLED; motivo de fechamento TIMEOUT/STAFF. Índice único parcial `table_sessions_one_active` (uma sessão ACTIVE por mesa) existe na migration; `calls_one_open_per_type` (session_id, type WHERE status='OPEN') existe desde a migration manual 20261114120000 (14/11/2026); 9 migrations (as quatro últimas criam índices de consulta, os timestamps da sessão, `refresh_tokens` e `password_resets`). Todo repository recebe `restaurantId` como primeiro parâmetro (multi-tenancy) e aceita `DbClient`/`tx` para transação.
 
 ## Decisões de produto
-Todas as decisões de produto foram tomadas em 12–14/11/2026 (DEC-01 a DEC-15; ver `decisoes.md`). Nenhuma pendente. Em aberto só o nome definitivo do produto e a cobrança (planos), depois do MVP.
+Todas as decisões de produto foram tomadas em 12–14/11/2026 (DEC-01 a DEC-15) e as do PDV (DEC-16 a DEC-22); ver `decisoes.md`. Nenhuma pendente. Em aberto só o nome definitivo do produto e a cobrança (planos), depois do MVP.
 
 ## Precedência em conflito
 Código (comportamento atual) > v0.3 > v0.2 > módulos/guia (propostas).

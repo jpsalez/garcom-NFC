@@ -7,18 +7,13 @@ Backlog: tela Tarefas do painel (`.claude/painel/tasks.json`). Aqui ficam só as
 ## Pendentes
 Formato: `- [ ] DEC-NN · título`; as linhas indentadas são detalhes. A tela Decisões e a tela Tarefas leem este bloco.
 
-- [ ] DEC-17 · Estorno de pagamento Point
-  - Hoje `POST /tabs/:id/payments/:paymentId/refund` só estorna `provider = MANUAL`; Point retorna `409 INTEGRATED_REFUND_UNAVAILABLE`.
-  - Opção A: estorno via API do Mercado Pago (depende de sandbox e afeta conciliação).
-  - Opção B: registro manual de um estorno feito fora do sistema (motivo e auditoria, sem chamada ao provedor).
-- [ ] DEC-18 · Segredo do webhook Mercado Pago
-  - Hoje o HMAC usa `MERCADO_PAGO_WEBHOOK_SECRET` do ambiente (um segredo global).
-  - Opção A: manter o segredo global por env (atual).
-  - Opção B: segredo por conta, na coluna `payment_provider_accounts.webhook_secret_encrypted` (hoje não usada).
+Nenhuma no momento.
 
 (A lista anterior, sem ids, está em `../_arquivo/decisoes-lista-antiga.md`.)
 
 ## Resolvidas que estavam na lista de tarefas
+- [x] DEC-17 · Estorno de pagamento Point — continua bloqueado no sistema (`409 INTEGRATED_REFUND_UNAVAILABLE`); o estorno é feito pelo app ou painel do Mercado Pago. Registro manual ou estorno via API ficam para quando houver volume (20/11/2026).
+- [x] DEC-18 · Segredo do webhook Mercado Pago — global por ambiente (`MERCADO_PAGO_WEBHOOK_SECRET`), porque o segredo é da aplicação no Mercado Pago, não do restaurante. A coluna `payment_provider_accounts.webhook_secret_encrypted`, nunca usada, foi removida (migration `20261121110000_drop_unused_webhook_secret`) (20/11/2026).
 - [x] DEC-22 · Estorno com NFC-e — bloqueado enquanto a comanda tem NFC-e `AUTHORIZED` (`409 FISCAL_DOCUMENT_AUTHORIZED`) ou em emissão, `PENDING`/`PROCESSING` (`409 FISCAL_DOCUMENT_IN_PROGRESS`). O operador cancela a nota primeiro e depois estorna. Fora do prazo de cancelamento da SEFAZ, o estorno continua bloqueado. A devolução por nota de devolução fica fora do escopo (20/11/2026).
 - [x] DEC-19 · Taxa de serviço, couvert e gorjeta na NFC-e — ficam fora da nota. A nota tem só os itens consumidos, com desconto rateado, e os pagamentos são rateados até o total da nota. Nenhum dos provedores aceita `vOutro` por item. Vale confirmar com o contador de cada restaurante (20/11/2026).
 - [x] DEC-20 · Emissão fiscal ambígua (timeout/5xx) — consultar, nunca reenviar às cegas. Focus: consulta a ref e reenvia a mesma ref só se ela não existir. Notaas (sem idempotência): sem `invoiceId`, fica em conferência humana depois de 5 min (vincular `invoice_id` ou confirmar que nada saiu) (20/11/2026).

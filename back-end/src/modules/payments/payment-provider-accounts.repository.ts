@@ -13,7 +13,7 @@ type RefreshCredentialsData = Pick<
 type PutProviderAccountData = RefreshCredentialsData &
   Pick<
     Prisma.payment_provider_accountsUncheckedCreateInput,
-    "external_account_id" | "status" | "webhook_secret_encrypted" | "metadata_json"
+    "external_account_id" | "status" | "metadata_json"
   >;
 
 @injectable()
